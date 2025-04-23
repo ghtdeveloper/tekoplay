@@ -60,6 +60,8 @@ flutter:
   assets:
     - assets/images/img_perfil_unknown.png
     - assets/images/splash_tekoplay.png
+    - assets/images/chess.png
+    - assets/images/domino.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
