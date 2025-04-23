@@ -6,7 +6,7 @@ import '../../widgets/domino_game_widget.dart';
 class GameScreen extends StatelessWidget {
   final String gameType;
 
-  const GameScreen({Key? key, required this.gameType}) : super(key: key);
+  const GameScreen({super.key, required this.gameType});
 
   @override
   Widget build(BuildContext context) {
