@@ -67,14 +67,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: 'Idioma',
                   subtitle: 'Cambiar lenguaje del juego',
                   icon: Icons.language,
-                  onTap: () { _showLanguageDialog(context);
+                  onTap: () {
+                    _showLanguageDialog(context);
                   },
                 ),
                 _buildSettingsCard(
                   title: 'Notificaciones',
                   subtitle: 'Personaliza tus notificaciones',
                   icon: Icons.notification_important_sharp,
-                  onTap: () {},
+                  onTap: () {
+                    _showNotificationsDialog(context);
+                  },
                 ),
                 _buildSettingsCard(
                   title: 'Privacidad',
@@ -95,10 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.only(bottom: 12),
             child: Text(
               _appVersion,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
         ],
@@ -121,16 +121,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         leading: Icon(icon, color: Colors.black),
         title: Text(
           title,
-          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         subtitle: Text(subtitle, style: const TextStyle(color: Colors.black54)),
-        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.black45, size: 16),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
+          color: Colors.black45,
+          size: 16,
+        ),
         onTap: onTap,
       ),
     );
   }
 }
-
 
 void _showLoginDialog(BuildContext context) {
   showDialog(
@@ -157,7 +163,6 @@ void _showLoginDialog(BuildContext context) {
 
               const SizedBox(height: 8),
 
-
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(
@@ -172,12 +177,17 @@ void _showLoginDialog(BuildContext context) {
 
               const SizedBox(height: 20),
 
-
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 elevation: 4,
                 child: ListTile(
-                  leading: const Icon(Icons.g_mobiledata, color: Colors.red, size: 32),
+                  leading: const Icon(
+                    Icons.g_mobiledata,
+                    color: Colors.red,
+                    size: 32,
+                  ),
                   title: const Text('Iniciar sesión con Google'),
                   onTap: () {
                     Navigator.of(context).pop();
@@ -188,9 +198,10 @@ void _showLoginDialog(BuildContext context) {
 
               const SizedBox(height: 12),
 
-
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 elevation: 4,
                 child: ListTile(
                   leading: const Icon(Icons.apple, size: 32),
@@ -209,8 +220,11 @@ void _showLoginDialog(BuildContext context) {
   );
 }
 
-
-void _showMusicVolumeDialog(BuildContext context, double currentVolume, Function(double) onVolumeChanged) {
+void _showMusicVolumeDialog(
+  BuildContext context,
+  double currentVolume,
+  Function(double) onVolumeChanged,
+) {
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -292,7 +306,6 @@ void _showMusicVolumeDialog(BuildContext context, double currentVolume, Function
                       ),
                     ),
                   ),
-
                 ],
               ),
             );
@@ -303,13 +316,12 @@ void _showMusicVolumeDialog(BuildContext context, double currentVolume, Function
   );
 }
 
-
 void _showLanguageDialog(BuildContext context) {
   showDialog(
     context: context,
-    barrierDismissible: false, // evita que se cierre al tocar fuera
+    barrierDismissible: false,
     builder: (BuildContext context) {
-      String selectedLanguage = 'Español'; // valor por defecto
+      String selectedLanguage = 'Español';
 
       return StatefulBuilder(
         builder: (context, setState) {
@@ -399,4 +411,87 @@ void _showLanguageDialog(BuildContext context) {
   );
 }
 
+void _showNotificationsDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext context) {
+      bool reminderEnabled = true;
+      bool messagesEnabled = true;
 
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Notificaciones',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    title: const Text('Recordatorio de eventos'),
+                    value: reminderEnabled,
+                    activeColor: Color(0xFFEC7A34),
+                    onChanged: (bool value) {
+                      setState(() {
+                        reminderEnabled = value;
+                      });
+                    },
+
+                  ),
+                  SwitchListTile(
+                    title: const Text('Recibir nuevos mensajes'),
+                    value: messagesEnabled,
+                    activeColor: Color(0xFFEC7A34),
+                    onChanged: (bool value) {
+                      setState(() {
+                        messagesEnabled = value;
+                      });
+                    },
+
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      // Guardar los valores si es necesario
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Aceptar'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
