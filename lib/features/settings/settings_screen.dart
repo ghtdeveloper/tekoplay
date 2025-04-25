@@ -474,7 +474,6 @@ void _showNotificationsDialog(BuildContext context) {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
-                      // Guardar los valores si es necesario
                       Navigator.of(context).pop();
                     },
                     style: ElevatedButton.styleFrom(
