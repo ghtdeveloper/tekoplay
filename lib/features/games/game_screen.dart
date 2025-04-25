@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../widgets/game_mode_widget.dart';
+import '../settings/settings_screen.dart';
 
 class GameScreen extends StatelessWidget {
   final String gameType;
@@ -22,7 +23,15 @@ class GameScreen extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(Icons.settings, size: 30.0, color: Colors.white),
+                  IconButton(
+                    icon: const Icon(Icons.settings,color: Colors.white),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) =>  SettingsScreen()),
+                      );
+                    },
+                  ),
                   Row(
                     children: [
                       Text(

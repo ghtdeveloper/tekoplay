@@ -43,9 +43,9 @@ class _MainScreenState extends State<MainScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: const Color(0xFFEC7A34),
         actions: [
-          IconButton(icon: const Icon(Icons.notifications), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.notifications,color: Colors.white,), onPressed: () {}),
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings,color: Colors.white,),
             onPressed: () {
               Navigator.push(
                 context,
