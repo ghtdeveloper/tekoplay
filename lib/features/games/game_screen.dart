@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../widgets/game_mode_widget.dart';
 import '../settings/settings_screen.dart';
@@ -92,7 +93,7 @@ class GameScreen extends StatelessWidget {
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_vs_friend.png',
                     label: 'Vs Amigo',
-                    onPressed: () {},
+                    onPressed: () => _showFriendGameDialog(context),
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_lessons.png',
@@ -118,3 +119,109 @@ class GameScreen extends StatelessWidget {
     );
   }
 }
+
+void _showFriendGameDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) {
+      return Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  icon: Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              Text(
+                'Jugar con un amigo',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Colors.black87,
+                ),
+              ),
+              SizedBox(height: 20),
+
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Buscar por nombre de usuario',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              SizedBox(height: 20),
+
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  icon: Icon(Icons.search),
+                  label: Text(
+                    'Buscar',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEC7A34),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+
+              SizedBox(height: 20),
+
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(
+                        ClipboardData(text: 'https://tuapp.com/invite/12345'));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Enlace copiado')),
+                    );
+                  },
+                  icon: Icon(Icons.link),
+                  label: Text(
+                    'Copiar enlace para compartir',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEC7A34),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+
+
+
+
