@@ -108,7 +108,7 @@ class GameScreen extends StatelessWidget {
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_online.png',
                     label: 'En Línea',
-                    onPressed: () {},
+                    onPressed: () => _showOnlineGameDialog(context),
                   ),
                 ],
               ),
@@ -305,5 +305,122 @@ void _showComputerGameDialog(BuildContext context) {
   );
 }
 
+void _showOnlineGameDialog(BuildContext context) {
+  final TextEditingController roomCodeController = TextEditingController();
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) {
+      return Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  icon: Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              Text(
+                'Jugar en línea',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Colors.black87,
+                ),
+              ),
+              SizedBox(height: 20),
+
+              TextField(
+                controller: roomCodeController,
+                decoration: InputDecoration(
+                  labelText: 'Código de sala',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    final roomCode = roomCodeController.text.trim();
+                    if (roomCode.isNotEmpty) {
+                      // Aquí va la lógica para unirse a la sala
+                      print('Unirse a la sala con código: $roomCode');
+                      Navigator.of(context).pop();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Por favor ingresa un código válido')),
+                      );
+                    }
+                  },
+                  icon: Icon(Icons.login),
+                  label: Text(
+                    'Unirse a la sala',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEC7A34),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+
+              SizedBox(height: 20),
+
+              Divider(),
+
+              SizedBox(height: 10),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    final generatedRoomCode = 'ROOM12345'; // Simulado
+                    Clipboard.setData(ClipboardData(text: generatedRoomCode));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Código generado y copiado: $generatedRoomCode')),
+                    );
+                    // Aquí va la lógica para crear la sala y esperar a otro jugador
+                    print('Sala creada: $generatedRoomCode');
+                    Navigator.of(context).pop();
+                  },
+                  icon: Icon(Icons.add),
+                  label: Text(
+                    'Crear nueva sala',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEC7A34),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
 
 
