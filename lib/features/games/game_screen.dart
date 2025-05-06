@@ -103,7 +103,7 @@ class GameScreen extends StatelessWidget {
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_vs_computer.png',
                     label: 'Vs CPU',
-                    onPressed: () {},
+                    onPressed: () => _showComputerGameDialog(context),
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_online.png',
@@ -159,7 +159,6 @@ void _showFriendGameDialog(BuildContext context) {
                 ),
               ),
               SizedBox(height: 20),
-
 
               SizedBox(
                 width: double.infinity,
@@ -222,6 +221,90 @@ void _showFriendGameDialog(BuildContext context) {
 }
 
 
+void _showComputerGameDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) {
+      String selectedDifficulty = 'Normal'; // valor predeterminado
+
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: IconButton(
+                      icon: Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  Text(
+                    'Jugar contra la computadora',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+
+                  // Lista de niveles de dificultad
+                  Column(
+                    children: ['Muy fácil', 'Fácil', 'Normal', 'Difícil'].map((level) {
+                      return RadioListTile<String>(
+                        title: Text(level),
+                        value: level,
+                        groupValue: selectedDifficulty,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedDifficulty = value!;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  SizedBox(height: 20),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                       //TODO IR A TABLERO DE JUEGO
+                        Navigator.of(context).pop();
+                      },
+                      icon: Icon(Icons.smart_toy),
+                      label: Text(
+                        'Empezar juego',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEC7A34),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
 
 
