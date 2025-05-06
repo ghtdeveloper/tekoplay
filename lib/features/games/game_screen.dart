@@ -255,7 +255,6 @@ void _showComputerGameDialog(BuildContext context) {
                   ),
                   SizedBox(height: 20),
 
-                  // Lista de niveles de dificultad
                   Column(
                     children: ['Muy fácil', 'Fácil', 'Normal', 'Difícil'].map((level) {
                       return RadioListTile<String>(
