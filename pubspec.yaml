@@ -14,9 +14,10 @@ dependencies:
   flutter:
     sdk: flutter
 
-
   cupertino_icons: ^1.0.8
   audioplayers: ^5.2.1
+  flutter_chess_board: ^1.0.1
+  stockfish_wrapper: ^1.0.4
 
 dev_dependencies:
   flutter_test:
@@ -24,6 +25,7 @@ dev_dependencies:
 
   flutter_lints: ^5.0.0
   package_info_plus: ^4.0.2
+
 
 flutter:
 
