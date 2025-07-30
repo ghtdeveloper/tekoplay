@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../widgets/game_mode_widget.dart';
 import '../settings/settings_screen.dart';
+import 'chess_vs_cpu_screen.dart';
 
 class GameScreen extends StatelessWidget {
   final String gameType;
@@ -276,8 +277,11 @@ void _showComputerGameDialog(BuildContext context) {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                       //TODO IR A TABLERO DE JUEGO
                         Navigator.of(context).pop();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => ChessVsComputerScreen()),
+                        );
                       },
                       icon: Icon(Icons.smart_toy),
                       label: Text(

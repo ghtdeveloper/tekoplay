@@ -13,11 +13,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  process_run: ^0.12.4
 
   cupertino_icons: ^1.0.8
   audioplayers: ^5.2.1
   flutter_chess_board: ^1.0.1
-  stockfish_wrapper: ^1.0.4
+
 
 dev_dependencies:
   flutter_test:
@@ -42,3 +43,4 @@ flutter:
     - assets/images/icon_play_online.png
     - assets/images/icon_play_vs_computer.png
     - assets/images/icon_play_vs_friend.png
+    - assets/stockfish
