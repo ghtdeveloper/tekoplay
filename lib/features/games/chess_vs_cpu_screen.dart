@@ -6,7 +6,7 @@ import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
-  const ChessVsComputerScreen({Key? key}) : super(key: key);
+  const ChessVsComputerScreen({super.key});
 
   @override
   State<ChessVsComputerScreen> createState() => _ChessVsComputerScreenState();
@@ -20,6 +20,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   int cpuScore = 0;
 
   bool _isStockfishReady = false;
+  bool _engineThinking = false;
 
   @override
   void initState() {
@@ -29,17 +30,30 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
     // Escucha la salida de Stockfish
     _stockfish.stdout.listen((output) {
-      if (output.startsWith("bestmove")) {
-        final move = output.split(" ")[1];
+      debugPrint('[SF] $output');
 
-        // Delay pequeño para que la UI del tablero actualice el movimiento
-        Future.delayed(const Duration(milliseconds: 200), () {
-          controller.makeMoveWithNormalNotation(move);
-        });
+      if (output.contains('bestmove ')) {
+        final parts = output.split(' ');
+        if (parts.length >= 2) {
+          final best = parts[1];
+          _engineThinking = false;
+
+          if (best == '0000' || best == '(none)') {
+            debugPrint('Sin jugada disponible (mate o tablas)');
+            return;
+          }
+
+          // Aplicar movimiento del CPU
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _applyUciMoveToBoard(best);
+          });
+
+          setState(() {}); // Actualizar UI para quitar indicador
+        }
       }
     });
 
-    // Escucha cambios de estado usando addListener
+    // Espera a que Stockfish esté listo
     _stockfish.state.addListener(() async {
       if (_stockfish.state.value == StockfishState.ready &&
           !_isStockfishReady) {
@@ -51,17 +65,51 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   Future<void> _initializeStockfish() async {
     _stockfish.stdin = "uci";
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 300));
     _stockfish.stdin = "isready";
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 300));
   }
 
-  void playerMoved() {
-    if (!_isStockfishReady) return;
+  void playerMoved() async {
+    if (!_isStockfishReady || _engineThinking) return;
+
+    _engineThinking = true;
+    setState(() {}); // Actualizar UI para mostrar indicador
 
     final fen = controller.getFen();
+    debugPrint("Jugador movió, FEN: $fen");
+
+    // Actualizamos posición en Stockfish
     _stockfish.stdin = "position fen $fen";
+
+    // Pedimos al CPU que calcule su movimiento
     _stockfish.stdin = "go depth 15";
+  }
+
+  void _applyUciMoveToBoard(String uci) {
+    debugPrint("CPU mueve: $uci");
+
+    if (uci.length == 4) {
+      // Ejemplo: e2e4
+      final from = uci.substring(0, 2);
+      final to = uci.substring(2, 4);
+      controller.makeMove(from: from, to: to);
+      return;
+    }
+
+    if (uci.length == 5) {
+      final from = uci.substring(0, 2);
+      final to = uci.substring(2, 4);
+      final promo = uci.substring(4).toUpperCase(); // q -> Q
+      controller.makeMoveWithPromotion(
+        from: from,
+        to: to,
+        pieceToPromoteTo: promo,
+      );
+      return;
+    }
+
+    debugPrint('Movimiento UCI no reconocido: $uci');
   }
 
   @override
@@ -149,15 +197,26 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
             ),
             // Tablero
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ChessBoard(
-                  controller: controller,
-                  boardColor: BoardColor.brown,
-                  boardOrientation: PlayerColor.white,
-                  enableUserMoves: true,
-                  onMove: playerMoved,
-                ),
+              child: Stack(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ChessBoard(
+                      controller: controller,
+                      boardColor: BoardColor.brown,
+                      boardOrientation: PlayerColor.white,
+                      enableUserMoves: true,
+                      onMove: playerMoved,
+                    ),
+                  ),
+                  if (_engineThinking)
+                    Container(
+                      color: Colors.black.withOpacity(0.4),
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                    ),
+                ],
               ),
             ),
             // Botón reiniciar
@@ -170,6 +229,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                     final fen = controller.getFen();
                     _stockfish.stdin = "position fen $fen";
                   }
+                  _engineThinking = false;
+                  setState(() {});
                 },
                 icon: Icon(Icons.replay),
                 label: Text('Reiniciar partida'),
