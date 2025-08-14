@@ -35,7 +35,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   void initState() {
     super.initState();
 
-    // Mapear dificultad
     switch (widget.selectedDifficulty.toLowerCase()) {
       case 'muy fácil':
         _cpuMoveTime = 200;
@@ -61,8 +60,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     _stockfish = Stockfish();
 
     _stockfish.stdout.listen((output) {
-      debugPrint('[SF] $output');
-
       if (output.contains('bestmove ')) {
         final parts = output.split(' ');
         if (parts.length >= 2) {
@@ -86,10 +83,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         _isStockfishReady = true;
         await _initializeStockfish();
 
-        // Si el jugador eligió negras, el CPU mueve primero con blancas
-        if (_playerColor == PlayerColor.black) {
-          _makeCpuMove();
-        }
+        if (_playerColor == PlayerColor.black) _makeCpuMove();
       }
     });
   }
@@ -106,7 +100,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   void _makeCpuMove() {
     if (!_isStockfishReady) return;
-
     _engineThinking = true;
     setState(() {});
 
@@ -115,22 +108,18 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     _stockfish.stdin = "go depth $_cpuDepth movetime $_cpuMoveTime";
   }
 
-  void playerMoved() async {
+  void playerMoved() {
     if (!_isStockfishReady || _engineThinking) return;
 
     _engineThinking = true;
     setState(() {});
 
     final fen = controller.getFen();
-    debugPrint("Jugador movió, FEN: $fen");
-
     _stockfish.stdin = "position fen $fen";
     _stockfish.stdin = "go depth $_cpuDepth movetime $_cpuMoveTime";
   }
 
   void _applyUciMoveToBoard(String uci) {
-    debugPrint("CPU mueve: $uci");
-
     if (uci.length == 4) {
       final from = uci.substring(0, 2);
       final to = uci.substring(2, 4);
@@ -147,15 +136,12 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         to: to,
         pieceToPromoteTo: promo,
       );
-      return;
     }
   }
 
   void _selectPlayerColor(PlayerColor color) {
     setState(() {
       _playerColor = color;
-
-      // Si el jugador elige negras, CPU hace primer movimiento
       if (_playerColor == PlayerColor.black && _isStockfishReady) {
         _makeCpuMove();
       }
@@ -239,6 +225,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // Avatares y marcador
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
@@ -248,9 +235,14 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                     children: [
                       CircleAvatar(
                         radius: 30,
-                        backgroundImage: AssetImage(
-                          'assets/images/img_perfil_unknown.png',
-                        ),
+                        backgroundColor:
+                            _playerColor == PlayerColor.white
+                                ? Colors.white
+                                : Colors.black,
+                        child:
+                            _playerColor == PlayerColor.white
+                                ? null
+                                : const Icon(Icons.person, color: Colors.white),
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -280,14 +272,26 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                     ],
                   ),
                   Column(
-                    children: const [
+                    children: [
                       CircleAvatar(
                         radius: 30,
-                        backgroundColor: Colors.black,
-                        child: Icon(Icons.smart_toy, color: Colors.white),
+                        backgroundColor:
+                            _playerColor == PlayerColor.white
+                                ? Colors.black
+                                : Colors.white,
+                        child:
+                            _playerColor == PlayerColor.white
+                                ? const Icon(
+                                  Icons.smart_toy,
+                                  color: Colors.white,
+                                )
+                                : const Icon(
+                                  Icons.smart_toy,
+                                  color: Colors.black,
+                                ),
                       ),
-                      SizedBox(height: 6),
-                      Text(
+                      const SizedBox(height: 6),
+                      const Text(
                         'CPU',
                         style: TextStyle(
                           color: Colors.white,
@@ -331,7 +335,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                     final fen = controller.getFen();
                     _stockfish.stdin = "position fen $fen";
 
-                    // Si el jugador es negro, CPU mueve primero
                     if (_playerColor == PlayerColor.black) _makeCpuMove();
                   }
                   _engineThinking = false;
