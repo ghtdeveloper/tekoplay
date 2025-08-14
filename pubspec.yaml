@@ -14,7 +14,7 @@ dependencies:
   flutter:
     sdk: flutter
   process_run: ^0.12.4
-
+  flutter_stockfish_plugin: ^1.2.0
   cupertino_icons: ^1.0.8
   audioplayers: ^5.2.1
   flutter_chess_board: ^1.0.1
@@ -23,7 +23,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+  flutter_stockfish_plugin: ^1.2.0
   flutter_lints: ^5.0.0
   package_info_plus: ^4.0.2
 

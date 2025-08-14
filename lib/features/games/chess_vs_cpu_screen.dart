@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
-import 'package:flutter_chess_board/flutter_chess_board.dart';
 
-import '../../core/services/stockfish_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_chess_board/flutter_chess_board.dart';
+import 'package:flutter_stockfish_plugin/stockfish.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   const ChessVsComputerScreen({Key? key}) : super(key: key);
@@ -12,39 +12,46 @@ class ChessVsComputerScreen extends StatefulWidget {
 }
 
 class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
-  late StockfishService stockfish;
+  late Stockfish _stockfish;
   ChessBoardController controller = ChessBoardController();
 
   int playerScore = 0;
   int cpuScore = 0;
 
+  bool _isStockfishReady = false;
+
   @override
   void initState() {
     super.initState();
-    stockfish = StockfishService();
-    stockfish.startEngine().then((_) {
-      stockfish.sendCommand("uci");
-      stockfish.sendCommand("isready");
+    _stockfish = Stockfish();
+
+    // Escucha la salida de Stockfish
+    _stockfish.stdout.listen((output) {
+      if (output.startsWith("bestmove")) {
+        final move = output.split(" ")[1];
+        controller.makeMoveWithNormalNotation(move);
+      }
     });
 
-    stockfish.output.listen((output) {
-      if (output.contains("bestmove")) {
-        final move = output.split("bestmove ")[1].split(" ")[0];
-        controller.makeMoveWithNormalNotation(move);
-        // Aquí podrías actualizar marcador en el futuro
-      }
+    // Inicializa Stockfish con retardo
+    Future.delayed(Duration(milliseconds: 1500), () {
+      _stockfish.stdin = "uci";
+      Future.delayed(Duration(milliseconds: 500), () {
+        _stockfish.stdin = "isready";
+      });
     });
   }
 
   void playerMoved() {
     final fen = controller.getFen();
-    stockfish.sendCommand("position fen $fen");
-    stockfish.sendCommand("go depth 15");
+    _stockfish.stdin = "position fen $fen";
+    _stockfish.stdin = "go depth 15";
   }
 
   @override
   void dispose() {
-    stockfish.dispose();
+    _stockfish.stdin = "quit";
+    _stockfish.dispose();
     super.dispose();
   }
 
@@ -64,9 +71,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 🧑 VS 🤖 Avatares y marcador
+            // Avatares y marcador
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -74,12 +81,17 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                     children: [
                       CircleAvatar(
                         radius: 30,
-                        backgroundImage: AssetImage('assets/images/img_perfil_unknown.png'),
+                        backgroundImage: AssetImage(
+                          'assets/images/img_perfil_unknown.png',
+                        ),
                       ),
                       SizedBox(height: 6),
                       Text(
                         'Tú',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -87,13 +99,14 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                     children: [
                       Text(
                         '$playerScore - $cpuScore',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                       SizedBox(height: 6),
-                      Text(
-                        'Marcador',
-                        style: TextStyle(color: Colors.white70),
-                      ),
+                      Text('Marcador', style: TextStyle(color: Colors.white70)),
                     ],
                   ),
                   Column(
@@ -106,18 +119,20 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                       SizedBox(height: 6),
                       Text(
                         'CPU',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-
-            // ♟️ Tablero de ajedrez
+            // Tablero
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16),
                 child: ChessBoard(
                   controller: controller,
                   boardColor: BoardColor.brown,
@@ -127,19 +142,15 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                 ),
               ),
             ),
-
-            // 🔁 Botón de reiniciar
+            // Botón reiniciar
             Padding(
-              padding: const EdgeInsets.only(bottom: 24.0),
+              padding: const EdgeInsets.only(bottom: 24),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  controller.resetBoard();
-                },
+                onPressed: () => controller.resetBoard(),
                 icon: Icon(Icons.replay),
                 label: Text('Reiniciar partida'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
-                  //foregroundColor: const Color(0xFFEC7A34),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
