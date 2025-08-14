@@ -64,17 +64,22 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   Future<void> _initializeStockfish() async {
+    // Inicialización de Stockfish
     _stockfish.stdin = "uci";
     await Future.delayed(const Duration(milliseconds: 300));
     _stockfish.stdin = "isready";
     await Future.delayed(const Duration(milliseconds: 300));
+
+    // Opciones para optimizar velocidad
+    _stockfish.stdin = "setoption name Threads value 1";
+    _stockfish.stdin = "setoption name Hash value 32"; // 32MB
   }
 
   void playerMoved() async {
     if (!_isStockfishReady || _engineThinking) return;
 
     _engineThinking = true;
-    setState(() {}); // Actualizar UI para mostrar indicador
+    setState(() {}); // mostrar indicador
 
     final fen = controller.getFen();
     debugPrint("Jugador movió, FEN: $fen");
@@ -82,15 +87,14 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     // Actualizamos posición en Stockfish
     _stockfish.stdin = "position fen $fen";
 
-    // Pedimos al CPU que calcule su movimiento
-    _stockfish.stdin = "go depth 15";
+    // Pedimos al CPU que calcule su movimiento rápido
+    _stockfish.stdin = "go movetime 500"; // CPU pensará máximo 0.5s
   }
 
   void _applyUciMoveToBoard(String uci) {
     debugPrint("CPU mueve: $uci");
 
     if (uci.length == 4) {
-      // Ejemplo: e2e4
       final from = uci.substring(0, 2);
       final to = uci.substring(2, 4);
       controller.makeMove(from: from, to: to);
@@ -100,7 +104,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     if (uci.length == 5) {
       final from = uci.substring(0, 2);
       final to = uci.substring(2, 4);
-      final promo = uci.substring(4).toUpperCase(); // q -> Q
+      final promo = uci.substring(4).toUpperCase();
       controller.makeMoveWithPromotion(
         from: from,
         to: to,
@@ -151,8 +155,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                           'assets/images/img_perfil_unknown.png',
                         ),
                       ),
-                      SizedBox(height: 6),
-                      Text(
+                      const SizedBox(height: 6),
+                      const Text(
                         'Tú',
                         style: TextStyle(
                           color: Colors.white,
@@ -165,18 +169,21 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                     children: [
                       Text(
                         '$playerScore - $cpuScore',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
                       ),
-                      SizedBox(height: 6),
-                      Text('Marcador', style: TextStyle(color: Colors.white70)),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Marcador',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                     ],
                   ),
                   Column(
-                    children: [
+                    children: const [
                       CircleAvatar(
                         radius: 30,
                         backgroundColor: Colors.black,
@@ -195,7 +202,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                 ],
               ),
             ),
-            // Tablero
+            // Tablero con indicador de CPU pensando
             Expanded(
               child: Stack(
                 children: [
@@ -232,14 +239,17 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                   _engineThinking = false;
                   setState(() {});
                 },
-                icon: Icon(Icons.replay),
-                label: Text('Reiniciar partida'),
+                icon: const Icon(Icons.replay),
+                label: const Text('Reiniciar partida'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 14,
+                  ),
                 ),
               ),
             ),
