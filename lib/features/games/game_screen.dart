@@ -26,11 +26,13 @@ class GameScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.settings,color: Colors.white),
+                    icon: const Icon(Icons.settings, color: Colors.white),
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) =>  SettingsScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => SettingsScreen(),
+                        ),
                       );
                     },
                   ),
@@ -186,16 +188,16 @@ void _showFriendGameDialog(BuildContext context) {
 
               SizedBox(height: 20),
 
-
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Clipboard.setData(
-                        ClipboardData(text: 'https://tuapp.com/invite/12345'));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Enlace copiado')),
+                      ClipboardData(text: 'https://tuapp.com/invite/12345'),
                     );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Enlace copiado')));
                   },
                   icon: Icon(Icons.link),
                   label: Text(
@@ -221,7 +223,6 @@ void _showFriendGameDialog(BuildContext context) {
   );
 }
 
-
 void _showComputerGameDialog(BuildContext context) {
   showDialog(
     context: context,
@@ -232,7 +233,9 @@ void _showComputerGameDialog(BuildContext context) {
       return StatefulBuilder(
         builder: (context, setState) {
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             backgroundColor: Colors.white,
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -257,18 +260,21 @@ void _showComputerGameDialog(BuildContext context) {
                   SizedBox(height: 20),
 
                   Column(
-                    children: ['Muy fácil', 'Fácil', 'Normal', 'Difícil'].map((level) {
-                      return RadioListTile<String>(
-                        title: Text(level),
-                        value: level,
-                        groupValue: selectedDifficulty,
-                        onChanged: (value) {
-                          setState(() {
-                            selectedDifficulty = value!;
-                          });
-                        },
-                      );
-                    }).toList(),
+                    children:
+                        ['Muy fácil', 'Fácil', 'Normal', 'Difícil'].map((
+                          level,
+                        ) {
+                          return RadioListTile<String>(
+                            title: Text(level),
+                            value: level,
+                            groupValue: selectedDifficulty,
+                            onChanged: (value) {
+                              setState(() {
+                                selectedDifficulty = value!;
+                              });
+                            },
+                          );
+                        }).toList(),
                   ),
 
                   SizedBox(height: 20),
@@ -280,7 +286,11 @@ void _showComputerGameDialog(BuildContext context) {
                         Navigator.of(context).pop();
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => ChessVsComputerScreen()),
+                          MaterialPageRoute(
+                            builder:
+                                (context) =>
+                                    ChessVsComputerScreen(selectedDifficulty),
+                          ),
                         );
                       },
                       icon: Icon(Icons.smart_toy),
@@ -363,7 +373,9 @@ void _showOnlineGameDialog(BuildContext context) {
                       Navigator.of(context).pop();
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Por favor ingresa un código válido')),
+                        SnackBar(
+                          content: Text('Por favor ingresa un código válido'),
+                        ),
                       );
                     }
                   },
@@ -397,7 +409,11 @@ void _showOnlineGameDialog(BuildContext context) {
                     final generatedRoomCode = 'ROOM12345'; // Simulado
                     Clipboard.setData(ClipboardData(text: generatedRoomCode));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Código generado y copiado: $generatedRoomCode')),
+                      SnackBar(
+                        content: Text(
+                          'Código generado y copiado: $generatedRoomCode',
+                        ),
+                      ),
                     );
                     // Aquí va la lógica para crear la sala y esperar a otro jugador
                     print('Sala creada: $generatedRoomCode');
@@ -426,5 +442,3 @@ void _showOnlineGameDialog(BuildContext context) {
     },
   );
 }
-
-

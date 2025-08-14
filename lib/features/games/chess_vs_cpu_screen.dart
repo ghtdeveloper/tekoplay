@@ -6,7 +6,9 @@ import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
-  const ChessVsComputerScreen({super.key});
+  final String selectedDifficulty;
+
+  const ChessVsComputerScreen(this.selectedDifficulty, {super.key});
 
   @override
   State<ChessVsComputerScreen> createState() => _ChessVsComputerScreenState();
@@ -22,13 +24,38 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   bool _isStockfishReady = false;
   bool _engineThinking = false;
 
+  // Variables para dificultad
+  late int _cpuMoveTime; // ms
+  late int _cpuDepth; // profundidad
+
   @override
   void initState() {
     super.initState();
 
+    switch (widget.selectedDifficulty.toLowerCase()) {
+      case 'muy fácil':
+        _cpuMoveTime = 200;
+        _cpuDepth = 5;
+        break;
+      case 'fácil':
+        _cpuMoveTime = 400;
+        _cpuDepth = 8;
+        break;
+      case 'normal':
+        _cpuMoveTime = 800;
+        _cpuDepth = 12;
+        break;
+      case 'difícil':
+        _cpuMoveTime = 1500;
+        _cpuDepth = 15;
+        break;
+      default:
+        _cpuMoveTime = 500;
+        _cpuDepth = 10;
+    }
+
     _stockfish = Stockfish();
 
-    // Escucha la salida de Stockfish
     _stockfish.stdout.listen((output) {
       debugPrint('[SF] $output');
 
@@ -64,7 +91,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   Future<void> _initializeStockfish() async {
-    // Inicialización de Stockfish
     _stockfish.stdin = "uci";
     await Future.delayed(const Duration(milliseconds: 300));
     _stockfish.stdin = "isready";
@@ -79,16 +105,15 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     if (!_isStockfishReady || _engineThinking) return;
 
     _engineThinking = true;
-    setState(() {}); // mostrar indicador
+    setState(() {});
 
     final fen = controller.getFen();
     debugPrint("Jugador movió, FEN: $fen");
 
-    // Actualizamos posición en Stockfish
     _stockfish.stdin = "position fen $fen";
 
-    // Pedimos al CPU que calcule su movimiento rápido
-    _stockfish.stdin = "go movetime 500"; // CPU pensará máximo 0.5s
+    // CPU hace su jugada según dificultad
+    _stockfish.stdin = "go depth $_cpuDepth movetime $_cpuMoveTime";
   }
 
   void _applyUciMoveToBoard(String uci) {
