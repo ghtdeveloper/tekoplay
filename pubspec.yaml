@@ -23,7 +23,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_stockfish_plugin: ^1.2.0
   flutter_lints: ^5.0.0
   package_info_plus: ^4.0.2
 

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
+import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   const ChessVsComputerScreen({Key? key}) : super(key: key);
@@ -23,26 +24,41 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   @override
   void initState() {
     super.initState();
+
     _stockfish = Stockfish();
 
     // Escucha la salida de Stockfish
     _stockfish.stdout.listen((output) {
       if (output.startsWith("bestmove")) {
         final move = output.split(" ")[1];
-        controller.makeMoveWithNormalNotation(move);
+
+        // Delay pequeño para que la UI del tablero actualice el movimiento
+        Future.delayed(const Duration(milliseconds: 200), () {
+          controller.makeMoveWithNormalNotation(move);
+        });
       }
     });
 
-    // Inicializa Stockfish con retardo
-    Future.delayed(Duration(milliseconds: 1500), () {
-      _stockfish.stdin = "uci";
-      Future.delayed(Duration(milliseconds: 500), () {
-        _stockfish.stdin = "isready";
-      });
+    // Escucha cambios de estado usando addListener
+    _stockfish.state.addListener(() async {
+      if (_stockfish.state.value == StockfishState.ready &&
+          !_isStockfishReady) {
+        _isStockfishReady = true;
+        await _initializeStockfish();
+      }
     });
   }
 
+  Future<void> _initializeStockfish() async {
+    _stockfish.stdin = "uci";
+    await Future.delayed(const Duration(milliseconds: 500));
+    _stockfish.stdin = "isready";
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
   void playerMoved() {
+    if (!_isStockfishReady) return;
+
     final fen = controller.getFen();
     _stockfish.stdin = "position fen $fen";
     _stockfish.stdin = "go depth 15";
@@ -50,7 +66,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   @override
   void dispose() {
-    _stockfish.stdin = "quit";
+    if (_isStockfishReady) {
+      _stockfish.stdin = "quit";
+    }
     _stockfish.dispose();
     super.dispose();
   }
@@ -146,7 +164,13 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 24),
               child: ElevatedButton.icon(
-                onPressed: () => controller.resetBoard(),
+                onPressed: () {
+                  controller.resetBoard();
+                  if (_isStockfishReady) {
+                    final fen = controller.getFen();
+                    _stockfish.stdin = "position fen $fen";
+                  }
+                },
                 icon: Icon(Icons.replay),
                 label: Text('Reiniciar partida'),
                 style: ElevatedButton.styleFrom(
