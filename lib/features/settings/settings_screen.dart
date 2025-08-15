@@ -6,7 +6,10 @@ import '../../app.dart';
 import '../../generated/l10n.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final Function(double)?
+  onVolumeChangedLive; // 🔊 Callback para cambio en vivo
+
+  const SettingsScreen({super.key, this.onVolumeChangedLive});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -75,7 +78,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       });
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.setDouble('musicVolume', newVolume);
-                    });
+                    }, widget.onVolumeChangedLive);
                   },
                 ),
                 _buildSettingsCard(
@@ -239,6 +242,7 @@ void _showMusicVolumeDialog(
   BuildContext context,
   double currentVolume,
   Function(double) onVolumeChanged,
+  Function(double)? onVolumeChangedLive,
 ) {
   showDialog(
     context: context,
@@ -294,6 +298,9 @@ void _showMusicVolumeDialog(
                       setState(() {
                         tempVolume = value;
                       });
+                      if (onVolumeChangedLive != null) {
+                        onVolumeChangedLive(value);
+                      }
                     },
                   ),
 

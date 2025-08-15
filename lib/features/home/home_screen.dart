@@ -59,7 +59,16 @@ class _MainScreenState extends State<MainScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => SettingsScreen()),
+                MaterialPageRoute(
+                  builder:
+                      (context) => SettingsScreen(
+                        onVolumeChangedLive: (newVolume) {
+                          _audioPlayer.setVolume(
+                            newVolume,
+                          ); // 🔊 Actualiza en vivo
+                        },
+                      ),
+                ),
               );
             },
           ),
@@ -74,7 +83,7 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Text(
                 S.of(context).whatPlay,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 36,
                   fontWeight: FontWeight.bold,
