@@ -24,11 +24,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   bool _isStockfishReady = false;
   bool _engineThinking = false;
 
-  // Variables de dificultad
   late int _cpuMoveTime;
-  late int _cpuDepth;
 
-  // Selección de color
   PlayerColor? _playerColor;
 
   @override
@@ -37,24 +34,19 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
     switch (widget.selectedDifficulty.toLowerCase()) {
       case 'muy fácil':
-        _cpuMoveTime = 200;
-        _cpuDepth = 5;
+        _cpuMoveTime = 100;
         break;
       case 'fácil':
-        _cpuMoveTime = 400;
-        _cpuDepth = 8;
+        _cpuMoveTime = 150;
         break;
       case 'normal':
-        _cpuMoveTime = 800;
-        _cpuDepth = 12;
+        _cpuMoveTime = 250;
         break;
       case 'difícil':
-        _cpuMoveTime = 1500;
-        _cpuDepth = 15;
+        _cpuMoveTime = 350;
         break;
       default:
-        _cpuMoveTime = 500;
-        _cpuDepth = 10;
+        _cpuMoveTime = 200;
     }
 
     _stockfish = Stockfish();
@@ -100,23 +92,18 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   void _makeCpuMove() {
     if (!_isStockfishReady) return;
-    _engineThinking = true;
-    setState(() {});
 
     final fen = controller.getFen();
     _stockfish.stdin = "position fen $fen";
-    _stockfish.stdin = "go depth $_cpuDepth movetime $_cpuMoveTime";
+    _stockfish.stdin = "go movetime $_cpuMoveTime";
   }
 
   void playerMoved() {
-    if (!_isStockfishReady || _engineThinking) return;
-
-    _engineThinking = true;
-    setState(() {});
+    if (!_isStockfishReady) return;
 
     final fen = controller.getFen();
     _stockfish.stdin = "position fen $fen";
-    _stockfish.stdin = "go depth $_cpuDepth movetime $_cpuMoveTime";
+    _stockfish.stdin = "go movetime $_cpuMoveTime";
   }
 
   void _applyUciMoveToBoard(String uci) {
