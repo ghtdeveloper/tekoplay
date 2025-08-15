@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../settings/settings_screen.dart';
 import 'chess_vs_cpu_screen.dart';
@@ -95,22 +96,22 @@ class GameScreen extends StatelessWidget {
                 children: [
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_vs_friend.png',
-                    label: 'Vs Amigo',
+                    label: S.of(context).vsFriend,
                     onPressed: () => _showFriendGameDialog(context),
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_lessons.png',
-                    label: 'Tutorial',
+                    label: S.of(context).tutorial,
                     onPressed: () {},
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_vs_computer.png',
-                    label: 'Vs CPU',
+                    label: S.of(context).vsCpu,
                     onPressed: () => _showComputerGameDialog(context),
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_online.png',
-                    label: 'En Línea',
+                    label: S.of(context).online,
                     onPressed: () => _showOnlineGameDialog(context),
                   ),
                 ],
@@ -144,7 +145,7 @@ void _showFriendGameDialog(BuildContext context) {
                 ),
               ),
               Text(
-                'Jugar con un amigo',
+                S.of(context).playWithFriend,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
@@ -155,7 +156,7 @@ void _showFriendGameDialog(BuildContext context) {
 
               TextField(
                 decoration: InputDecoration(
-                  labelText: 'Buscar por nombre de usuario',
+                  labelText: S.of(context).searchByUsername,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -171,7 +172,7 @@ void _showFriendGameDialog(BuildContext context) {
                   },
                   icon: Icon(Icons.search),
                   label: Text(
-                    'Buscar',
+                    S.of(context).search,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16),
                   ),
@@ -195,13 +196,13 @@ void _showFriendGameDialog(BuildContext context) {
                     Clipboard.setData(
                       ClipboardData(text: 'https://tuapp.com/invite/12345'),
                     );
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text('Enlace copiado')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(S.of(context).linkCopied)),
+                    );
                   },
                   icon: Icon(Icons.link),
                   label: Text(
-                    'Copiar enlace para compartir',
+                    S.of(context).copyLinkToShare,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16),
                   ),
@@ -228,7 +229,7 @@ void _showComputerGameDialog(BuildContext context) {
     context: context,
     barrierDismissible: false,
     builder: (context) {
-      String selectedDifficulty = 'Normal'; // valor predeterminado
+      String selectedDifficulty = S.of(context).normal; // valor predeterminado
 
       return StatefulBuilder(
         builder: (context, setState) {
@@ -250,7 +251,7 @@ void _showComputerGameDialog(BuildContext context) {
                     ),
                   ),
                   Text(
-                    'Jugar contra la computadora',
+                    S.of(context).playVsComputer,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -261,9 +262,12 @@ void _showComputerGameDialog(BuildContext context) {
 
                   Column(
                     children:
-                        ['Muy fácil', 'Fácil', 'Normal', 'Difícil'].map((
-                          level,
-                        ) {
+                        [
+                          S.of(context).veryEasy,
+                          S.of(context).easy,
+                          S.of(context).normal,
+                          S.of(context).difficult,
+                        ].map((level) {
                           return RadioListTile<String>(
                             title: Text(level),
                             value: level,
@@ -295,7 +299,7 @@ void _showComputerGameDialog(BuildContext context) {
                       },
                       icon: Icon(Icons.smart_toy),
                       label: Text(
-                        'Empezar juego',
+                        S.of(context).startGame,
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 16),
                       ),
@@ -342,7 +346,7 @@ void _showOnlineGameDialog(BuildContext context) {
                 ),
               ),
               Text(
-                'Jugar en línea',
+                S.of(context).playOnline,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
@@ -354,7 +358,7 @@ void _showOnlineGameDialog(BuildContext context) {
               TextField(
                 controller: roomCodeController,
                 decoration: InputDecoration(
-                  labelText: 'Código de sala',
+                  labelText: S.of(context).roomCode,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -374,14 +378,14 @@ void _showOnlineGameDialog(BuildContext context) {
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Por favor ingresa un código válido'),
+                          content: Text(S.of(context).pleaseEnterValidCode),
                         ),
                       );
                     }
                   },
                   icon: Icon(Icons.login),
                   label: Text(
-                    'Unirse a la sala',
+                    S.of(context).joinRoom,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16),
                   ),
@@ -411,7 +415,7 @@ void _showOnlineGameDialog(BuildContext context) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Código generado y copiado: $generatedRoomCode',
+                          '${S.of(context).generatedAndCopiedCode} : $generatedRoomCode',
                         ),
                       ),
                     );
@@ -421,7 +425,7 @@ void _showOnlineGameDialog(BuildContext context) {
                   },
                   icon: Icon(Icons.add),
                   label: Text(
-                    'Crear nueva sala',
+                    S.of(context).createNewRoom,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16),
                   ),

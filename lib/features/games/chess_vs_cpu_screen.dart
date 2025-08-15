@@ -5,6 +5,8 @@ import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 
+import '../../generated/l10n.dart';
+
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
 
@@ -151,8 +153,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Selecciona tu color',
+              Text(
+                S.of(context).changeColor,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -169,8 +171,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                       children: [
                         CircleAvatar(radius: 40, backgroundColor: Colors.white),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Blancas',
+                        Text(
+                          S.of(context).whites,
                           style: TextStyle(color: Colors.white),
                         ),
                       ],
@@ -183,8 +185,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                       children: [
                         CircleAvatar(radius: 40, backgroundColor: Colors.black),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Negras',
+                        Text(
+                          S.of(context).blacks,
                           style: TextStyle(color: Colors.white),
                         ),
                       ],
@@ -203,8 +205,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
         elevation: 0,
-        title: const Text(
-          'Jugador vs CPU',
+        title: Text(
+          S.of(context).playerVsCpu,
           style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -252,8 +254,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'Marcador',
+                      Text(
+                        S.of(context).marker,
                         style: TextStyle(color: Colors.white70),
                       ),
                     ],
@@ -278,8 +280,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                                 ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'CPU',
+                      Text(
+                        S.of(context).cpu,
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -328,7 +330,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                   setState(() {});
                 },
                 icon: const Icon(Icons.replay),
-                label: const Text('Reiniciar partida'),
+                label: Text(S.of(context).restartGame),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   shape: RoundedRectangleBorder(

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../app.dart';
+import '../../generated/l10n.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,7 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
     setState(() {
-      _appVersion = 'Versión ${info.version}';
+      _appVersion = '${S.of(context).version}${info.version}';
     });
   }
 
@@ -30,8 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFEC7A34),
       appBar: AppBar(
-        title: const Text(
-          'Configuración',
+        title: Text(
+          S.of(context).settings,
           style: TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFFEC7A34),
@@ -45,14 +49,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(16.0),
               children: [
                 _buildSettingsCard(
-                  title: 'Agregar cuenta',
-                  subtitle: 'Iniciar sesión con tu cuenta',
+                  title: S.of(context).addAccount,
+                  subtitle: S.of(context).signInAccount,
                   icon: Icons.account_circle_outlined,
                   onTap: () => _showLoginDialog(context),
                 ),
                 _buildSettingsCard(
-                  title: 'Música del juego',
-                  subtitle: 'Ajusta el volumen de la música',
+                  title: S.of(context).gameMusic,
+                  subtitle: S.of(context).adjustGameMusic,
                   icon: Icons.music_note,
                   onTap: () {
                     _showMusicVolumeDialog(context, _musicVolume, (newVolume) {
@@ -64,30 +68,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 _buildSettingsCard(
-                  title: 'Idioma',
-                  subtitle: 'Cambiar lenguaje del juego',
+                  title: S.of(context).language,
+                  subtitle: S.of(context).changeGameLanguage,
                   icon: Icons.language,
                   onTap: () {
                     _showLanguageDialog(context);
                   },
                 ),
                 _buildSettingsCard(
-                  title: 'Notificaciones',
-                  subtitle: 'Personaliza tus notificaciones',
+                  title: S.of(context).notifications,
+                  subtitle: S.of(context).customNotifications,
                   icon: Icons.notification_important_sharp,
                   onTap: () {
                     _showNotificationsDialog(context);
                   },
                 ),
                 _buildSettingsCard(
-                  title: 'Privacidad',
-                  subtitle: 'Política de privacidad',
+                  title: S.of(context).privacyTitle,
+                  subtitle: S.of(context).privacy,
                   icon: Icons.privacy_tip_outlined,
                   onTap: () {},
                 ),
                 _buildSettingsCard(
-                  title: 'Términos y condiciones',
-                  subtitle: 'Consulta nuestros términos',
+                  title: S.of(context).terms,
+                  subtitle: S.of(context).termsCheck,
                   icon: Icons.description_outlined,
                   onTap: () {},
                 ),
@@ -163,10 +167,10 @@ void _showLoginDialog(BuildContext context) {
 
               const SizedBox(height: 8),
 
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(
-                  'Inicio de sesión',
+                  S.of(context).login,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -188,7 +192,7 @@ void _showLoginDialog(BuildContext context) {
                     color: Colors.red,
                     size: 32,
                   ),
-                  title: const Text('Iniciar sesión con Google'),
+                  title: Text(S.of(context).googleLogin),
                   onTap: () {
                     Navigator.of(context).pop();
                     // TODO Aquí lógica de Google
@@ -205,7 +209,7 @@ void _showLoginDialog(BuildContext context) {
                 elevation: 4,
                 child: ListTile(
                   leading: const Icon(Icons.apple, size: 32),
-                  title: const Text('Iniciar sesión con Apple ID'),
+                  title: Text(S.of(context).appleLogin),
                   onTap: () {
                     Navigator.of(context).pop();
                     //TODO Aquí lógica de Apple ID
@@ -253,10 +257,10 @@ void _showMusicVolumeDialog(
 
                   const SizedBox(height: 8),
 
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8.0),
                     child: Text(
-                      'Volumen de música',
+                      S.of(context).volume,
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -297,8 +301,8 @@ void _showMusicVolumeDialog(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Aceptar',
+                      child: Text(
+                        S.of(context).accept,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -317,12 +321,12 @@ void _showMusicVolumeDialog(
 }
 
 void _showLanguageDialog(BuildContext context) {
+  String selectedLanguage = 'Español';
+
   showDialog(
     context: context,
     barrierDismissible: false,
     builder: (BuildContext context) {
-      String selectedLanguage = 'Español';
-
       return StatefulBuilder(
         builder: (context, setState) {
           return Dialog(
@@ -337,10 +341,10 @@ void _showLanguageDialog(BuildContext context) {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Seleccionar idioma',
-                          style: TextStyle(
+                          S.of(context).languageSelect,
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -354,43 +358,33 @@ void _showLanguageDialog(BuildContext context) {
                   ),
                   const SizedBox(height: 8),
                   RadioListTile<String>(
-                    title: const Text('Español'),
+                    title: Text(S.of(context).languageEs),
                     value: 'Español',
                     groupValue: selectedLanguage,
-                    activeColor: Color(0xFFEC7A34),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedLanguage = value!;
-                      });
-                    },
+                    activeColor: const Color(0xFFEC7A34),
+                    onChanged:
+                        (value) => setState(() => selectedLanguage = value!),
                   ),
                   RadioListTile<String>(
-                    title: const Text('Inglés'),
+                    title: Text(S.of(context).languageEn),
                     value: 'Inglés',
                     groupValue: selectedLanguage,
-                    activeColor: Color(0xFFEC7A34),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedLanguage = value!;
-                      });
-                    },
+                    activeColor: const Color(0xFFEC7A34),
+                    onChanged:
+                        (value) => setState(() => selectedLanguage = value!),
                   ),
                   RadioListTile<String>(
-                    title: const Text('Francés'),
+                    title: Text(S.of(context).languageFr),
                     value: 'Francés',
                     groupValue: selectedLanguage,
-                    activeColor: Color(0xFFEC7A34),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedLanguage = value!;
-                      });
-                    },
+                    activeColor: const Color(0xFFEC7A34),
+                    onChanged:
+                        (value) => setState(() => selectedLanguage = value!),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
-                      //TODO CAMBIAR IDIOMA
-                      Navigator.of(context).pop();
+                      _changeLanguage(selectedLanguage, context);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFEC7A34),
@@ -399,7 +393,7 @@ void _showLanguageDialog(BuildContext context) {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text('Aceptar'),
+                    child: Text(S.of(context).accept),
                   ),
                 ],
               ),
@@ -409,6 +403,31 @@ void _showLanguageDialog(BuildContext context) {
       );
     },
   );
+}
+
+Future<void> _changeLanguage(
+  String selectedLanguage,
+  BuildContext context,
+) async {
+  Locale newLocale;
+  switch (selectedLanguage) {
+    case 'Inglés':
+      newLocale = const Locale('en');
+      break;
+    case 'Francés':
+      newLocale = const Locale('fr');
+      break;
+    default:
+      newLocale = const Locale('es');
+  }
+
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('languageCode', newLocale.languageCode);
+
+  if (!context.mounted) return;
+
+  TekoplayApp.setLocale(context, newLocale);
+  Navigator.of(context).pop();
 }
 
 void _showNotificationsDialog(BuildContext context) {
@@ -433,9 +452,9 @@ void _showNotificationsDialog(BuildContext context) {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Notificaciones',
+                          S.of(context).notifications,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -450,7 +469,7 @@ void _showNotificationsDialog(BuildContext context) {
                   ),
                   const SizedBox(height: 8),
                   SwitchListTile(
-                    title: const Text('Recordatorio de eventos'),
+                    title: Text(S.of(context).reminder),
                     value: reminderEnabled,
                     activeColor: Color(0xFFEC7A34),
                     onChanged: (bool value) {
@@ -458,10 +477,9 @@ void _showNotificationsDialog(BuildContext context) {
                         reminderEnabled = value;
                       });
                     },
-
                   ),
                   SwitchListTile(
-                    title: const Text('Recibir nuevos mensajes'),
+                    title: Text(S.of(context).messages),
                     value: messagesEnabled,
                     activeColor: Color(0xFFEC7A34),
                     onChanged: (bool value) {
@@ -469,22 +487,8 @@ void _showNotificationsDialog(BuildContext context) {
                         messagesEnabled = value;
                       });
                     },
-
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC7A34),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Aceptar'),
-                  ),
                 ],
               ),
             ),

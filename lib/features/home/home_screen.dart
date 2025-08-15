@@ -1,5 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+
+import '../../generated/l10n.dart';
 import '../games/game_screen.dart';
 import '../settings/settings_screen.dart';
 
@@ -43,13 +45,16 @@ class _MainScreenState extends State<MainScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: const Color(0xFFEC7A34),
         actions: [
-          IconButton(icon: const Icon(Icons.notifications,color: Colors.white,), onPressed: () {}),
           IconButton(
-            icon: const Icon(Icons.settings,color: Colors.white,),
+            icon: const Icon(Icons.notifications, color: Colors.white),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) =>  SettingsScreen()),
+                MaterialPageRoute(builder: (context) => SettingsScreen()),
               );
             },
           ),
@@ -62,8 +67,8 @@ class _MainScreenState extends State<MainScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Text(
-                '¿Qué deseas jugar?',
+              Text(
+                S.of(context).whatPlay,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 36,
@@ -79,12 +84,14 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     GameCard(
                       imagePath: 'assets/images/chess.png',
-                      title: 'Ajedrez',
+                      title: S.of(context).chess,
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const GameScreen(gameType: 'Ajedrez'),
+                            builder:
+                                (context) =>
+                                    GameScreen(gameType: S.of(context).chess),
                           ),
                         );
                       },
@@ -92,12 +99,14 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                     GameCard(
                       imagePath: 'assets/images/domino.png',
-                      title: 'Dominó',
+                      title: S.of(context).domino,
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const GameScreen(gameType: 'Dominó'),
+                            builder:
+                                (context) =>
+                                    GameScreen(gameType: S.of(context).domino),
                           ),
                         );
                       },
@@ -134,9 +143,7 @@ class GameCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
           width: size,
           height: size,
@@ -144,9 +151,7 @@ class GameCard extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Expanded(
-                child: Image.asset(imagePath, fit: BoxFit.contain),
-              ),
+              Expanded(child: Image.asset(imagePath, fit: BoxFit.contain)),
               const SizedBox(height: 10),
               Text(
                 title,

@@ -18,6 +18,14 @@ dependencies:
   cupertino_icons: ^1.0.8
   audioplayers: ^5.2.1
   flutter_chess_board: ^1.0.1
+  shared_preferences: ^2.1.1
+  package_info_plus: ^4.0.2
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.19.0
+  intl_utils: ^2.6.0
+
+
 
 
 dev_dependencies:
