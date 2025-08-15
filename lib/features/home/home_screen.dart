@@ -1,5 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../generated/l10n.dart';
 import '../games/game_screen.dart';
@@ -22,8 +23,12 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _initMusic() async {
+    final prefs = await SharedPreferences.getInstance();
+    double volume = prefs.getDouble('musicVolume') ?? 0.5;
+
     _audioPlayer = AudioPlayer();
     await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    await _audioPlayer.setVolume(volume);
     await _audioPlayer.play(AssetSource('audio/background_music.mp3'));
   }
 

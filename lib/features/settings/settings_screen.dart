@@ -20,6 +20,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadAppVersion();
+    _loadMusicVolume();
+  }
+
+  Future<void> _loadMusicVolume() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _musicVolume = prefs.getDouble('musicVolume') ?? 0.5;
+    });
   }
 
   Future<void> _loadAppVersion() async {
@@ -59,11 +67,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: S.of(context).adjustGameMusic,
                   icon: Icons.music_note,
                   onTap: () {
-                    _showMusicVolumeDialog(context, _musicVolume, (newVolume) {
+                    _showMusicVolumeDialog(context, _musicVolume, (
+                      newVolume,
+                    ) async {
                       setState(() {
                         _musicVolume = newVolume;
                       });
-                      // TODO Aquí podrías aplicar el volumen a tu motor de audio
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setDouble('musicVolume', newVolume);
                     });
                   },
                 ),
