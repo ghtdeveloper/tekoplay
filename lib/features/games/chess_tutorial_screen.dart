@@ -14,11 +14,9 @@ class _ChessImmersiveTutorialScreenState
     extends State<ChessImmersiveTutorialScreen> {
   final ChessBoardController _controller = ChessBoardController();
 
-  /// Paso actual (0..n-1)
   int _currentStep = 0;
 
-  /// Definición de pasos sencillos: se valida por SAN (e4, Nf3, a4, etc.)
-  /// Además incluimos from/to para la demo automática.
+
   final List<Map<String, String>> _steps = const [
     {
       'title': 'Mover Peones',
@@ -52,14 +50,13 @@ class _ChessImmersiveTutorialScreenState
     _resetBoardForStep();
   }
 
-  /// Reinicia el tablero para practicar el paso actual desde la posición inicial.
+
   void _resetBoardForStep() {
     _controller.resetBoard();
-    // Si tu paquete tuviera animaciones lentas o algo en curso, puedes esperar un frame.
     setState(() {});
   }
 
-  /// Avanza al siguiente paso o muestra finalización.
+
   void _nextStep() async {
     if (_currentStep < _steps.length - 1) {
       setState(() => _currentStep++);
@@ -100,11 +97,10 @@ class _ChessImmersiveTutorialScreenState
     }
   }
 
-  /// Demostración automática del movimiento esperado en el paso actual.
+  
   void _demoMove() async {
     final from = _steps[_currentStep]['from']!;
     final to = _steps[_currentStep]['to']!;
-    // Reinicia el tablero por si el usuario probó algo
     _resetBoardForStep();
     await Future.delayed(const Duration(milliseconds: 200));
     _controller.makeMove(from: from, to: to);
@@ -209,12 +205,12 @@ class _ChessImmersiveTutorialScreenState
                   boardColor: BoardColor.brown,
                   boardOrientation: PlayerColor.white,
                   enableUserMoves: true,
-                  onMove: _onUserMove, // <- importante: ahora es VoidCallback
+                  onMove: _onUserMove,
                 ),
               ),
             ),
 
-            // Navegación simple entre pasos (opcional)
+        
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Row(
