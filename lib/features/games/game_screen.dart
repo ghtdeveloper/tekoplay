@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tekoplay/features/games/chess_tutorial_screen.dart';
 
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
@@ -102,7 +103,7 @@ class GameScreen extends StatelessWidget {
                   GameModeButton(
                     imagePath: 'assets/images/icon_lessons.png',
                     label: S.of(context).tutorial,
-                    onPressed: () {},
+                    onPressed: () => _showTutorial(context),
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_vs_computer.png',
@@ -224,12 +225,22 @@ void _showFriendGameDialog(BuildContext context) {
   );
 }
 
+
+void _showTutorial(BuildContext context) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) =>  ChessImmersiveTutorialScreen(),
+    ),
+  );
+}
+
 void _showComputerGameDialog(BuildContext context) {
   showDialog(
     context: context,
     barrierDismissible: false,
     builder: (context) {
-      String selectedDifficulty = S.of(context).normal; // valor predeterminado
+      String selectedDifficulty = S.of(context).normal;
 
       return StatefulBuilder(
         builder: (context, setState) {
