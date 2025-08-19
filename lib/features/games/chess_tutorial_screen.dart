@@ -82,10 +82,8 @@ class _ChessImmersiveTutorialScreenState
     }
   }
 
-  /// Se llama después de cada movimiento del usuario.
-  /// La API actual de flutter_chess_board expone la última jugada con getSan().
   void _onUserMove() {
-    final lastSan = _controller.getSan(); // p.ej. "e4", "Nf3", "a4"
+    final lastSan = _controller.getSan(); 
     final expectedSan = _steps[_currentStep]['san'];
 
     if (lastSan == expectedSan) {
@@ -146,7 +144,6 @@ class _ChessImmersiveTutorialScreenState
       body: SafeArea(
         child: Column(
           children: [
-            // Título y descripción
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Column(
@@ -196,7 +193,7 @@ class _ChessImmersiveTutorialScreenState
               ),
             ),
 
-            // Tablero
+        
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
