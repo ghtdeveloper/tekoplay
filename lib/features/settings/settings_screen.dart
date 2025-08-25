@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tekoplay/service/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../app.dart';
 import '../../generated/l10n.dart';
@@ -18,12 +20,14 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String _appVersion = '';
   double _musicVolume = 0.5;
+  User? _currentUser;
 
   @override
   void initState() {
     super.initState();
     _loadAppVersion();
     _loadMusicVolume();
+    _loadCurrentUser();
   }
 
   Future<void> _loadMusicVolume() async {
@@ -38,6 +42,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _appVersion = '${S.of(context).version}${info.version}';
     });
+  }
+
+  void _loadCurrentUser() {
+    setState(() {
+      _currentUser = AuthService().getCurrentUser();
+    });
+  }
+
+  Future<void> _signInWithGoogle() async {
+    try {
+      final user = await AuthService().signInWithGoogle();
+      if (!mounted) return;
+
+      if (user != null) {
+        setState(() {
+          _currentUser = user;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Bienvenido ${user.displayName ?? ''}"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Error al iniciar sesión con Google"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Error al iniciar sesión con Google"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -55,24 +99,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: Column(
         children: [
+          if (_currentUser != null) _buildUserSection(),
+
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(16.0),
               children: [
-                _buildSettingsCard(
+                _currentUser == null
+                    ? _buildSettingsCard(
                   title: S.of(context).addAccount,
                   subtitle: S.of(context).signInAccount,
                   icon: Icons.account_circle_outlined,
                   onTap: () => _showLoginDialog(context),
+                )
+                    : _buildSettingsCard(
+                  title: "Cerrar sesión",
+                  subtitle: "Salir de tu cuenta",
+                  icon: Icons.logout,
+                  onTap: () => _showLogoutDialog(context),
                 ),
+
                 _buildSettingsCard(
                   title: S.of(context).gameMusic,
                   subtitle: S.of(context).adjustGameMusic,
                   icon: Icons.music_note,
                   onTap: () {
                     _showMusicVolumeDialog(context, _musicVolume, (
-                      newVolume,
-                    ) async {
+                        newVolume,
+                        ) async {
                       setState(() {
                         _musicVolume = newVolume;
                       });
@@ -124,6 +178,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildUserSection() {
+    return Container(
+      margin: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 25,
+            backgroundColor: const Color(0xFFEC7A34),
+            backgroundImage: _currentUser?.photoURL != null
+                ? NetworkImage(_currentUser!.photoURL!)
+                : null,
+            child: _currentUser?.photoURL == null
+                ? const Icon(
+              Icons.person,
+              color: Colors.white,
+              size: 30,
+            )
+                : null,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _currentUser?.displayName ?? 'Usuario',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _currentUser?.email ?? '',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSettingsCard({
     required String title,
     required String subtitle,
@@ -154,96 +268,161 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-}
 
-void _showLoginDialog(BuildContext context) {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        insetPadding: const EdgeInsets.all(20),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8.0),
-                child: Text(
-                  S.of(context).login,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
+  void _showLoginDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.all(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 20),
+                const SizedBox(height: 8),
 
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 4,
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.g_mobiledata,
-                    color: Colors.red,
-                    size: 32,
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text(
+                    S.of(context).login,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
                   ),
-                  title: Text(S.of(context).googleLogin),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    // TODO Aquí lógica de Google
-                  },
                 ),
-              ),
 
-              const SizedBox(height: 12),
+                const SizedBox(height: 20),
 
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 4,
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.g_mobiledata,
+                      color: Colors.red,
+                      size: 32,
+                    ),
+                    title: Text(S.of(context).googleLogin),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      await _signInWithGoogle();
+                    },
+                  ),
                 ),
-                elevation: 4,
-                child: ListTile(
-                  leading: const Icon(Icons.apple, size: 32),
-                  title: Text(S.of(context).appleLogin),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    //TODO Aquí lógica de Apple ID
-                  },
+
+                const SizedBox(height: 12),
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 4,
+                  child: ListTile(
+                    leading: const Icon(Icons.apple, size: 32),
+                    title: Text(S.of(context).appleLogin),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      //TODO Aquí lógica de Apple ID
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+        );
+      },
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            "Cerrar sesión",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Text("¿Estás seguro de que quieres cerrar sesión?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                "Cancelar",
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _signOut();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEC7A34),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text("Cerrar sesión"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _signOut() async {
+    try {
+      await AuthService().signOut();
+      setState(() {
+        _currentUser = null;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Sesión cerrada exitosamente"),
+          backgroundColor: Colors.green,
         ),
       );
-    },
-  );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Error al cerrar sesión"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 }
 
 void _showMusicVolumeDialog(
-  BuildContext context,
-  double currentVolume,
-  Function(double) onVolumeChanged,
-  Function(double)? onVolumeChangedLive,
-) {
+    BuildContext context,
+    double currentVolume,
+    Function(double) onVolumeChanged,
+    Function(double)? onVolumeChangedLive,
+    ) {
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -424,9 +603,9 @@ void _showLanguageDialog(BuildContext context) {
 }
 
 Future<void> _changeLanguage(
-  String selectedLanguage,
-  BuildContext context,
-) async {
+    String selectedLanguage,
+    BuildContext context,
+    ) async {
   Locale newLocale;
   switch (selectedLanguage) {
     case 'Inglés':
