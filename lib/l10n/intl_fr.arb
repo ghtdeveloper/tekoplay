@@ -55,5 +55,6 @@
   "playerVsCpu": "Joueur contre CPU",
   "marker": "Marqueur",
   "cpu": "CPU",
-  "restartGame": "Recommencer la partie"
+  "restartGame": "Recommencer la partie",
+  "anonymous": "Anonyme"
 }

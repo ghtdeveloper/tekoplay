@@ -55,5 +55,6 @@
   "playerVsCpu": "Player vs CPU",
   "marker": "Marker",
   "cpu": "CPU",
-  "restartGame": "Restart game"
+  "restartGame": "Restart game",
+  "anonymous": "Anonymous"
 }

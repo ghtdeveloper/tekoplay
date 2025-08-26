@@ -9,7 +9,7 @@ import '../../generated/l10n.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Function(double)?
-  onVolumeChangedLive; // 🔊 Callback para cambio en vivo
+  onVolumeChangedLive;
 
   const SettingsScreen({super.key, this.onVolumeChangedLive});
 
@@ -328,21 +328,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
 
                 const SizedBox(height: 12),
-
-                Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 4,
-                  child: ListTile(
-                    leading: const Icon(Icons.apple, size: 32),
-                    title: Text(S.of(context).appleLogin),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      //TODO Aquí lógica de Apple ID
-                    },
-                  ),
-                ),
               ],
             ),
           ),

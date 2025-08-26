@@ -1,16 +1,40 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tekoplay/features/games/chess_tutorial_screen.dart';
 
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
+import '../home/home_screen.dart';
 import '../settings/settings_screen.dart';
 import 'chess_vs_cpu_screen.dart';
+import 'package:tekoplay/service/auth_service.dart';
 
-class GameScreen extends StatelessWidget {
+class GameScreen extends StatefulWidget {
   final String gameType;
 
   const GameScreen({super.key, required this.gameType});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  late String gameType;
+  User? _currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    gameType = widget.gameType;
+    _loadCurrentUser();
+  }
+
+  void _loadCurrentUser() {
+    setState(() {
+      _currentUser = AuthService().getCurrentUser();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,12 +52,12 @@ class GameScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.settings, color: Colors.white),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => SettingsScreen(),
+                          builder: (context) => MainScreen(),
                         ),
                       );
                     },
@@ -78,7 +102,7 @@ class GameScreen extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Player00000',
+                      _currentUser?.displayName ?? S.of(context).anonymous,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -123,337 +147,337 @@ class GameScreen extends StatelessWidget {
       ),
     );
   }
-}
 
-void _showFriendGameDialog(BuildContext context) {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-              Text(
-                S.of(context).playWithFriend,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: Colors.black87,
-                ),
-              ),
-              SizedBox(height: 20),
-
-              TextField(
-                decoration: InputDecoration(
-                  labelText: S.of(context).searchByUsername,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  icon: Icon(Icons.search),
-                  label: Text(
-                    S.of(context).search,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEC7A34),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 20),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(
-                      ClipboardData(text: 'https://tuapp.com/invite/12345'),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(S.of(context).linkCopied)),
-                    );
-                  },
-                  icon: Icon(Icons.link),
-                  label: Text(
-                    S.of(context).copyLinkToShare,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEC7A34),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-            ],
+  void _showFriendGameDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-        ),
-      );
-    },
-  );
-}
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+                Text(
+                  S.of(context).playWithFriend,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.black87,
+                  ),
+                ),
+                SizedBox(height: 20),
 
+                TextField(
+                  decoration: InputDecoration(
+                    labelText: S.of(context).searchByUsername,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 20),
 
-void _showTutorial(BuildContext context) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) =>  ChessImmersiveTutorialScreen(),
-    ),
-  );
-}
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    icon: Icon(Icons.search),
+                    label: Text(
+                      S.of(context).search,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
 
-void _showComputerGameDialog(BuildContext context) {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      String selectedDifficulty = S.of(context).normal;
+                SizedBox(height: 20),
 
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(
+                        ClipboardData(text: 'https://tuapp.com/invite/12345'),
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(S.of(context).linkCopied)),
+                      );
+                    },
+                    icon: Icon(Icons.link),
+                    label: Text(
+                      S.of(context).copyLinkToShare,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            backgroundColor: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      icon: Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                  Text(
-                    S.of(context).playVsComputer,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  SizedBox(height: 20),
+          ),
+        );
+      },
+    );
+  }
 
-                  Column(
-                    children:
-                        [
-                          S.of(context).veryEasy,
-                          S.of(context).easy,
-                          S.of(context).normal,
-                          S.of(context).difficult,
-                        ].map((level) {
-                          return RadioListTile<String>(
-                            title: Text(level),
-                            value: level,
-                            groupValue: selectedDifficulty,
-                            onChanged: (value) {
-                              setState(() {
-                                selectedDifficulty = value!;
-                              });
-                            },
+  void _showTutorial(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ChessImmersiveTutorialScreen()),
+    );
+  }
+
+  void _showComputerGameDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        String selectedDifficulty = S.of(context).normal;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: IconButton(
+                        icon: Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                    Text(
+                      S.of(context).playVsComputer,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+
+                    Column(
+                      children:
+                          [
+                            S.of(context).veryEasy,
+                            S.of(context).easy,
+                            S.of(context).normal,
+                            S.of(context).difficult,
+                          ].map((level) {
+                            return RadioListTile<String>(
+                              title: Text(level),
+                              value: level,
+                              groupValue: selectedDifficulty,
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedDifficulty = value!;
+                                });
+                              },
+                            );
+                          }).toList(),
+                    ),
+
+                    SizedBox(height: 20),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      ChessVsComputerScreen(selectedDifficulty),
+                            ),
                           );
-                        }).toList(),
+                        },
+                        icon: Icon(Icons.smart_toy),
+                        label: Text(
+                          S.of(context).startGame,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEC7A34),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showOnlineGameDialog(BuildContext context) {
+    final TextEditingController roomCodeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
+                ),
+                Text(
+                  S.of(context).playOnline,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.black87,
+                  ),
+                ),
+                SizedBox(height: 20),
 
-                  SizedBox(height: 20),
+                TextField(
+                  controller: roomCodeController,
+                  decoration: InputDecoration(
+                    labelText: S.of(context).roomCode,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 20),
 
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final roomCode = roomCodeController.text.trim();
+                      if (roomCode.isNotEmpty) {
+                        // Aquí va la lógica para unirse a la sala
+                        print('Unirse a la sala con código: $roomCode');
                         Navigator.of(context).pop();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) =>
-                                    ChessVsComputerScreen(selectedDifficulty),
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(S.of(context).pleaseEnterValidCode),
                           ),
                         );
-                      },
-                      icon: Icon(Icons.smart_toy),
-                      label: Text(
-                        S.of(context).startGame,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16),
+                      }
+                    },
+                    icon: Icon(Icons.login),
+                    label: Text(
+                      S.of(context).joinRoom,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEC7A34),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    },
-  );
-}
-
-void _showOnlineGameDialog(BuildContext context) {
-  final TextEditingController roomCodeController = TextEditingController();
-
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              Text(
-                S.of(context).playOnline,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: Colors.black87,
-                ),
-              ),
-              SizedBox(height: 20),
 
-              TextField(
-                controller: roomCodeController,
-                decoration: InputDecoration(
-                  labelText: S.of(context).roomCode,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20),
+                SizedBox(height: 20),
 
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final roomCode = roomCodeController.text.trim();
-                    if (roomCode.isNotEmpty) {
-                      // Aquí va la lógica para unirse a la sala
-                      print('Unirse a la sala con código: $roomCode');
-                      Navigator.of(context).pop();
-                    } else {
+                Divider(),
+
+                SizedBox(height: 10),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final generatedRoomCode = 'ROOM12345';
+                      Clipboard.setData(ClipboardData(text: generatedRoomCode));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(S.of(context).pleaseEnterValidCode),
+                          content: Text(
+                            '${S.of(context).generatedAndCopiedCode} : $generatedRoomCode',
+                          ),
                         ),
                       );
-                    }
-                  },
-                  icon: Icon(Icons.login),
-                  label: Text(
-                    S.of(context).joinRoom,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEC7A34),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      print('Sala creada: $generatedRoomCode');
+                      Navigator.of(context).pop();
+                    },
+                    icon: Icon(Icons.add),
+                    label: Text(
+                      S.of(context).createNewRoom,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
                     ),
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 20),
-
-              Divider(),
-
-              SizedBox(height: 10),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final generatedRoomCode = 'ROOM12345'; // Simulado
-                    Clipboard.setData(ClipboardData(text: generatedRoomCode));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '${S.of(context).generatedAndCopiedCode} : $generatedRoomCode',
-                        ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    );
-                    // Aquí va la lógica para crear la sala y esperar a otro jugador
-                    print('Sala creada: $generatedRoomCode');
-                    Navigator.of(context).pop();
-                  },
-                  icon: Icon(Icons.add),
-                  label: Text(
-                    S.of(context).createNewRoom,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEC7A34),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      padding: EdgeInsets.symmetric(vertical: 14),
                     ),
-                    padding: EdgeInsets.symmetric(vertical: 14),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 }

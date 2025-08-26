@@ -65,7 +65,7 @@ class _MainScreenState extends State<MainScreen> {
                         onVolumeChangedLive: (newVolume) {
                           _audioPlayer.setVolume(
                             newVolume,
-                          ); // 🔊 Actualiza en vivo
+                          );
                         },
                       ),
                 ),
