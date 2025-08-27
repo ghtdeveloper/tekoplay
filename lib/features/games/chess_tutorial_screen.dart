@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
+import '../../generated/l10n.dart';
 
 class ChessImmersiveTutorialScreen extends StatefulWidget {
   const ChessImmersiveTutorialScreen({super.key});
@@ -17,7 +18,7 @@ class _ChessImmersiveTutorialScreenState
   int _currentStep = 0;
 
 
-  final List<Map<String, String>> _steps = const [
+  final List<Map<String, String>> _steps =  [
     {
       'title': 'Mover Peones',
       'description':
@@ -40,7 +41,7 @@ class _ChessImmersiveTutorialScreenState
           'Las torres se mueven en línea recta. Mueve la torre de a1 a a4.',
       'san': 'a4',
       'from': 'a2',
-      'to': 'a4', // Para poder llegar a a4, primero mueve el peón a2-a4 (SAN "a4")
+      'to': 'a4',
     },
   ];
 
@@ -67,12 +68,12 @@ class _ChessImmersiveTutorialScreenState
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('¡Felicidades!'),
-          content: const Text('Has completado el tutorial.'),
+          title:  Text(S.of(context).congratulations),
+          content: Text(S.of(context).completeTutorial),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cerrar'),
+              child:  Text(S.of(context).close),
             ),
           ],
         ),
@@ -87,10 +88,10 @@ class _ChessImmersiveTutorialScreenState
     final expectedSan = _steps[_currentStep]['san'];
 
     if (lastSan == expectedSan) {
-      _showSnack('¡Bien hecho! Movimiento correcto ($lastSan)', isSuccess: true);
+      _showSnack('${S.of(context).firstMoveCompleted} ($lastSan)', isSuccess: true);
       Future.delayed(const Duration(milliseconds: 600), _nextStep);
     } else {
-      _showSnack('Movimiento incorrecto: hiciste $lastSan, intenta ${_steps[_currentStep]['san']}');
+      _showSnack('${S.of(context).incorrectMove}: ${S.of(context).youDid} $lastSan, ${S.of(context).attempt} ${_steps[_currentStep]['san']}');
       _controller.undoMove();
     }
   }
@@ -127,14 +128,14 @@ class _ChessImmersiveTutorialScreenState
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
         elevation: 0,
-        title: const Text('Tutorial de Ajedrez'),
+        title:  Text(S.of(context).tutorialChessTitle),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                'Paso ${_currentStep + 1} / $total',
+                '${S.of(context).passed} ${_currentStep + 1} / $total',
                 style: const TextStyle(color: Colors.white),
               ),
             ),
@@ -171,7 +172,7 @@ class _ChessImmersiveTutorialScreenState
                       ElevatedButton.icon(
                         onPressed: _demoMove,
                         icon: const Icon(Icons.play_arrow),
-                        label: const Text('Ver movimiento'),
+                        label:  Text(S.of(context).watchMovement),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
@@ -181,7 +182,7 @@ class _ChessImmersiveTutorialScreenState
                       OutlinedButton.icon(
                         onPressed: _resetBoardForStep,
                         icon: const Icon(Icons.replay),
-                        label: const Text('Reiniciar paso'),
+                        label:  Text(S.of(context).resetPassed),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
                           side: const BorderSide(color: Colors.white70),
@@ -219,14 +220,14 @@ class _ChessImmersiveTutorialScreenState
                         _resetBoardForStep();
                       },
                       icon: const Icon(Icons.chevron_left),
-                      label: const Text('Atrás'),
+                      label:  Text(S.of(context).back),
                       style: TextButton.styleFrom(foregroundColor: Colors.white),
                     ),
                   const Spacer(),
                   TextButton.icon(
                     onPressed: _nextStep,
                     icon: const Icon(Icons.chevron_right),
-                    label: Text(_currentStep == total - 1 ? 'Finalizar' : 'Siguiente'),
+                    label: Text(_currentStep == total - 1 ? S.of(context).finish : S.of(context).next),
                     style: TextButton.styleFrom(foregroundColor: Colors.white),
                   ),
                 ],

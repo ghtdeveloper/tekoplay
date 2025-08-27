@@ -6,9 +6,10 @@ import 'package:tekoplay/features/games/chess_tutorial_screen.dart';
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../home/home_screen.dart';
-import '../settings/settings_screen.dart';
 import 'chess_vs_cpu_screen.dart';
 import 'package:tekoplay/service/auth_service.dart';
+
+import 'domino_tutorial_screen.dart';
 
 class GameScreen extends StatefulWidget {
   final String gameType;
@@ -22,6 +23,9 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   late String gameType;
   User? _currentUser;
+  bool get isChess => gameType == S.of(context).chess;
+  bool get isDomino => gameType == S.of(context).domino;
+
 
   @override
   void initState() {
@@ -251,13 +255,28 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showTutorial(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ChessImmersiveTutorialScreen()),
-    );
+    if(isChess){
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ChessImmersiveTutorialScreen()),
+      );
+    }else if(isDomino){
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => DominoImmersiveTutorialScreen()),
+      );
+    }
   }
 
   void _showComputerGameDialog(BuildContext context) {
+    if (isChess) {
+      _showChessCpuDialog(context);
+    } else if (isDomino) {
+      _showDominoCpuDialog(context);
+    }
+  }
+
+  void _showChessCpuDialog(BuildContext context){
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -295,23 +314,23 @@ class _GameScreenState extends State<GameScreen> {
 
                     Column(
                       children:
-                          [
-                            S.of(context).veryEasy,
-                            S.of(context).easy,
-                            S.of(context).normal,
-                            S.of(context).difficult,
-                          ].map((level) {
-                            return RadioListTile<String>(
-                              title: Text(level),
-                              value: level,
-                              groupValue: selectedDifficulty,
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedDifficulty = value!;
-                                });
-                              },
-                            );
-                          }).toList(),
+                      [
+                        S.of(context).veryEasy,
+                        S.of(context).easy,
+                        S.of(context).normal,
+                        S.of(context).difficult,
+                      ].map((level) {
+                        return RadioListTile<String>(
+                          title: Text(level),
+                          value: level,
+                          groupValue: selectedDifficulty,
+                          onChanged: (value) {
+                            setState(() {
+                              selectedDifficulty = value!;
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -326,7 +345,7 @@ class _GameScreenState extends State<GameScreen> {
                             MaterialPageRoute(
                               builder:
                                   (context) =>
-                                      ChessVsComputerScreen(selectedDifficulty),
+                                  ChessVsComputerScreen(selectedDifficulty),
                             ),
                           );
                         },
@@ -356,9 +375,119 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  void _showDominoCpuDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        String selectedDifficulty = S.of(context).normal;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: IconButton(
+                        icon: Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                    Text(
+                      S.of(context).playVsComputer,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+
+                    Column(
+                      children:
+                      [
+                        S.of(context).veryEasy,
+                        S.of(context).easy,
+                        S.of(context).normal,
+                        S.of(context).difficult,
+                      ].map((level) {
+                        return RadioListTile<String>(
+                          title: Text(level),
+                          value: level,
+                          groupValue: selectedDifficulty,
+                          onChanged: (value) {
+                            setState(() {
+                              selectedDifficulty = value!;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+
+                    SizedBox(height: 20),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          //TODO Crear nueva pantalla para navegar al Board Domino
+                      /*
+
+                      Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                  ChessVsComputerScreen(selectedDifficulty),
+                            ),
+                          );*/
+                        },
+                        icon: Icon(Icons.smart_toy),
+                        label: Text(
+                          S.of(context).startGame,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEC7A34),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+
   void _showOnlineGameDialog(BuildContext context) {
     final TextEditingController roomCodeController = TextEditingController();
+    if(isChess){
+      _showOnlineDialogChess(context,roomCodeController);
+    }else if(isDomino){
+      _showOnlineDialogDomino(context,roomCodeController);
+    }
+  }
 
+  void _showOnlineDialogChess(BuildContext context,TextEditingController roomCodeController){
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -480,4 +609,129 @@ class _GameScreenState extends State<GameScreen> {
       },
     );
   }
+
+
+  void _showOnlineDialogDomino(BuildContext context,TextEditingController roomCodeController){
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+                Text(
+                  S.of(context).playOnline,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.black87,
+                  ),
+                ),
+                SizedBox(height: 20),
+
+                TextField(
+                  controller: roomCodeController,
+                  decoration: InputDecoration(
+                    labelText: S.of(context).roomCode,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 20),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final roomCode = roomCodeController.text.trim();
+                      if (roomCode.isNotEmpty) {
+                        // Aquí va la lógica para unirse a la sala
+                        print('Unirse a la sala con código: $roomCode');
+                        Navigator.of(context).pop();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(S.of(context).pleaseEnterValidCode),
+                          ),
+                        );
+                      }
+                    },
+                    icon: Icon(Icons.login),
+                    label: Text(
+                      S.of(context).joinRoom,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 20),
+
+                Divider(),
+
+                SizedBox(height: 10),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final generatedRoomCode = 'ROOM12345';
+                      Clipboard.setData(ClipboardData(text: generatedRoomCode));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '${S.of(context).generatedAndCopiedCode} : $generatedRoomCode',
+                          ),
+                        ),
+                      );
+                      print('Sala creada: $generatedRoomCode');
+                      Navigator.of(context).pop();
+                    },
+                    icon: Icon(Icons.add),
+                    label: Text(
+                      S.of(context).createNewRoom,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 }
