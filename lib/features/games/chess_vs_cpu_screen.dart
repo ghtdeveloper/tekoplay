@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../generated/l10n.dart';
 
@@ -30,6 +31,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   late int _cpuMoveTime;
 
   PlayerColor? _playerColor;
+
+  // Firebase Auth user
+  User? get currentUser => FirebaseAuth.instance.currentUser;
 
   @override
   void initState() {
@@ -226,6 +230,47 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     setState(() {});
   }
 
+  Widget _buildPlayerAvatar() {
+    if (currentUser?.photoURL != null) {
+      return CircleAvatar(
+        radius: 30,
+        backgroundColor: Colors.grey[300],
+        backgroundImage: NetworkImage(currentUser!.photoURL!),
+        onBackgroundImageError: (exception, stackTrace) {
+        },
+        child: currentUser!.photoURL == null
+            ? Icon(
+          Icons.person,
+          color: _playerColor == PlayerColor.white ? Colors.black : Colors.white,
+          size: 30,
+        )
+            : null,
+      );
+    } else {
+      return CircleAvatar(
+        radius: 30,
+        backgroundColor: _playerColor == PlayerColor.white ? Colors.white : Colors.black,
+        child: Icon(
+          Icons.person,
+          color: _playerColor == PlayerColor.white ? Colors.black : Colors.white,
+          size: 30,
+        ),
+      );
+    }
+  }
+
+  Widget _buildCpuAvatar() {
+    return CircleAvatar(
+      radius: 30,
+      backgroundColor: _playerColor == PlayerColor.white ? Colors.black : Colors.white,
+      child: Icon(
+        Icons.smart_toy,
+        color: _playerColor == PlayerColor.white ? Colors.white : Colors.black,
+        size: 30,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     if (_isStockfishReady) _stockfish.stdin = "quit";
@@ -310,24 +355,16 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                 children: [
                   Column(
                     children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor:
-                        _playerColor == PlayerColor.white
-                            ? Colors.white
-                            : Colors.black,
-                        child:
-                        _playerColor == PlayerColor.white
-                            ? null
-                            : const Icon(Icons.person, color: Colors.white),
-                      ),
+                      _buildPlayerAvatar(),
                       const SizedBox(height: 6),
-                      const Text(
-                        'Tú',
+                      Text(
+                        currentUser?.displayName ?? 'Tú',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -350,23 +387,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                   ),
                   Column(
                     children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor:
-                        _playerColor == PlayerColor.white
-                            ? Colors.black
-                            : Colors.white,
-                        child:
-                        _playerColor == PlayerColor.white
-                            ? const Icon(
-                          Icons.smart_toy,
-                          color: Colors.white,
-                        )
-                            : const Icon(
-                          Icons.smart_toy,
-                          color: Colors.black,
-                        ),
-                      ),
+                      _buildCpuAvatar(),
                       const SizedBox(height: 6),
                       Text(
                         S.of(context).cpu,

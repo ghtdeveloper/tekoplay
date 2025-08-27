@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/models/DominoTile.dart';
 import '../../generated/l10n.dart';
 
@@ -251,6 +252,9 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
   DominoTile? _selectedTile;
   bool _isLoading = false;
 
+  // Firebase Auth user
+  User? get currentUser => FirebaseAuth.instance.currentUser;
+
   @override
   void initState() {
     super.initState();
@@ -409,6 +413,35 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
     );
   }
 
+  Widget _buildPlayerAvatar() {
+    if (currentUser?.photoURL != null) {
+      return CircleAvatar(
+        radius: 20,
+        backgroundColor: Colors.grey[300],
+        backgroundImage: NetworkImage(currentUser!.photoURL!),
+        onBackgroundImageError: (exception, stackTrace) {
+        },
+        child: currentUser!.photoURL == null
+            ? const Icon(Icons.person, color: Colors.white, size: 20)
+            : null,
+      );
+    } else {
+      return CircleAvatar(
+        radius: 20,
+        backgroundColor: Colors.white,
+        child: const Icon(Icons.person, color: Colors.black, size: 20),
+      );
+    }
+  }
+
+  Widget _buildCpuAvatar() {
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: Colors.grey[700],
+      child: const Icon(Icons.smart_toy, color: Colors.white, size: 20),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -436,10 +469,11 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildPlayerInfo(
-                   S.of(context).cpu,
+                  _buildPlayerInfoWithAvatar(
+                    S.of(context).cpu,
                     _controller.computerTiles.length,
                     _controller.gameState == GameState.computerTurn,
+                    _buildCpuAvatar(),
                   ),
                   Column(
                     children: [
@@ -453,10 +487,11 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
                       ),
                     ],
                   ),
-                  _buildPlayerInfo(
-                    S.of(context).you,
+                  _buildPlayerInfoWithAvatar(
+                    currentUser?.displayName ?? S.of(context).you,
                     _controller.playerTiles.length,
                     _controller.gameState == GameState.playerTurn,
+                    _buildPlayerAvatar(),
                   ),
                 ],
               ),
@@ -551,6 +586,41 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
             style: const TextStyle(
               color: Colors.white70,
               fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerInfoWithAvatar(String name, int tilesCount, bool isActive, Widget avatar) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.green[600] : Colors.white24,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          avatar,
+          const SizedBox(height: 6),
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            '$tilesCount ${S.of(context).tokens}',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
             ),
           ),
         ],

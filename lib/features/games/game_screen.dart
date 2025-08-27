@@ -42,6 +42,30 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
+  // Widget para mostrar el avatar del usuario
+  Widget _buildUserAvatar() {
+    if (_currentUser?.photoURL != null && _currentUser!.photoURL!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 60,
+        backgroundColor: Colors.grey[300],
+        backgroundImage: NetworkImage(_currentUser!.photoURL!),
+        onBackgroundImageError: (exception, stackTrace) {
+          // En caso de error al cargar la imagen, se mostrará el fallback
+        },
+        child: _currentUser!.photoURL == null || _currentUser!.photoURL!.isEmpty
+            ? const Icon(Icons.person, color: Colors.white, size: 60)
+            : null,
+      );
+    } else {
+      // Avatar por defecto si no hay imagen
+      return CircleAvatar(
+        radius: 60,
+        backgroundImage: AssetImage('assets/images/img_perfil_unknown.png'),
+        backgroundColor: Colors.grey[300],
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,12 +114,7 @@ class _GameScreenState extends State<GameScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundImage: AssetImage(
-                        'assets/images/img_perfil_unknown.png',
-                      ),
-                    ),
+                    _buildUserAvatar(),
                     SizedBox(height: 10),
                     Text(
                       gameType,
@@ -112,6 +131,9 @@ class _GameScreenState extends State<GameScreen> {
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -316,23 +338,23 @@ class _GameScreenState extends State<GameScreen> {
 
                     Column(
                       children:
-                          [
-                            S.of(context).veryEasy,
-                            S.of(context).easy,
-                            S.of(context).normal,
-                            S.of(context).difficult,
-                          ].map((level) {
-                            return RadioListTile<String>(
-                              title: Text(level),
-                              value: level,
-                              groupValue: selectedDifficulty,
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedDifficulty = value!;
-                                });
-                              },
-                            );
-                          }).toList(),
+                      [
+                        S.of(context).veryEasy,
+                        S.of(context).easy,
+                        S.of(context).normal,
+                        S.of(context).difficult,
+                      ].map((level) {
+                        return RadioListTile<String>(
+                          title: Text(level),
+                          value: level,
+                          groupValue: selectedDifficulty,
+                          onChanged: (value) {
+                            setState(() {
+                              selectedDifficulty = value!;
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -347,7 +369,7 @@ class _GameScreenState extends State<GameScreen> {
                             MaterialPageRoute(
                               builder:
                                   (context) =>
-                                      ChessVsComputerScreen(selectedDifficulty),
+                                  ChessVsComputerScreen(selectedDifficulty),
                             ),
                           );
                         },
@@ -415,23 +437,23 @@ class _GameScreenState extends State<GameScreen> {
 
                     Column(
                       children:
-                          [
-                            S.of(context).veryEasy,
-                            S.of(context).easy,
-                            S.of(context).normal,
-                            S.of(context).difficult,
-                          ].map((level) {
-                            return RadioListTile<String>(
-                              title: Text(level),
-                              value: level,
-                              groupValue: selectedDifficulty,
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedDifficulty = value!;
-                                });
-                              },
-                            );
-                          }).toList(),
+                      [
+                        S.of(context).veryEasy,
+                        S.of(context).easy,
+                        S.of(context).normal,
+                        S.of(context).difficult,
+                      ].map((level) {
+                        return RadioListTile<String>(
+                          title: Text(level),
+                          value: level,
+                          groupValue: selectedDifficulty,
+                          onChanged: (value) {
+                            setState(() {
+                              selectedDifficulty = value!;
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -446,8 +468,8 @@ class _GameScreenState extends State<GameScreen> {
                             MaterialPageRoute(
                               builder:
                                   (context) => DominoVsComputerScreen(
-                                    selectedDifficulty,
-                                  ),
+                                selectedDifficulty,
+                              ),
                             ),
                           );
                         },
@@ -487,9 +509,9 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showOnlineDialogChess(
-    BuildContext context,
-    TextEditingController roomCodeController,
-  ) {
+      BuildContext context,
+      TextEditingController roomCodeController,
+      ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -613,9 +635,9 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showOnlineDialogDomino(
-    BuildContext context,
-    TextEditingController roomCodeController,
-  ) {
+      BuildContext context,
+      TextEditingController roomCodeController,
+      ) {
     showDialog(
       context: context,
       barrierDismissible: false,
