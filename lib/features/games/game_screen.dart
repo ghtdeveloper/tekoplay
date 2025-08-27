@@ -441,7 +441,6 @@ class _GameScreenState extends State<GameScreen> {
                       child: ElevatedButton.icon(
                         onPressed: () {
                           Navigator.of(context).pop();
-                          //TODO Crear nueva pantalla para navegar al Board Domino
                           Navigator.push(
                             context,
                             MaterialPageRoute(
