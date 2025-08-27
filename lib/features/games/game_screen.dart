@@ -10,6 +10,7 @@ import 'chess_vs_cpu_screen.dart';
 import 'package:tekoplay/service/auth_service.dart';
 
 import 'domino_tutorial_screen.dart';
+import 'domino_vs_cpu_screen.dart';
 
 class GameScreen extends StatefulWidget {
   final String gameType;
@@ -23,9 +24,10 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   late String gameType;
   User? _currentUser;
-  bool get isChess => gameType == S.of(context).chess;
-  bool get isDomino => gameType == S.of(context).domino;
 
+  bool get isChess => gameType == S.of(context).chess;
+
+  bool get isDomino => gameType == S.of(context).domino;
 
   @override
   void initState() {
@@ -60,9 +62,7 @@ class _GameScreenState extends State<GameScreen> {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => MainScreen(),
-                        ),
+                        MaterialPageRoute(builder: (context) => MainScreen()),
                       );
                     },
                   ),
@@ -255,15 +255,17 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showTutorial(BuildContext context) {
-    if(isChess){
+    if (isChess) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => ChessImmersiveTutorialScreen()),
       );
-    }else if(isDomino){
+    } else if (isDomino) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => DominoImmersiveTutorialScreen()),
+        MaterialPageRoute(
+          builder: (context) => DominoImmersiveTutorialScreen(),
+        ),
       );
     }
   }
@@ -276,7 +278,7 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-  void _showChessCpuDialog(BuildContext context){
+  void _showChessCpuDialog(BuildContext context) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -314,23 +316,23 @@ class _GameScreenState extends State<GameScreen> {
 
                     Column(
                       children:
-                      [
-                        S.of(context).veryEasy,
-                        S.of(context).easy,
-                        S.of(context).normal,
-                        S.of(context).difficult,
-                      ].map((level) {
-                        return RadioListTile<String>(
-                          title: Text(level),
-                          value: level,
-                          groupValue: selectedDifficulty,
-                          onChanged: (value) {
-                            setState(() {
-                              selectedDifficulty = value!;
-                            });
-                          },
-                        );
-                      }).toList(),
+                          [
+                            S.of(context).veryEasy,
+                            S.of(context).easy,
+                            S.of(context).normal,
+                            S.of(context).difficult,
+                          ].map((level) {
+                            return RadioListTile<String>(
+                              title: Text(level),
+                              value: level,
+                              groupValue: selectedDifficulty,
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedDifficulty = value!;
+                                });
+                              },
+                            );
+                          }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -345,7 +347,7 @@ class _GameScreenState extends State<GameScreen> {
                             MaterialPageRoute(
                               builder:
                                   (context) =>
-                                  ChessVsComputerScreen(selectedDifficulty),
+                                      ChessVsComputerScreen(selectedDifficulty),
                             ),
                           );
                         },
@@ -413,23 +415,23 @@ class _GameScreenState extends State<GameScreen> {
 
                     Column(
                       children:
-                      [
-                        S.of(context).veryEasy,
-                        S.of(context).easy,
-                        S.of(context).normal,
-                        S.of(context).difficult,
-                      ].map((level) {
-                        return RadioListTile<String>(
-                          title: Text(level),
-                          value: level,
-                          groupValue: selectedDifficulty,
-                          onChanged: (value) {
-                            setState(() {
-                              selectedDifficulty = value!;
-                            });
-                          },
-                        );
-                      }).toList(),
+                          [
+                            S.of(context).veryEasy,
+                            S.of(context).easy,
+                            S.of(context).normal,
+                            S.of(context).difficult,
+                          ].map((level) {
+                            return RadioListTile<String>(
+                              title: Text(level),
+                              value: level,
+                              groupValue: selectedDifficulty,
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedDifficulty = value!;
+                                });
+                              },
+                            );
+                          }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -440,16 +442,15 @@ class _GameScreenState extends State<GameScreen> {
                         onPressed: () {
                           Navigator.of(context).pop();
                           //TODO Crear nueva pantalla para navegar al Board Domino
-                      /*
-
-                      Navigator.push(
+                          Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder:
-                                  (context) =>
-                                  ChessVsComputerScreen(selectedDifficulty),
+                                  (context) => DominoVsComputerScreen(
+                                    selectedDifficulty,
+                                  ),
                             ),
-                          );*/
+                          );
                         },
                         icon: Icon(Icons.smart_toy),
                         label: Text(
@@ -477,17 +478,19 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-
   void _showOnlineGameDialog(BuildContext context) {
     final TextEditingController roomCodeController = TextEditingController();
-    if(isChess){
-      _showOnlineDialogChess(context,roomCodeController);
-    }else if(isDomino){
-      _showOnlineDialogDomino(context,roomCodeController);
+    if (isChess) {
+      _showOnlineDialogChess(context, roomCodeController);
+    } else if (isDomino) {
+      _showOnlineDialogDomino(context, roomCodeController);
     }
   }
 
-  void _showOnlineDialogChess(BuildContext context,TextEditingController roomCodeController){
+  void _showOnlineDialogChess(
+    BuildContext context,
+    TextEditingController roomCodeController,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -610,8 +613,10 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-
-  void _showOnlineDialogDomino(BuildContext context,TextEditingController roomCodeController){
+  void _showOnlineDialogDomino(
+    BuildContext context,
+    TextEditingController roomCodeController,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -733,5 +738,4 @@ class _GameScreenState extends State<GameScreen> {
       },
     );
   }
-
 }
