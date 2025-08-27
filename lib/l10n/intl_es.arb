@@ -97,4 +97,12 @@
   "stole": "Robar",
   "pass": "Pasar",
   "tokens": "Fichas",
+  "youWonCheckMate": "¡Ganaste! Jaque mate",
+  "cpuWonCheckMate": "La CPU ganó por jaque mate",
+  "drawByStalemate": "¡Empate por ahogado!",
+  "tieByReply": "¡Empate por repetición!",
+  "tieByInsufficient": "¡Empate por material insuficiente!",
+  "gameOver": "Juego terminado",
+  "exit": "Salir"
+
 }

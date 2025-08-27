@@ -96,5 +96,12 @@
   "you": "You",
   "stole": "Stole",
   "pass": "Pass",
-  "tokens": "Tokens"
+  "tokens": "Tokens",
+  "youWonCheckMate": "You won! Checkmate",
+  "cpuWonCheckMate": "The CPU won by checkmate",
+  "drawByStalemate": "Draw by stalemate!",
+  "tieByReply": "Tie by replay!",
+  "tieByInsufficient": "Tie due to insufficient material!",
+  "gameOver": "Game over",
+  "exit": "Exit"
 }

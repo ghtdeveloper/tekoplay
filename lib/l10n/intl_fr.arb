@@ -95,5 +95,12 @@
   "you": "Tu",
   "stole": "Volé",
   "pass": "Passe",
-  "tokens": "Jetons"
+  "tokens": "Jetons",
+  "youWonCheckMate": "Tu as gagné ! Échec et mat",
+  "cpuWonCheckMate": "Le CPU a gagné par échec et mat",
+  "drawByStalemate": "Match nul par pat !",
+  "tieByReply": "Égalité par reprise !",
+  "tieByInsufficient": "Match nul par matériel insuffisant !",
+  "gameOver": "Fin de la partie",
+  "exit": "Quitter"
 }

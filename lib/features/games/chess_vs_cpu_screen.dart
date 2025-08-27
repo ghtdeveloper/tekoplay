@@ -25,6 +25,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   bool _isStockfishReady = false;
   bool _engineThinking = false;
+  bool _gameEnded = false;
 
   late int _cpuMoveTime;
 
@@ -64,6 +65,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _applyUciMoveToBoard(best);
+            _checkGameEnd();
           });
 
           setState(() {});
@@ -93,7 +95,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   void _makeCpuMove() {
-    if (!_isStockfishReady) return;
+    if (!_isStockfishReady || _gameEnded) return;
+
+    _engineThinking = true;
+    setState(() {});
 
     final fen = controller.getFen();
     _stockfish.stdin = "position fen $fen";
@@ -101,11 +106,78 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   void playerMoved() {
-    if (!_isStockfishReady) return;
+    if (!_isStockfishReady || _gameEnded) return;
 
-    final fen = controller.getFen();
-    _stockfish.stdin = "position fen $fen";
-    _stockfish.stdin = "go movetime $_cpuMoveTime";
+    _checkGameEnd();
+
+    if (!_gameEnded) {
+      _makeCpuMove();
+    }
+  }
+
+  void _checkGameEnd() {
+    if (controller.isCheckMate()) {
+      _gameEnded = true;
+
+      final isWhiteTurn = controller.getFen().split(' ')[1] == 'w';
+      final playerWon = (_playerColor == PlayerColor.white && !isWhiteTurn) ||
+          (_playerColor == PlayerColor.black && isWhiteTurn);
+
+      if (playerWon) {
+        playerScore++;
+        _showGameEndDialog(S.of(context).youWonCheckMate);
+      } else {
+        cpuScore++;
+        _showGameEndDialog(S.of(context).cpuWonCheckMate);
+      }
+
+      setState(() {});
+    } else if (controller.isDraw()) {
+      _gameEnded = true;
+      _showGameEndDialog(S.of(context).drawMsg);
+      setState(() {});
+    } else if (controller.isStaleMate()) {
+      _gameEnded = true;
+      _showGameEndDialog(S.of(context).drawByStalemate);
+      setState(() {});
+    } else if (controller.isThreefoldRepetition()) {
+      _gameEnded = true;
+      _showGameEndDialog(S.of(context).tieByReply);
+      setState(() {});
+    } else if (controller.isInsufficientMaterial()) {
+      _gameEnded = true;
+      _showGameEndDialog(S.of(context).tieByInsufficient);
+      setState(() {});
+    }
+  }
+
+  void _showGameEndDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(S.of(context).gameOver),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _restartGame();
+              },
+              child: Text(S.of(context).newGame),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+              child: Text(S.of(context).exit),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _applyUciMoveToBoard(String uci) {
@@ -135,6 +207,23 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         _makeCpuMove();
       }
     });
+  }
+
+  void _restartGame() {
+    _gameEnded = false;
+    _engineThinking = false;
+    controller.resetBoard();
+
+    if (_isStockfishReady) {
+      final fen = controller.getFen();
+      _stockfish.stdin = "position fen $fen";
+
+      if (_playerColor == PlayerColor.black) {
+        _makeCpuMove();
+      }
+    }
+
+    setState(() {});
   }
 
   @override
@@ -214,7 +303,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Avatares y marcador
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
@@ -225,13 +313,13 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                       CircleAvatar(
                         radius: 30,
                         backgroundColor:
-                            _playerColor == PlayerColor.white
-                                ? Colors.white
-                                : Colors.black,
+                        _playerColor == PlayerColor.white
+                            ? Colors.white
+                            : Colors.black,
                         child:
-                            _playerColor == PlayerColor.white
-                                ? null
-                                : const Icon(Icons.person, color: Colors.white),
+                        _playerColor == PlayerColor.white
+                            ? null
+                            : const Icon(Icons.person, color: Colors.white),
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -265,19 +353,19 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                       CircleAvatar(
                         radius: 30,
                         backgroundColor:
-                            _playerColor == PlayerColor.white
-                                ? Colors.black
-                                : Colors.white,
+                        _playerColor == PlayerColor.white
+                            ? Colors.black
+                            : Colors.white,
                         child:
-                            _playerColor == PlayerColor.white
-                                ? const Icon(
-                                  Icons.smart_toy,
-                                  color: Colors.white,
-                                )
-                                : const Icon(
-                                  Icons.smart_toy,
-                                  color: Colors.black,
-                                ),
+                        _playerColor == PlayerColor.white
+                            ? const Icon(
+                          Icons.smart_toy,
+                          color: Colors.white,
+                        )
+                            : const Icon(
+                          Icons.smart_toy,
+                          color: Colors.black,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -301,7 +389,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                       controller: controller,
                       boardColor: BoardColor.brown,
                       boardOrientation: _playerColor!,
-                      enableUserMoves: true,
+                      enableUserMoves: !_gameEnded,
                       onMove: playerMoved,
                     ),
                   ),
@@ -318,17 +406,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 24),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  controller.resetBoard();
-                  if (_isStockfishReady) {
-                    final fen = controller.getFen();
-                    _stockfish.stdin = "position fen $fen";
-
-                    if (_playerColor == PlayerColor.black) _makeCpuMove();
-                  }
-                  _engineThinking = false;
-                  setState(() {});
-                },
+                onPressed: _restartGame,
                 icon: const Icon(Icons.replay),
                 label: Text(S.of(context).restartGame),
                 style: ElevatedButton.styleFrom(
