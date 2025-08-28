@@ -102,5 +102,14 @@
   "tieByReply": "Égalité par reprise !",
   "tieByInsufficient": "Match nul par matériel insuffisant !",
   "gameOver": "Fin de la partie",
-  "exit": "Quitter"
+  "exit": "Quitter",
+  "welcome": "Bienvenue",
+  "errorSignInGoogle": "Erreur de connexion avec Google",
+  "signOut": "Se déconnecter",
+  "signOutAccount": "Se déconnecter de votre compte",
+  "user": "Utilisateur",
+  "signOutConfirmation": "Êtes-vous sûr de vouloir vous déconnecter ?",
+  "cancel": "Annuler",
+  "signOutSuccessful": "Déconnexion réussie",
+  "signOutFailed": "Échec de la déconnexion"
 }

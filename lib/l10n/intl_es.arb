@@ -103,6 +103,15 @@
   "tieByReply": "¡Empate por repetición!",
   "tieByInsufficient": "¡Empate por material insuficiente!",
   "gameOver": "Juego terminado",
-  "exit": "Salir"
+  "exit": "Salir",
+  "welcome": "Bienvenido",
+  "errorSignInGoogle": "Error al iniciar sesión con Google",
+  "signOut": "Cerrar sesión",
+  "signOutAccount": "Salir de tu cuenta",
+  "user": "Usuario",
+  "signOutConfirmation": "¿Estás seguro de que quieres cerrar sesión?",
+  "cancel": "Cancelar",
+  "signOutSuccessful": "Sesión cerrada exitosamente",
+  "signOutFailed": "Error al cerrar sesión"
 
 }

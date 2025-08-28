@@ -103,5 +103,14 @@
   "tieByReply": "Tie by replay!",
   "tieByInsufficient": "Tie due to insufficient material!",
   "gameOver": "Game over",
-  "exit": "Exit"
+  "exit": "Exit",
+  "welcome": "Welcome",
+  "errorSignInGoogle": "Error signing in with Google",
+  "signOut": "Sign out",
+  "signOutAccount": "Sign out of your account",
+  "user": "User",
+  "signOutConfirmation": "Are you sure you want to sign out?",
+  "cancel": "Cancel",
+  "signOutSuccessful": "Signed out successfully",
+  "signOutFailed": "Sign out failed"
 }

@@ -13,29 +13,49 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   late AudioPlayer _audioPlayer;
+  double _currentVolume = 0.5;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initMusic();
-  }
-
-  Future<void> _initMusic() async {
-    final prefs = await SharedPreferences.getInstance();
-    double volume = prefs.getDouble('musicVolume') ?? 0.5;
-
-    _audioPlayer = AudioPlayer();
-    await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-    await _audioPlayer.setVolume(volume);
-    await _audioPlayer.play(AssetSource('audio/background_music.mp3'));
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _initMusic() async {
+    _audioPlayer = AudioPlayer();
+    await _loadAndApplyVolume();
+    await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    await _audioPlayer.play(AssetSource('audio/background_music.mp3'));
+  }
+
+  Future<void> _loadAndApplyVolume() async {
+    final prefs = await SharedPreferences.getInstance();
+    _currentVolume = prefs.getDouble('musicVolume') ?? 0.5;
+    await _audioPlayer.setVolume(_currentVolume);
+  }
+
+  Future<void> _updateVolume(double newVolume) async {
+    _currentVolume = newVolume;
+    await _audioPlayer.setVolume(newVolume);
+    setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _loadAndApplyVolume();
+    }
   }
 
   @override
@@ -47,6 +67,7 @@ class _MainScreenState extends State<MainScreen> {
       backgroundColor: const Color(0xFFEC7A34),
       appBar: AppBar(
         title: const Text('TekoPlay', style: TextStyle(color: Colors.white)),
+        automaticallyImplyLeading: false,
         iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: const Color(0xFFEC7A34),
         actions: [
@@ -56,20 +77,18 @@ class _MainScreenState extends State<MainScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder:
-                      (context) => SettingsScreen(
-                        onVolumeChangedLive: (newVolume) {
-                          _audioPlayer.setVolume(
-                            newVolume,
-                          );
-                        },
-                      ),
+                  builder: (context) => SettingsScreen(
+                    onVolumeChangedLive: (newVolume) {
+                      _updateVolume(newVolume);
+                    },
+                  ),
                 ),
               );
+              await _loadAndApplyVolume();
             },
           ),
         ],
@@ -103,9 +122,8 @@ class _MainScreenState extends State<MainScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder:
-                                (context) =>
-                                    GameScreen(gameType: S.of(context).chess),
+                            builder: (context) =>
+                                GameScreen(gameType: S.of(context).chess),
                           ),
                         );
                       },
@@ -118,9 +136,8 @@ class _MainScreenState extends State<MainScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder:
-                                (context) =>
-                                    GameScreen(gameType: S.of(context).domino),
+                            builder: (context) =>
+                                GameScreen(gameType: S.of(context).domino),
                           ),
                         );
                       },

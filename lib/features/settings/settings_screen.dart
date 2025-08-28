@@ -8,8 +8,7 @@ import '../../app.dart';
 import '../../generated/l10n.dart';
 
 class SettingsScreen extends StatefulWidget {
-  final Function(double)?
-  onVolumeChangedLive;
+  final Function(double)? onVolumeChangedLive;
 
   const SettingsScreen({super.key, this.onVolumeChangedLive});
 
@@ -37,6 +36,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _saveMusicVolume(double volume) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('musicVolume', volume);
+    setState(() {
+      _musicVolume = volume;
+    });
+    if (widget.onVolumeChangedLive != null) {
+      widget.onVolumeChangedLive!(volume);
+    }
+  }
+
   Future<void> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
     setState(() {
@@ -61,14 +71,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Bienvenido ${user.displayName ?? ''}"),
+            content: Text("${S.of(context).welcome} ${user.displayName ?? ''}"),
             backgroundColor: Colors.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Error al iniciar sesión con Google"),
+           SnackBar(
+            content: Text(S.of(context).errorSignInGoogle),
             backgroundColor: Colors.red,
           ),
         );
@@ -76,8 +86,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Error al iniciar sesión con Google"),
+         SnackBar(
+          content: Text(S.of(context).errorSignInGoogle),
           backgroundColor: Colors.red,
         ),
       );
@@ -113,8 +123,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => _showLoginDialog(context),
                 )
                     : _buildSettingsCard(
-                  title: "Cerrar sesión",
-                  subtitle: "Salir de tu cuenta",
+                  title: S.of(context).signOut,
+                  subtitle: S.of(context).signOutAccount,
                   icon: Icons.logout,
                   onTap: () => _showLogoutDialog(context),
                 ),
@@ -123,17 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: S.of(context).gameMusic,
                   subtitle: S.of(context).adjustGameMusic,
                   icon: Icons.music_note,
-                  onTap: () {
-                    _showMusicVolumeDialog(context, _musicVolume, (
-                        newVolume,
-                        ) async {
-                      setState(() {
-                        _musicVolume = newVolume;
-                      });
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setDouble('musicVolume', newVolume);
-                    }, widget.onVolumeChangedLive);
-                  },
+                  onTap: () => _showMusicVolumeDialog(context),
                 ),
                 _buildSettingsCard(
                   title: S.of(context).language,
@@ -215,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _currentUser?.displayName ?? 'Usuario',
+                  _currentUser?.displayName ?? S.of(context).user,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -266,6 +266,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         onTap: onTap,
       ),
+    );
+  }
+
+  void _showMusicVolumeDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        double tempVolume = _musicVolume;
+
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.all(20),
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              return Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text(
+                        S.of(context).volume,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    Slider(
+                      value: tempVolume,
+                      min: 0,
+                      max: 1,
+                      divisions: 10,
+                      label: '${(tempVolume * 100).round()}%',
+                      activeColor: const Color(0xFFEC7A34),
+                      inactiveColor: Colors.orange.shade100,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          tempVolume = value;
+                        });
+                        if (widget.onVolumeChangedLive != null) {
+                          widget.onVolumeChangedLive!(value);
+                        }
+                      },
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          await _saveMusicVolume(tempVolume);
+                          if (!context.mounted) return;
+                          Navigator.of(context).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEC7A34),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          S.of(context).accept,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -344,16 +440,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Text(
-            "Cerrar sesión",
+          title:  Text(
+            S.of(context).signOut,
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          content: const Text("¿Estás seguro de que quieres cerrar sesión?"),
+          content:  Text(S.of(context).signOutConfirmation),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text(
-                "Cancelar",
+              child:  Text(
+                S.of(context).cancel,
                 style: TextStyle(color: Colors.grey),
               ),
             ),
@@ -369,7 +465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text("Cerrar sesión"),
+              child:  Text(S.of(context).signOut),
             ),
           ],
         );
@@ -385,121 +481,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Sesión cerrada exitosamente"),
+         SnackBar(
+          content: Text(S.of(context).signOutSuccessful),
           backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Error al cerrar sesión"),
+         SnackBar(
+          content: Text(S.of(context).signOutFailed),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
-}
-
-void _showMusicVolumeDialog(
-    BuildContext context,
-    double currentVolume,
-    Function(double) onVolumeChanged,
-    Function(double)? onVolumeChangedLive,
-    ) {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      double tempVolume = currentVolume;
-
-      return Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        insetPadding: const EdgeInsets.all(20),
-        child: StatefulBuilder(
-          builder: (context, setState) {
-            return Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Text(
-                      S.of(context).volume,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  Slider(
-                    value: tempVolume,
-                    min: 0,
-                    max: 1,
-                    divisions: 10,
-                    label: '${(tempVolume * 100).round()}%',
-                    activeColor: const Color(0xFFEC7A34),
-                    inactiveColor: Colors.orange.shade100,
-                    onChanged: (value) {
-                      setState(() {
-                        tempVolume = value;
-                      });
-                      if (onVolumeChangedLive != null) {
-                        onVolumeChangedLive(value);
-                      }
-                    },
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  Center(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        onVolumeChanged(tempVolume);
-                        Navigator.of(context).pop();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEC7A34),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        S.of(context).accept,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      );
-    },
-  );
 }
 
 void _showLanguageDialog(BuildContext context) {
