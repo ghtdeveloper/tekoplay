@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tekoplay/service/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../app.dart';
+import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -93,6 +93,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
   }
+
+  Future<void> _signInWithFacebook() async {
+    try {
+      final user = await AuthService().signInWithFacebook();
+      if (!mounted) return;
+
+      if (user != null) {
+        setState(() {
+          _currentUser = user;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("${S.of(context).welcome} ${user.displayName ?? ''}"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.of(context).errorSignInFacebook),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(S.of(context).errorSignInFacebook),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -558,6 +593,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () async {
                       Navigator.of(context).pop();
                       await _signInWithGoogle();
+                    },
+                  ),
+                ),
+
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 4,
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.facebook,
+                      color: Colors.blue,
+                      size: 32,
+                    ),
+                    title: Text(S.of(context).facebookLogin),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                     await _signInWithFacebook();
+                    },
+                  ),
+                ),
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 4,
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.email,
+                      color: Colors.black,
+                      size: 32,
+                    ),
+                    title: Text(S.of(context).emailLogin),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      //TODO crear _signInWithEmail
+                      // await _signInWithGoogle();
                     },
                   ),
                 ),

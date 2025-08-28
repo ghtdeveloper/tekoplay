@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tekoplay/features/games/chess_tutorial_screen.dart';
 
+import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../home/home_screen.dart';
 import 'chess_vs_cpu_screen.dart';
-import 'package:tekoplay/service/auth_service.dart';
 
 import 'domino_tutorial_screen.dart';
 import 'domino_vs_cpu_screen.dart';
@@ -42,7 +42,6 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
-  // Widget para mostrar el avatar del usuario
   Widget _buildUserAvatar() {
     if (_currentUser?.photoURL != null && _currentUser!.photoURL!.isNotEmpty) {
       return CircleAvatar(
@@ -50,14 +49,13 @@ class _GameScreenState extends State<GameScreen> {
         backgroundColor: Colors.grey[300],
         backgroundImage: NetworkImage(_currentUser!.photoURL!),
         onBackgroundImageError: (exception, stackTrace) {
-          // En caso de error al cargar la imagen, se mostrará el fallback
+
         },
         child: _currentUser!.photoURL == null || _currentUser!.photoURL!.isEmpty
             ? const Icon(Icons.person, color: Colors.white, size: 60)
             : null,
       );
     } else {
-      // Avatar por defecto si no hay imagen
       return CircleAvatar(
         radius: 60,
         backgroundImage: AssetImage('assets/images/img_perfil_unknown.png'),
