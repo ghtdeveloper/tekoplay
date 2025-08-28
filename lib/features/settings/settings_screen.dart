@@ -77,7 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(
+          SnackBar(
             content: Text(S.of(context).errorSignInGoogle),
             backgroundColor: Colors.red,
           ),
@@ -86,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
+        SnackBar(
           content: Text(S.of(context).errorSignInGoogle),
           backgroundColor: Colors.red,
         ),
@@ -162,6 +162,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: S.of(context).termsCheck,
                   icon: Icons.description_outlined,
                   onTap: () {},
+                ),
+                _buildSettingsCard(
+                  title: 'Soporte Técnico',
+                  subtitle: 'Contacta con nuestro equipo de soporte',
+                  icon: Icons.support_agent,
+                  onTap: () => _showTechnicalSupportDialog(context),
                 ),
               ],
             ),
@@ -267,6 +273,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onTap: onTap,
       ),
     );
+  }
+
+  void _showTechnicalSupportDialog(BuildContext context) {
+    final TextEditingController messageController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.all(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        S.of(context).supportTitle,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                 Text(
+                  S.of(context).describeIssue,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.black87,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: messageController,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: S.of(context).writeIssueHere,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFEC7A34), width: 2),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                Center(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (messageController.text.trim().isNotEmpty) {
+                        await _sendSupportMessage(messageController.text.trim());
+                        if (!context.mounted) return;
+                        Navigator.of(context).pop();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                           SnackBar(
+                            content: Text(S.of(context).pleaseWriteIssue),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child:  Text(
+                      S.of(context).send,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _sendSupportMessage(String message) async {
+    try {
+      // TODO Aquí puedes implementar la lógica para enviar el mensaje
+
+      await Future.delayed(const Duration(seconds: 1));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+          content: Text(S.of(context).sendIssueSuccessfully),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+          content: Text(S.of(context).sendIssueFailed),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showMusicVolumeDialog(BuildContext context) {
@@ -481,7 +620,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
+        SnackBar(
           content: Text(S.of(context).signOutSuccessful),
           backgroundColor: Colors.green,
         ),
@@ -489,7 +628,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
+        SnackBar(
           content: Text(S.of(context).signOutFailed),
           backgroundColor: Colors.red,
         ),

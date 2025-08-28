@@ -112,5 +112,12 @@
   "signOutConfirmation": "Are you sure you want to sign out?",
   "cancel": "Cancel",
   "signOutSuccessful": "Signed out successfully",
-  "signOutFailed": "Sign out failed"
+  "signOutFailed": "Sign out failed",
+  "supportTitle": "Technical Support",
+  "describeIssue": "Describe your issue or question:",
+  "writeIssueHere": "Write your message here...",
+  "pleaseWriteIssue": "Please write a message",
+  "send": "Send",
+  "sendIssueSuccessfully": "Message sent successfully. We will contact you soon.",
+  "sendIssueFailed": "Failed to send the message. Please try again."
 }

@@ -112,6 +112,13 @@
   "signOutConfirmation": "¿Estás seguro de que quieres cerrar sesión?",
   "cancel": "Cancelar",
   "signOutSuccessful": "Sesión cerrada exitosamente",
-  "signOutFailed": "Error al cerrar sesión"
+  "signOutFailed": "Error al cerrar sesión",
+  "supportTitle": "Soporte Técnico",
+  "describeIssue": "Describe tu problema o consulta:",
+  "writeIssueHere": "Escribe tu mensaje aquí...",
+  "pleaseWriteIssue": "Por favor escribe un mensaje",
+  "send": "Enviar",
+  "sendIssueSuccessfully": "Mensaje enviado correctamente. Te contactaremos pronto.",
+  "sendIssueFailed": "Error al enviar el mensaje. Inténtalo de nuevo."
 
 }

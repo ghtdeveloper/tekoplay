@@ -111,5 +111,12 @@
   "signOutConfirmation": "Êtes-vous sûr de vouloir vous déconnecter ?",
   "cancel": "Annuler",
   "signOutSuccessful": "Déconnexion réussie",
-  "signOutFailed": "Échec de la déconnexion"
+  "signOutFailed": "Échec de la déconnexion",
+  "supportTitle": "Support Technique",
+  "describeIssue": "Décrivez votre problème ou question :",
+  "writeIssueHere": "Écrivez votre message ici...",
+  "pleaseWriteIssue": "Veuillez écrire un message",
+  "send": "Envoyer",
+  "sendIssueSuccessfully": "Message envoyé avec succès. Nous vous contacterons bientôt.",
+  "sendIssueFailed": "Échec de l'envoi du message. Veuillez réessayer."
 }
