@@ -28,9 +28,7 @@ class AuthService {
 
   Future<User?> signInWithFacebook() async {
     try {
-      final LoginResult result = await FacebookAuth.instance.login(
-        permissions: ['email', 'public_profile'],
-      );
+      final LoginResult result = await FacebookAuth.instance.login();
       if (result.status == LoginStatus.success) {
         final AccessToken accessToken = result.accessToken!;
 
@@ -46,6 +44,59 @@ class AuthService {
     } catch (e) {
       print("Error en Facebook Sign-In: $e");
       return null;
+    }
+  }
+
+  Future<User?> registerWithEmail(String email, String password, String displayName) async {
+    try {
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      await userCredential.user?.updateDisplayName(displayName);
+
+      await userCredential.user?.sendEmailVerification();
+
+      return userCredential.user;
+    } on FirebaseAuthException catch (e) {
+      print("Error en registro: ${e.code} - ${e.message}");
+      return null;
+    } catch (e) {
+      print("Error inesperado en registro: $e");
+      return null;
+    }
+  }
+
+  Future<User?> signInWithEmail(String email, String password) async {
+    try {
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      if (userCredential.user != null && userCredential.user!.emailVerified) {
+        return userCredential.user;
+      } else {
+        print("El correo no ha sido verificado");
+        await _auth.signOut();
+        return null;
+      }
+    } on FirebaseAuthException catch (e) {
+      print("Error en Email Sign-In: ${e.code} - ${e.message}");
+      return null;
+    } catch (e) {
+      print("Error inesperado en Email Sign-In: $e");
+      return null;
+    }
+  }
+
+  Future<void> sendEmailVerification(User user) async {
+    try {
+      if (!user.emailVerified) {
+        await user.sendEmailVerification();
+      }
+    } catch (e) {
+      print("Error al enviar correo de verificación: $e");
     }
   }
 
