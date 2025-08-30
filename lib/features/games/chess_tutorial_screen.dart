@@ -128,7 +128,10 @@ class _ChessImmersiveTutorialScreenState
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
         elevation: 0,
-        title:  Text(S.of(context).tutorialChessTitle),
+        title:  Text(
+            (S.of(context).tutorialChessTitle),
+          style: const TextStyle(color: Colors.white),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           Center(
