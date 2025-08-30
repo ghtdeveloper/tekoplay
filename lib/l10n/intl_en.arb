@@ -122,5 +122,12 @@
   "pleaseWriteIssue": "Please write a message",
   "send": "Send",
   "sendIssueSuccessfully": "Message sent successfully. We will contact you soon.",
-  "sendIssueFailed": "Failed to send the message. Please try again."
+  "sendIssueFailed": "Failed to send the message. Please try again.",
+  "tekoplayAccount": "Tekoplay account",
+  "signUp": "Sign Up",
+  "logIn": "Log In",
+  "forgotPassword": "Forgot your password?",
+  "email": "Email",
+  "password": "Password",
+  "createAccount": "Create account"
 }

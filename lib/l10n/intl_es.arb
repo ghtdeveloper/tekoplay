@@ -122,6 +122,13 @@
   "pleaseWriteIssue": "Por favor escribe un mensaje",
   "send": "Enviar",
   "sendIssueSuccessfully": "Mensaje enviado correctamente. Te contactaremos pronto.",
-  "sendIssueFailed": "Error al enviar el mensaje. Inténtalo de nuevo."
+  "sendIssueFailed": "Error al enviar el mensaje. Inténtalo de nuevo.",
+  "tekoplayAccount": "Tekoplay cuenta",
+  "signUp": "Registrarte",
+  "logIn": "Acceso",
+  "forgotPassword": "¿Olvidaste la contraseña?",
+  "email": "Correo",
+  "password": "Contraseña",
+  "createAccount": "Crear cuenta"
 
 }
