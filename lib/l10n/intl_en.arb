@@ -129,5 +129,15 @@
   "forgotPassword": "Forgot your password?",
   "email": "Email",
   "password": "Password",
-  "createAccount": "Create account"
+  "createAccount": "Create account",
+  "name": "Name",
+  "fillAllFields": "Fill all fields",
+  "accountCreatedCheckEmail": "Account created. Verify your email before signing in.",
+  "errorCreatingAccount": "Error creating account",
+  "emailNotVerified": "Verify your email before signing in",
+  "errorSignInEmail": "Sign in error. Check your credentials.",
+  "enterEmailToReset": "Enter your email to receive a recovery link",
+  "enterValidEmail": "Enter a valid email",
+  "passwordResetSent": "Recovery email sent. Check your inbox.",
+  "errorSendingPasswordReset": "Error sending password reset email"
 }

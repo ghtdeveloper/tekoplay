@@ -129,6 +129,16 @@
   "forgotPassword": "¿Olvidaste la contraseña?",
   "email": "Correo",
   "password": "Contraseña",
-  "createAccount": "Crear cuenta"
+  "createAccount": "Crear cuenta",
+  "name": "Nombre",
+  "fillAllFields": "Completa todos los campos",
+  "accountCreatedCheckEmail": "Cuenta creada. Verifica tu email antes de iniciar sesión.",
+  "errorCreatingAccount": "Error al crear la cuenta",
+  "emailNotVerified": "Verifica tu email antes de iniciar sesión",
+  "errorSignInEmail": "Error al iniciar sesión. Verifica tus credenciales.",
+  "enterEmailToReset": "Ingresa tu email para recibir un enlace de recuperación",
+  "enterValidEmail": "Ingresa un email válido",
+  "passwordResetSent": "Email de recuperación enviado. Revisa tu bandeja de entrada.",
+  "errorSendingPasswordReset": "Error al enviar el email de recuperación"
 
 }

@@ -128,5 +128,15 @@
   "forgotPassword": "Mot de passe oublié ?",
   "email": "E-mail",
   "password": "Mot de passe",
-  "createAccount": "Créer un compte"
+  "createAccount": "Créer un compte",
+  "name": "Nom",
+  "fillAllFields": "Remplissez tous les champs",
+  "accountCreatedCheckEmail": "Compte créé. Vérifiez votre email avant de vous connecter.",
+  "errorCreatingAccount": "Erreur lors de la création du compte",
+  "emailNotVerified": "Vérifiez votre email avant de vous connecter",
+  "errorSignInEmail": "Erreur de connexion. Vérifiez vos informations d'identification.",
+  "enterEmailToReset": "Entrez votre email pour recevoir un lien de récupération",
+  "enterValidEmail": "Entrez un email valide",
+  "passwordResetSent": "Email de récupération envoyé. Vérifiez votre boîte de réception.",
+  "errorSendingPasswordReset": "Erreur lors de l'envoi de l'email de récupération de mot de passe"
 }
