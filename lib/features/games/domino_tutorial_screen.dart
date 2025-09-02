@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import '../../core/models/DominoTile.dart';
+import '../../core/models/domino_tile.dart';
 import '../../generated/l10n.dart';
 
 class DominoController {

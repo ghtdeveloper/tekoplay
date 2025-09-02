@@ -138,5 +138,8 @@
   "enterEmailToReset": "Entrez votre email pour recevoir un lien de récupération",
   "enterValidEmail": "Entrez un email valide",
   "passwordResetSent": "Email de récupération envoyé. Vérifiez votre boîte de réception.",
-  "errorSendingPasswordReset": "Erreur lors de l'envoi de l'email de récupération de mot de passe"
+  "errorSendingPasswordReset": "Erreur lors de l'envoi de l'email de récupération de mot de passe",
+  "selectGameType": "Sélectionner le type de partie",
+  "fun": "Divertissement",
+  "bet": "Pari"
 }

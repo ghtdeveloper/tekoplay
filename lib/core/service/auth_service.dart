@@ -1,15 +1,23 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:tekoplay/core/utils/game_result.dart';
+import 'package:tekoplay/core/utils/game_type.dart';
+import '../models/dame_stats.dart';
+import '../models/game_match.dart';
+import 'firestore_service.dart';
+import '../models/user.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final FirestoreService _firestoreService = FirestoreService();
 
   Future<User?> signInWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null;
+
       final GoogleSignInAuthentication googleAuth =
       await googleUser.authentication;
 
@@ -19,6 +27,11 @@ class AuthService {
       );
 
       final userCredential = await _auth.signInWithCredential(credential);
+
+      if (userCredential.user != null) {
+        await _firestoreService.createOrGetUser(userCredential.user!);
+      }
+
       return userCredential.user;
     } catch (e) {
       print("Error en Google Sign-In: $e");
@@ -36,6 +49,11 @@ class AuthService {
         FacebookAuthProvider.credential(accessToken.token);
 
         final userCredential = await _auth.signInWithCredential(credential);
+
+        if (userCredential.user != null) {
+          await _firestoreService.createOrGetUser(userCredential.user!);
+        }
+
         return userCredential.user;
       } else {
         print("Facebook login cancelled o fallido: ${result.status}");
@@ -55,8 +73,11 @@ class AuthService {
       );
 
       await userCredential.user?.updateDisplayName(displayName);
-
       await userCredential.user?.sendEmailVerification();
+
+      if (userCredential.user != null) {
+        await _firestoreService.createOrGetUser(userCredential.user!);
+      }
 
       return userCredential.user;
     } on FirebaseAuthException catch (e) {
@@ -74,7 +95,9 @@ class AuthService {
         email: email,
         password: password,
       );
+
       if (userCredential.user != null && userCredential.user!.emailVerified) {
+        await _firestoreService.createOrGetUser(userCredential.user!);
         return userCredential.user;
       } else {
         print("El correo no ha sido verificado");
@@ -100,8 +123,6 @@ class AuthService {
     }
   }
 
-
-
   Future<void> signOut() async {
     try {
       await _googleSignIn.signOut();
@@ -118,5 +139,195 @@ class AuthService {
 
   Stream<User?> authStateChanges() {
     return _auth.authStateChanges();
+  }
+
+  Future<UserModel?> getUserData(String userId) async {
+    return await _firestoreService.getUser(userId);
+  }
+
+  Future<UserModel?> getCurrentUserData() async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.getUser(user.uid);
+    }
+    return null;
+  }
+
+  Stream<UserModel?> getCurrentUserDataStream() {
+    final user = getCurrentUser();
+    if (user != null) {
+      return _firestoreService.getUserStream(user.uid);
+    }
+    return Stream.value(null);
+  }
+
+  Future<bool> updateUserCurrency(int newCurrency) async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.updateUserCurrency(user.uid, newCurrency);
+    }
+    return false;
+  }
+
+  Future<bool> updateUserData({
+    int? currency,
+    Map<GameTypeModel, GameStats>? gameStats
+  }) async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.updateUserData(
+        user.uid,
+        currency: currency,
+        gameStats: gameStats,
+      );
+    }
+    return false;
+  }
+
+  Future<bool> updateGamePoints(GameTypeModel gameType, int newPoints) async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.updateGamePoints(user.uid, gameType, newPoints);
+    }
+    return false;
+  }
+
+  Future<bool> updateGameStats(GameTypeModel gameType, GameStats stats) async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.updateGameStats(user.uid, gameType, stats);
+    }
+    return false;
+  }
+
+  Future<bool> recordGameMatch({
+    required GameTypeModel gameType,
+    required GameResultModel result,
+    required int pointsEarned,
+    required int durationMinutes,
+    String? opponentId,
+    String? opponentName,
+    Map<String, dynamic>? additionalData,
+  }) async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.recordGameMatch(
+        userId: user.uid,
+        gameType: gameType,
+        result: result,
+        pointsEarned: pointsEarned,
+        durationMinutes: durationMinutes,
+        opponentId: opponentId,
+        opponentName: opponentName,
+        additionalData: additionalData,
+      );
+    }
+    return false;
+  }
+
+  Future<List<GameMatch>> getCurrentUserGameHistory({
+    GameTypeModel? gameType,
+    int limit = 50,
+  }) async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.getUserGameHistory(
+        userId: user.uid,
+        gameType: gameType,
+        limit: limit,
+      );
+    }
+    return [];
+  }
+
+  Stream<List<GameMatch>> getCurrentUserGameHistoryStream({
+    GameTypeModel? gameType,
+    int limit = 20,
+  }) {
+    final user = getCurrentUser();
+    if (user != null) {
+      return _firestoreService.getUserGameHistoryStream(
+        userId: user.uid,
+        gameType: gameType,
+        limit: limit,
+      );
+    }
+    return Stream.value([]);
+  }
+
+  Future<Map<String, dynamic>?> getCurrentUserSummaryStats() async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.getUserSummaryStats(user.uid);
+    }
+    return null;
+  }
+
+  Future<GameStats?> getCurrentUserGameStats(GameTypeModel gameType) async {
+    final user = getCurrentUser();
+    if (user != null) {
+      return await _firestoreService.getUserGameStats(user.uid, gameType);
+    }
+    return null;
+  }
+
+  Future<int> getCurrentUserTotalPoints() async {
+    final userData = await getCurrentUserData();
+    return userData?.totalPoints ?? 0;
+  }
+
+  Future<int> getCurrentUserGamePoints(GameTypeModel gameType) async {
+    final gameStats = await getCurrentUserGameStats(gameType);
+    return gameStats?.points ?? GameStats.getInitialPoints(gameType);
+  }
+
+
+  Future<bool> canAffordBet(GameTypeModel gameType, int betAmount) async {
+    final points = await getCurrentUserGamePoints(gameType);
+    return points >= betAmount;
+  }
+
+  Future<int?> getUserRankInGame(GameTypeModel gameType) async {
+    try {
+      final user = getCurrentUser();
+      if (user == null) return null;
+
+      final leaderboard = await _firestoreService.getGameLeaderboard(
+        gameType: gameType,
+        limit: 100,
+      );
+
+      for (int i = 0; i < leaderboard.length; i++) {
+        if (leaderboard[i]['userId'] == user.uid) {
+          return i + 1;
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error getting user rank: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getCurrentUserGameProfile() async {
+    final user = getCurrentUser();
+    final userData = await getCurrentUserData();
+
+    if (user == null || userData == null) return null;
+
+    return {
+      'uid': user.uid,
+      'name': userData.name,
+      'totalPoints': userData.totalPoints,
+      'currency': userData.currency,
+      'gameStats': userData.gameStats.map((gameType, stats) => MapEntry(
+        gameType.displayName,
+        {
+          'points': stats.points,
+          'gamesPlayed': stats.gamesPlayed,
+          'winRate': stats.winRate,
+        },
+      )),
+    };
   }
 }

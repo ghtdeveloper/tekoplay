@@ -186,7 +186,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const SizedBox(height: 16),
 
-                // Botón Log In
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -505,8 +504,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(S.of(context).emailNotVerified ??
-                                      'Verifica tu email antes de iniciar sesión'),
+                                  content: Text(S.of(context).emailNotVerified),
                                   backgroundColor: Colors.orange,
                                 ),
                               );

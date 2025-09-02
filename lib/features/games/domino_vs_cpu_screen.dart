@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../core/models/DominoTile.dart';
+import '../../core/models/domino_tile.dart';
 import '../../generated/l10n.dart';
 
 enum GameState { playerTurn, computerTurn, gameOver }

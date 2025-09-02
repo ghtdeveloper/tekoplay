@@ -139,6 +139,9 @@
   "enterEmailToReset": "Ingresa tu email para recibir un enlace de recuperación",
   "enterValidEmail": "Ingresa un email válido",
   "passwordResetSent": "Email de recuperación enviado. Revisa tu bandeja de entrada.",
-  "errorSendingPasswordReset": "Error al enviar el email de recuperación"
+  "errorSendingPasswordReset": "Error al enviar el email de recuperación",
+  "selectGameType": "Seleccionar tipo de partida",
+  "fun": "Diversión",
+  "bet": "Apuesta"
 
 }

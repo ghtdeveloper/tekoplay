@@ -58,6 +58,111 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
+  // Nuevo método para mostrar el diálogo de selección de tipo de partida
+  void _showGameTypeDialog(BuildContext context, String gameType) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+                Text(
+                  S.of(context).selectGameType,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => GameScreen(
+                            gameType: gameType,
+                            matchType: S.of(context).fun,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: Icon(Icons.sports_esports),
+                    label: Text(
+                     S.of(context).fun,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4CAF50),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 15),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => GameScreen(
+                            gameType: gameType,
+                            matchType: S.of(context).bet,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: Icon(Icons.monetization_on),
+                    label: Text(
+                     S.of(context).bet,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF9800),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -119,13 +224,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       imagePath: 'assets/images/chess.png',
                       title: S.of(context).chess,
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                GameScreen(gameType: S.of(context).chess),
-                          ),
-                        );
+                        // Mostrar diálogo de selección en lugar de navegar directamente
+                        _showGameTypeDialog(context, S.of(context).chess);
                       },
                       size: cardSize,
                     ),
@@ -133,13 +233,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       imagePath: 'assets/images/domino.png',
                       title: S.of(context).domino,
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                GameScreen(gameType: S.of(context).domino),
-                          ),
-                        );
+                        // Mostrar diálogo de selección en lugar de navegar directamente
+                        _showGameTypeDialog(context, S.of(context).domino);
                       },
                       size: cardSize,
                     ),

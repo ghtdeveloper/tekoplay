@@ -14,8 +14,13 @@ import 'domino_vs_cpu_screen.dart';
 
 class GameScreen extends StatefulWidget {
   final String gameType;
+  final String matchType;
 
-  const GameScreen({super.key, required this.gameType});
+  const GameScreen({
+    super.key,
+    required this.gameType,
+    required this.matchType,
+  });
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -23,6 +28,7 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   late String gameType;
+  late String matchType;
   User? _currentUser;
 
   bool get isChess => gameType == S.of(context).chess;
@@ -33,6 +39,7 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     gameType = widget.gameType;
+    matchType = widget.matchType;
     _loadCurrentUser();
   }
 
@@ -62,6 +69,35 @@ class _GameScreenState extends State<GameScreen> {
         backgroundColor: Colors.grey[300],
       );
     }
+  }
+
+  Widget _buildMatchTypeIndicator() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: matchType == S.of(context).bet ? Colors.amber : Colors.green,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            matchType == S.of(context).bet ? Icons.monetization_on : Icons.sports_esports,
+            color: Colors.white,
+            size: 16,
+          ),
+          SizedBox(width: 4),
+          Text(
+            matchType,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -122,6 +158,10 @@ class _GameScreenState extends State<GameScreen> {
                         color: Colors.white,
                       ),
                     ),
+                    SizedBox(height: 8),
+                    // Mostrar el indicador del tipo de partida
+                    _buildMatchTypeIndicator(),
+                    SizedBox(height: 8),
                     Text(
                       _currentUser?.displayName ?? S.of(context).anonymous,
                       style: TextStyle(
