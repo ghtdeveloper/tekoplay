@@ -8,9 +8,10 @@ import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../home/home_screen.dart';
 import 'chess_vs_cpu_screen.dart';
-
 import 'domino_tutorial_screen.dart';
 import 'domino_vs_cpu_screen.dart';
+import 'ranking_screen.dart';
+import 'game_history_screen.dart';
 
 class GameScreen extends StatefulWidget {
   final String gameType;
@@ -55,9 +56,7 @@ class _GameScreenState extends State<GameScreen> {
         radius: 60,
         backgroundColor: Colors.grey[300],
         backgroundImage: NetworkImage(_currentUser!.photoURL!),
-        onBackgroundImageError: (exception, stackTrace) {
-
-        },
+        onBackgroundImageError: (exception, stackTrace) {},
         child: _currentUser!.photoURL == null || _currentUser!.photoURL!.isEmpty
             ? const Icon(Icons.person, color: Colors.white, size: 60)
             : null,
@@ -97,6 +96,121 @@ class _GameScreenState extends State<GameScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showUserOptionsDialog(BuildContext context) {
+    if (_currentUser == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.grey[300],
+                  backgroundImage: _currentUser!.photoURL != null
+                      ? NetworkImage(_currentUser!.photoURL!)
+                      : AssetImage('assets/images/img_perfil_unknown.png') as ImageProvider,
+                  child: _currentUser!.photoURL == null
+                      ? Icon(Icons.person, color: Colors.white, size: 40)
+                      : null,
+                ),
+
+                SizedBox(height: 12),
+
+                Text(
+                  _currentUser!.displayName ?? S.of(context).anonymous,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+
+                SizedBox(height: 20),
+
+                // Botón Ranking
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => RankingScreen(),
+                        ),
+                      );
+                    },
+                    icon: Icon(Icons.leaderboard),
+                    label: Text(
+                      S.of(context).ranking,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 12),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => GameHistoryScreen(),
+                        ),
+                      );
+                    },
+                    icon: Icon(Icons.history),
+                    label: Text(
+                      S.of(context).gameStats,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -159,19 +273,43 @@ class _GameScreenState extends State<GameScreen> {
                       ),
                     ),
                     SizedBox(height: 8),
-                    // Mostrar el indicador del tipo de partida
                     _buildMatchTypeIndicator(),
                     SizedBox(height: 8),
-                    Text(
-                      _currentUser?.displayName ?? S.of(context).anonymous,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+
+                    GestureDetector(
+                      onTap: _currentUser != null ? () => _showUserOptionsDialog(context) : null,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: _currentUser != null ? BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        ) : null,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _currentUser?.displayName ?? S.of(context).anonymous,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                            if (_currentUser != null) ...[
+                              SizedBox(width: 8),
+                              Icon(
+                                Icons.keyboard_arrow_down,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -212,6 +350,7 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  // Resto de métodos sin cambios...
   void _showFriendGameDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -598,7 +737,6 @@ class _GameScreenState extends State<GameScreen> {
                     onPressed: () {
                       final roomCode = roomCodeController.text.trim();
                       if (roomCode.isNotEmpty) {
-                        // Aquí va la lógica para unirse a la sala
                         print('Unirse a la sala con código: $roomCode');
                         Navigator.of(context).pop();
                       } else {
@@ -724,7 +862,6 @@ class _GameScreenState extends State<GameScreen> {
                     onPressed: () {
                       final roomCode = roomCodeController.text.trim();
                       if (roomCode.isNotEmpty) {
-                        // Aquí va la lógica para unirse a la sala
                         print('Unirse a la sala con código: $roomCode');
                         Navigator.of(context).pop();
                       } else {

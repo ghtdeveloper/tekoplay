@@ -58,7 +58,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  // Nuevo método para mostrar el diálogo de selección de tipo de partida
   void _showGameTypeDialog(BuildContext context, String gameType) {
     showDialog(
       context: context,
@@ -224,7 +223,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       imagePath: 'assets/images/chess.png',
                       title: S.of(context).chess,
                       onTap: () {
-                        // Mostrar diálogo de selección en lugar de navegar directamente
                         _showGameTypeDialog(context, S.of(context).chess);
                       },
                       size: cardSize,
@@ -233,7 +231,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       imagePath: 'assets/images/domino.png',
                       title: S.of(context).domino,
                       onTap: () {
-                        // Mostrar diálogo de selección en lugar de navegar directamente
                         _showGameTypeDialog(context, S.of(context).domino);
                       },
                       size: cardSize,

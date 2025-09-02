@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
-import '../models/dame_stats.dart';
+import '../models/game_stats.dart';
 import '../models/game_match.dart';
 import '../models/user.dart';
 

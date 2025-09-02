@@ -3,7 +3,7 @@ import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
-import '../models/dame_stats.dart';
+import '../models/game_stats.dart';
 import '../models/game_match.dart';
 import 'firestore_service.dart';
 import '../models/user.dart';

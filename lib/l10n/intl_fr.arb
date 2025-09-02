@@ -141,5 +141,51 @@
   "errorSendingPasswordReset": "Erreur lors de l'envoi de l'email de récupération de mot de passe",
   "selectGameType": "Sélectionner le type de partie",
   "fun": "Divertissement",
-  "bet": "Pari"
+  "bet": "Pari",
+  "ranking": "Classement",
+  "gameStats": "Statistiques du jeu",
+  "yourPositionIn": "Votre position dans",
+  "notRankingInfo": "Aucune donnée de classement disponible",
+  "gamePlayed": "Parties jouées",
+  "victories": "Victoires",
+  "loadingRanking": "Chargement des classements...",
+  "notRankingIn": "Vous n'avez pas de classement dans",
+  "generalSummary": "Résumé Général",
+  "games": "Parties",
+  "victoriesPct": "% de victoires",
+  "totalPoints": "Total des points",
+  "stats": "Statistiques",
+  "point": "Points",
+  "defeats": "Défaites",
+  "ties": "Matchs nuls",
+  "averageTime": "Temps Moyen",
+  "notPlayedGameYet": "Vous n'avez encore joué aucune partie",
+  "youHaventPlayed": "Vous n'avez pas joué",
+  "still": "encore",
+  "wins": "Victoire",
+  "lose": "Défaite",
+  "tie": "Match nul",
+  "gameHistory": "Historique des parties",
+  "all": "Tous",
+  "loadingHistory": "Chargement de l'historique..."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }

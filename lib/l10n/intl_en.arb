@@ -142,5 +142,51 @@
   "errorSendingPasswordReset": "Error sending password reset email",
   "selectGameType": "Select game type",
   "fun": "Fun",
-  "bet": "Bet"
+  "bet": "Bet",
+  "ranking": "Ranking",
+  "gameStats": "Game Statistics",
+  "yourPositionIn": "Your position in",
+  "notRankingInfo": "No ranking data available",
+  "gamePlayed": "Games Played",
+  "victories": "Victories",
+  "loadingRanking": "Loading rankings...",
+  "notRankingIn": "You don't have a ranking in",
+  "generalSummary": "General Summary",
+  "games": "Games",
+  "victoriesPct": "Win %",
+  "totalPoints": "Total Points",
+  "stats": "Statistics",
+  "point": "Points",
+  "defeats": "Defeats",
+  "ties": "Ties",
+  "averageTime": "Average Time",
+  "notPlayedGameYet": "You haven't played any games yet",
+  "youHaventPlayed": "You haven't played",
+  "still": "yet",
+  "wins": "Win",
+  "lose": "Loss",
+  "tie": "Tie",
+  "gameHistory": "Game History",
+  "all": "All",
+  "loadingHistory": "Loading history..."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
