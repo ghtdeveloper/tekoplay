@@ -168,6 +168,8 @@
   "tie": "Empate",
   "gameHistory": "Histórico de Partidas",
   "all": "Todos",
-  "loadingHistory": "Cargando historial..."
+  "loadingHistory": "Cargando historial...",
+  "technicalSupport": "Soporte Técnico",
+  "contactSupport": "Contacta con nuestro equipo de soporte"
 
 }

@@ -167,7 +167,11 @@
   "tie": "Match nul",
   "gameHistory": "Historique des parties",
   "all": "Tous",
-  "loadingHistory": "Chargement de l'historique..."
+  "loadingHistory": "Chargement de l'historique...",
+  "technicalSupport": "Support technique",
+  "contactSupport": "Contactez notre équipe d'assistance"
+
+
 
 
 

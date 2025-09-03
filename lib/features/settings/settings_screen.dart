@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:tekoplay/core/service/firestore_service.dart';
 
 import '../../app.dart';
 import '../../core/service/auth_service.dart';
@@ -764,8 +765,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () {},
                 ),
                 _buildSettingsCard(
-                  title: 'Soporte Técnico',
-                  subtitle: 'Contacta con nuestro equipo de soporte',
+                  title: S.of(context).technicalSupport,
+                  subtitle: S.of(context).contactSupport,
                   icon: Icons.support_agent,
                   onTap: () => _showTechnicalSupportDialog(context),
                 ),
@@ -986,21 +987,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _sendSupportMessage(String message) async {
     try {
-      // TODO Aquí puedes implementar la lógica para enviar el mensaje
-
-      await Future.delayed(const Duration(seconds: 1));
-
+      final technicalIssue = await FirestoreService().createTechnicalIssue(_currentUser, message);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
-          content: Text(S.of(context).sendIssueSuccessfully),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if(technicalIssue != null){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.of(context).sendIssueSuccessfully),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.of(context).sendIssueFailed),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      await Future.delayed(const Duration(seconds: 1));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
+        SnackBar(
           content: Text(S.of(context).sendIssueFailed),
           backgroundColor: Colors.red,
         ),

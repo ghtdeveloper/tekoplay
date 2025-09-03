@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:tekoplay/core/models/technical_issue.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
 import '../models/game_stats.dart';
@@ -16,6 +17,7 @@ class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _usersCollection = 'users';
   final String _gameMatchesCollection = 'game_matches';
+  final String _technicalIssueCollection = 'supports';
 
   Future<UserModel?> createOrGetUser(User firebaseUser) async {
     try {
@@ -55,6 +57,47 @@ class FirestoreService {
       }
     } catch (e) {
       print('Error creating/getting user: $e');
+      return null;
+    }
+  }
+
+  Future<TechnicalIssue?> createTechnicalIssue(
+    User? firebaseUser,
+    String message,
+  ) async {
+    try {
+      final userDoc =
+          await _firestore.collection(_technicalIssueCollection).doc().get();
+
+      if (firebaseUser != null) {
+        final newIssue = TechnicalIssue(
+          id: userDoc.id,
+          issueUserId: firebaseUser.uid,
+          message: message,
+          createdAt: DateTime.now(),
+          status: '',
+        );
+        await _firestore
+            .collection(_technicalIssueCollection)
+            .doc(userDoc.id)
+            .set(newIssue.toFirestore());
+        return newIssue;
+      } else {
+        final newIssue = TechnicalIssue(
+          id: userDoc.id,
+          issueUserId: null,
+          message: message,
+          createdAt: DateTime.now(),
+          status: '',
+        );
+        await _firestore
+            .collection(_technicalIssueCollection)
+            .doc(userDoc.id)
+            .set(newIssue.toFirestore());
+        return newIssue;
+      }
+    } catch (e) {
+      print('Error creating/technical issue: $e');
       return null;
     }
   }
