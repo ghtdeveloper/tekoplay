@@ -1,9 +1,11 @@
+
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:tekoplay/core/service/firestore_service.dart';
-
+import 'package:tekoplay/core/utils/constants.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../app.dart';
 import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
@@ -129,6 +131,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _launchUrl(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      throw Exception('No se pudo abrir $url');
+    }
+  }
+
   Future<void> _signInWithEmail(BuildContext context) async {
     showDialog(
       context: context,
@@ -136,7 +145,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           insetPadding: const EdgeInsets.all(20),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
@@ -163,7 +174,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Botón Sign Up
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -179,9 +189,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(S.of(context).signUp,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(
+                      S.of(context).signUp,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
                 ),
 
@@ -202,9 +216,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(S.of(context).logIn,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(
+                      S.of(context).logIn,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -229,7 +247,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context, setDialogState) {
             return Dialog(
               backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               insetPadding: const EdgeInsets.all(20),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -242,14 +262,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Text(
                             S.of(context).signUp,
                             style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black),
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
                           ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
-                          onPressed: isLoading ? null : () => Navigator.of(context).pop(),
+                          onPressed:
+                              isLoading
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
                         ),
                       ],
                     ),
@@ -261,7 +285,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: InputDecoration(
                         labelText: S.of(context).name ?? 'Nombre',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -273,7 +298,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: InputDecoration(
                         labelText: S.of(context).email,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -285,7 +311,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: InputDecoration(
                         labelText: S.of(context).password,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
 
@@ -294,61 +321,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: isLoading ? null : () async {
-                          if (emailController.text.trim().isEmpty ||
-                              passwordController.text.trim().isEmpty ||
-                              nameController.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).fillAllFields),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
+                        onPressed:
+                            isLoading
+                                ? null
+                                : () async {
+                                  if (emailController.text.trim().isEmpty ||
+                                      passwordController.text.trim().isEmpty ||
+                                      nameController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S.of(context).fillAllFields,
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                          setDialogState(() {
-                            isLoading = true;
-                          });
+                                  setDialogState(() {
+                                    isLoading = true;
+                                  });
 
-                          try {
-                            final user = await AuthService().registerWithEmail(
-                              emailController.text.trim(),
-                              passwordController.text.trim(),
-                              nameController.text.trim(),
-                            );
+                                  try {
+                                    final user = await AuthService()
+                                        .registerWithEmail(
+                                          emailController.text.trim(),
+                                          passwordController.text.trim(),
+                                          nameController.text.trim(),
+                                        );
 
-                            if (!mounted) return;
+                                    if (!mounted) return;
 
-                            Navigator.of(context).pop();
+                                    Navigator.of(context).pop();
 
-                            if (user != null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(S.of(context).accountCreatedCheckEmail),
-                                  backgroundColor: Colors.green,
-                                  duration: const Duration(seconds: 4),
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(S.of(context).errorCreatingAccount),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            if (!mounted) return;
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).errorCreatingAccount),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
+                                    if (user != null) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            S
+                                                .of(context)
+                                                .accountCreatedCheckEmail,
+                                          ),
+                                          backgroundColor: Colors.green,
+                                          duration: const Duration(seconds: 4),
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            S.of(context).errorCreatingAccount,
+                                          ),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    Navigator.of(context).pop();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S.of(context).errorCreatingAccount,
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
@@ -357,18 +402,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: isLoading
-                            ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 2,
-                          ),
-                        )
-                            : Text(S.of(context).createAccount,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        child:
+                            isLoading
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : Text(
+                                  S.of(context).createAccount,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
                       ),
                     ),
                   ],
@@ -394,7 +446,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context, setDialogState) {
             return Dialog(
               backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               insetPadding: const EdgeInsets.all(20),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -407,14 +461,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Text(
                             S.of(context).logIn,
                             style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black),
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
                           ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
-                          onPressed: isLoading ? null : () => Navigator.of(context).pop(),
+                          onPressed:
+                              isLoading
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
                         ),
                       ],
                     ),
@@ -427,7 +485,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: InputDecoration(
                         labelText: S.of(context).email,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -439,7 +498,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: InputDecoration(
                         labelText: S.of(context).password,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
 
@@ -448,15 +508,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: isLoading ? null : () {
-                          Navigator.of(context).pop();
-                          _showForgotPasswordDialog(context);
-                        },
+                        onPressed:
+                            isLoading
+                                ? null
+                                : () {
+                                  Navigator.of(context).pop();
+                                  _showForgotPasswordDialog(context);
+                                },
                         child: Text(
                           S.of(context).forgotPassword,
                           style: const TextStyle(
-                              color: Color(0xFFEC7A34),
-                              fontWeight: FontWeight.w500),
+                            color: Color(0xFFEC7A34),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
@@ -466,61 +530,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: isLoading ? null : () async {
-                          if (emailController.text.trim().isEmpty ||
-                              passwordController.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).fillAllFields),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
+                        onPressed:
+                            isLoading
+                                ? null
+                                : () async {
+                                  if (emailController.text.trim().isEmpty ||
+                                      passwordController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S.of(context).fillAllFields,
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                          setDialogState(() {
-                            isLoading = true;
-                          });
+                                  setDialogState(() {
+                                    isLoading = true;
+                                  });
 
-                          try {
-                            final user = await AuthService().signInWithEmail(
-                              emailController.text.trim(),
-                              passwordController.text.trim(),
-                            );
+                                  try {
+                                    final user = await AuthService()
+                                        .signInWithEmail(
+                                          emailController.text.trim(),
+                                          passwordController.text.trim(),
+                                        );
 
-                            if (!mounted) return;
+                                    if (!mounted) return;
 
-                            Navigator.of(context).pop();
+                                    Navigator.of(context).pop();
 
-                            if (user != null) {
-                              setState(() {
-                                _currentUser = user;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text("${S.of(context).welcome} ${user.displayName ?? user.email}"),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(S.of(context).emailNotVerified),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            if (!mounted) return;
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).errorSignInEmail),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
+                                    if (user != null) {
+                                      setState(() {
+                                        _currentUser = user;
+                                      });
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            "${S.of(context).welcome} ${user.displayName ?? user.email}",
+                                          ),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            S.of(context).emailNotVerified,
+                                          ),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    Navigator.of(context).pop();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S.of(context).errorSignInEmail,
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
@@ -529,18 +609,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: isLoading
-                            ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 2,
-                          ),
-                        )
-                            : Text(S.of(context).logIn,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        child:
+                            isLoading
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : Text(
+                                  S.of(context).logIn,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
                       ),
                     ),
                   ],
@@ -552,7 +639,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
   }
-
 
   void _showForgotPasswordDialog(BuildContext context) {
     final emailController = TextEditingController();
@@ -566,7 +652,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context, setDialogState) {
             return Dialog(
               backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               insetPadding: const EdgeInsets.all(20),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -579,14 +667,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Text(
                             S.of(context).forgotPassword,
                             style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black),
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
                           ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
-                          onPressed: isLoading ? null : () => Navigator.of(context).pop(),
+                          onPressed:
+                              isLoading
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
                         ),
                       ],
                     ),
@@ -594,7 +686,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     Text(
                       S.of(context).enterEmailToReset,
-                      style: const TextStyle(fontSize: 16, color: Colors.black54),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.black54,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
@@ -606,7 +701,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: InputDecoration(
                         labelText: S.of(context).email,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
 
@@ -615,49 +711,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: isLoading ? null : () async {
-                          if (emailController.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).enterValidEmail),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
+                        onPressed:
+                            isLoading
+                                ? null
+                                : () async {
+                                  if (emailController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S.of(context).enterValidEmail,
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                          setDialogState(() {
-                            isLoading = true;
-                          });
+                                  setDialogState(() {
+                                    isLoading = true;
+                                  });
 
-                          try {
-                            await FirebaseAuth.instance.sendPasswordResetEmail(
-                              email: emailController.text.trim(),
-                            );
+                                  try {
+                                    await FirebaseAuth.instance
+                                        .sendPasswordResetEmail(
+                                          email: emailController.text.trim(),
+                                        );
 
-                            if (!mounted) return;
+                                    if (!mounted) return;
 
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).passwordResetSent),
-                                backgroundColor: Colors.green,
-                                duration: const Duration(seconds: 4),
-                              ),
-                            );
-                          } catch (e) {
-                            if (!mounted) return;
-                            setDialogState(() {
-                              isLoading = false;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).errorSendingPasswordReset),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
+                                    Navigator.of(context).pop();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S.of(context).passwordResetSent,
+                                        ),
+                                        backgroundColor: Colors.green,
+                                        duration: const Duration(seconds: 4),
+                                      ),
+                                    );
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    setDialogState(() {
+                                      isLoading = false;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S
+                                              .of(context)
+                                              .errorSendingPasswordReset,
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
@@ -666,18 +774,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: isLoading
-                            ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 2,
-                          ),
-                        )
-                            : Text(S.of(context).send ?? 'Enviar',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        child:
+                            isLoading
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : Text(
+                                  S.of(context).send ?? 'Enviar',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
                       ),
                     ),
                   ],
@@ -689,11 +804,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
   }
-
-
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -718,17 +828,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 _currentUser == null
                     ? _buildSettingsCard(
-                  title: S.of(context).addAccount,
-                  subtitle: S.of(context).signInAccount,
-                  icon: Icons.account_circle_outlined,
-                  onTap: () => _showLoginDialog(context),
-                )
+                      title: S.of(context).addAccount,
+                      subtitle: S.of(context).signInAccount,
+                      icon: Icons.account_circle_outlined,
+                      onTap: () => _showLoginDialog(context),
+                    )
                     : _buildSettingsCard(
-                  title: S.of(context).signOut,
-                  subtitle: S.of(context).signOutAccount,
-                  icon: Icons.logout,
-                  onTap: () => _showLogoutDialog(context),
-                ),
+                      title: S.of(context).signOut,
+                      subtitle: S.of(context).signOutAccount,
+                      icon: Icons.logout,
+                      onTap: () => _showLogoutDialog(context),
+                    ),
 
                 _buildSettingsCard(
                   title: S.of(context).gameMusic,
@@ -756,13 +866,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: S.of(context).privacyTitle,
                   subtitle: S.of(context).privacy,
                   icon: Icons.privacy_tip_outlined,
-                  onTap: () {},
+                  onTap: () {
+                    _launchUrl(AppConstants.urlPrivacy);
+                  },
                 ),
                 _buildSettingsCard(
                   title: S.of(context).terms,
                   subtitle: S.of(context).termsCheck,
                   icon: Icons.description_outlined,
-                  onTap: () {},
+                  onTap: () {
+                    _launchUrl(AppConstants.urlTerms);
+                  },
                 ),
                 _buildSettingsCard(
                   title: S.of(context).technicalSupport,
@@ -785,7 +899,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildUserSection() {  
+  Widget _buildUserSection() {
     return Container(
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(16.0),
@@ -805,16 +919,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           CircleAvatar(
             radius: 25,
             backgroundColor: const Color(0xFFEC7A34),
-            backgroundImage: _currentUser?.photoURL != null
-                ? NetworkImage(_currentUser!.photoURL!)
-                : null,
-            child: _currentUser?.photoURL == null
-                ? const Icon(
-              Icons.person,
-              color: Colors.white,
-              size: 30,
-            )
-                : null,
+            backgroundImage:
+                _currentUser?.photoURL != null
+                    ? NetworkImage(_currentUser!.photoURL!)
+                    : null,
+            child:
+                _currentUser?.photoURL == null
+                    ? const Icon(Icons.person, color: Colors.white, size: 30)
+                    : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -832,10 +944,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 4),
                 Text(
                   _currentUser?.email ?? '',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.black54,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: Colors.black54),
                 ),
               ],
             ),
@@ -885,7 +994,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           insetPadding: const EdgeInsets.all(20),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
@@ -914,12 +1025,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const SizedBox(height: 20),
 
-                 Text(
+                Text(
                   S.of(context).describeIssue,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black87,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.black87),
                 ),
 
                 const SizedBox(height: 12),
@@ -935,7 +1043,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFEC7A34), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFEC7A34),
+                        width: 2,
+                      ),
                     ),
                     filled: true,
                     fillColor: Colors.grey.shade50,
@@ -948,12 +1059,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ElevatedButton(
                     onPressed: () async {
                       if (messageController.text.trim().isNotEmpty) {
-                        await _sendSupportMessage(messageController.text.trim());
+                        await _sendSupportMessage(
+                          messageController.text.trim(),
+                        );
                         if (!context.mounted) return;
                         Navigator.of(context).pop();
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                           SnackBar(
+                          SnackBar(
                             content: Text(S.of(context).pleaseWriteIssue),
                             backgroundColor: Colors.red,
                           ),
@@ -963,12 +1076,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFEC7A34),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child:  Text(
+                    child: Text(
                       S.of(context).send,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -987,16 +1103,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _sendSupportMessage(String message) async {
     try {
-      final technicalIssue = await FirestoreService().createTechnicalIssue(_currentUser, message);
+      final technicalIssue = await FirestoreService().createTechnicalIssue(
+        _currentUser,
+        message,
+      );
       if (!mounted) return;
-      if(technicalIssue != null){
+      if (technicalIssue != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(S.of(context).sendIssueSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
-      }else {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(S.of(context).sendIssueFailed),
@@ -1025,7 +1144,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           insetPadding: const EdgeInsets.all(20),
           child: StatefulBuilder(
             builder: (context, setDialogState) {
@@ -1119,7 +1240,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           insetPadding: const EdgeInsets.all(20),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
@@ -1170,7 +1293,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
 
-
                 Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -1185,7 +1307,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: Text(S.of(context).facebookLogin),
                     onTap: () async {
                       Navigator.of(context).pop();
-                     await _signInWithFacebook();
+                      await _signInWithFacebook();
                     },
                   ),
                 ),
@@ -1226,15 +1348,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title:  Text(
+          title: Text(
             S.of(context).signOut,
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          content:  Text(S.of(context).signOutConfirmation),
+          content: Text(S.of(context).signOutConfirmation),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child:  Text(
+              child: Text(
                 S.of(context).cancel,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -1251,7 +1373,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child:  Text(S.of(context).signOut),
+              child: Text(S.of(context).signOut),
             ),
           ],
         );
@@ -1370,9 +1492,9 @@ void _showLanguageDialog(BuildContext context) {
 }
 
 Future<void> _changeLanguage(
-    String selectedLanguage,
-    BuildContext context,
-    ) async {
+  String selectedLanguage,
+  BuildContext context,
+) async {
   Locale newLocale;
   switch (selectedLanguage) {
     case 'Inglés':
