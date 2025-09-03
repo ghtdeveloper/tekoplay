@@ -8,6 +8,7 @@ import 'game_match.dart';
 class UserModel {
   final String id;
   final String name;
+  final String urlPhoto;
   final DateTime createdAt;
   final int currency;
   final Map<GameTypeModel, GameStats> gameStats;
@@ -15,6 +16,7 @@ class UserModel {
   UserModel({
     required this.id,
     required this.name,
+    required this.urlPhoto,
     required this.createdAt,
     this.currency = 500,
     Map<GameTypeModel, GameStats>? gameStats,
@@ -48,6 +50,7 @@ class UserModel {
     return UserModel(
       id: doc.id,
       name: data['name'] ?? '',
+      urlPhoto: data['urlPhoto']??'',
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       currency: data['currency'] ?? 500,
       gameStats: gameStats,
@@ -62,6 +65,7 @@ class UserModel {
 
     return {
       'name': name,
+      'urlPhoto':urlPhoto,
       'createdAt': Timestamp.fromDate(createdAt),
       'currency': currency,
       'gameStats': gameStatsData,
@@ -71,6 +75,7 @@ class UserModel {
   UserModel copyWith({
     String? id,
     String? name,
+    String? urlPhoto,
     DateTime? createdAt,
     int? currency,
     Map<GameTypeModel, GameStats>? gameStats,
@@ -78,6 +83,7 @@ class UserModel {
     return UserModel(
       id: id ?? this.id,
       name: name ?? this.name,
+      urlPhoto: urlPhoto ?? this.urlPhoto,
       createdAt: createdAt ?? this.createdAt,
       currency: currency ?? this.currency,
       gameStats: gameStats ?? this.gameStats,

@@ -26,6 +26,13 @@ class FirestoreService {
               .get();
 
       if (userDoc.exists) {
+        final data = userDoc.data();
+        if (data?['urlPhoto'] == null ||
+            (data?['urlPhoto'] as String).isEmpty) {
+          await userDoc.reference.update({
+            'urlPhoto': firebaseUser.photoURL ?? '',
+          });
+        }
         return UserModel.fromFirestore(userDoc);
       } else {
         final newUser = UserModel(
@@ -34,6 +41,7 @@ class FirestoreService {
               firebaseUser.displayName ??
               firebaseUser.email?.split('@').first ??
               'Usuario',
+          urlPhoto: firebaseUser.photoURL ?? '',
           createdAt: DateTime.now(),
           currency: 500,
         );
@@ -64,6 +72,12 @@ class FirestoreService {
       print('Error getting user: $e');
       return null;
     }
+  }
+
+  Future<void> addMissingUrlPhoto(String userId, String? photoUrl) async {
+    await FirebaseFirestore.instance.collection('users').doc(userId).update({
+      'urlPhoto': photoUrl ?? '',
+    });
   }
 
   Future<bool> updateUserCurrency(String userId, int newCurrency) async {
