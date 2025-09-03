@@ -5,8 +5,10 @@ import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import '../../core/service/firestore_service.dart';
 import '../../generated/l10n.dart';
+import '../../core/utils/game_type.dart';
+import '../../core/utils/game_result.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
@@ -29,11 +31,13 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   bool _gameEnded = false;
 
   late int _cpuMoveTime;
+  DateTime? _gameStartTime;
 
   PlayerColor? _playerColor;
 
-  // Firebase Auth user
   User? get currentUser => FirebaseAuth.instance.currentUser;
+
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -112,6 +116,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   void playerMoved() {
     if (!_isStockfishReady || _gameEnded) return;
 
+    _gameStartTime ??= DateTime.now();
+
     _checkGameEnd();
 
     if (!_gameEnded) {
@@ -120,7 +126,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   void _checkGameEnd() {
-    if (controller.isCheckMate()) {
+    bool isCheckMate = controller.isCheckMate();
+    bool isCheck = controller.isInCheck();
+
+    if (isCheckMate) {
       _gameEnded = true;
 
       final isWhiteTurn = controller.getFen().split(' ')[1] == 'w';
@@ -129,29 +138,126 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
       if (playerWon) {
         playerScore++;
-        _showGameEndDialog(S.of(context).youWonCheckMate);
+        _showGameEndDialog(
+            '${S.of(context).youWonCheckMate}\n¡Jaque Mate!'
+        );
+        _recordGameResult(GameResultModel.win);
       } else {
         cpuScore++;
-        _showGameEndDialog(S.of(context).cpuWonCheckMate);
+        _showGameEndDialog(
+            '${S.of(context).cpuWonCheckMate}\n¡Jaque Mate!'
+        );
+        _recordGameResult(GameResultModel.loss);
       }
 
       setState(() {});
     } else if (controller.isDraw()) {
       _gameEnded = true;
       _showGameEndDialog(S.of(context).drawMsg);
+      _recordGameResult(GameResultModel.draw);
       setState(() {});
     } else if (controller.isStaleMate()) {
       _gameEnded = true;
       _showGameEndDialog(S.of(context).drawByStalemate);
+      _recordGameResult(GameResultModel.draw);
       setState(() {});
     } else if (controller.isThreefoldRepetition()) {
       _gameEnded = true;
       _showGameEndDialog(S.of(context).tieByReply);
+      _recordGameResult(GameResultModel.draw);
       setState(() {});
     } else if (controller.isInsufficientMaterial()) {
       _gameEnded = true;
       _showGameEndDialog(S.of(context).tieByInsufficient);
+      _recordGameResult(GameResultModel.draw);
       setState(() {});
+    } else if (isCheck) {
+      // Mostrar mensaje temporal de jaque
+      _showCheckMessage();
+    }
+  }
+
+  void _showCheckMessage() {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '¡Jaque!',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        backgroundColor: Colors.orange[700],
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _recordGameResult(GameResultModel result) async {
+    if (currentUser == null) {
+      print('Usuario no autenticado, no se registrará la partida');
+      return;
+    }
+
+    if (_gameStartTime == null) {
+      print('Tiempo de juego no válido, no se registrará la partida');
+      return;
+    }
+
+    try {
+      final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
+      int pointsEarned = 0;
+
+      // Calcular puntos basado en el resultado
+      switch (result) {
+        case GameResultModel.win:
+          pointsEarned = 10; // +10 puntos por victoria
+          break;
+        case GameResultModel.loss:
+          pointsEarned = -10; // -10 puntos por derrota
+          break;
+        case GameResultModel.draw:
+          pointsEarned = 5; // 0 puntos por empate
+          break;
+      }
+
+      final success = await _firestoreService.recordGameMatch(
+        userId: currentUser!.uid,
+        gameType: GameTypeModel.chess,
+        result: result,
+        pointsEarned: pointsEarned,
+        durationMinutes: gameDuration > 0 ? gameDuration : 1,
+        opponentName: 'CPU (${widget.selectedDifficulty})',
+        additionalData: {
+          'difficulty': widget.selectedDifficulty,
+          'playerColor': _playerColor == PlayerColor.white ? 'white' : 'black',
+          'finalFEN': controller.getFen(),
+        },
+      );
+
+      if (success) {
+        print('Partida registrada exitosamente');
+      } else {
+        print('Error al registrar la partida en Firestore');
+      }
+    } catch (e) {
+      print('Error al registrar la partida: $e');
+      if (mounted && currentUser != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar el resultado de la partida'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -161,22 +267,55 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(S.of(context).gameOver),
-          content: Text(message),
+          title: Text(
+            S.of(context).gameOver,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            message,
+            style: TextStyle(fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 _restartGame();
               },
-              child: Text(S.of(context).newGame),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.orange[600],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(S.of(context).newGame),
+              ),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).pop();
               },
-              child: Text(S.of(context).exit),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.grey[600],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(S.of(context).exit),
+              ),
             ),
           ],
         );
@@ -207,6 +346,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   void _selectPlayerColor(PlayerColor color) {
     setState(() {
       _playerColor = color;
+      _gameStartTime = DateTime.now();
       if (_playerColor == PlayerColor.black && _isStockfishReady) {
         _makeCpuMove();
       }
@@ -216,6 +356,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   void _restartGame() {
     _gameEnded = false;
     _engineThinking = false;
+    _gameStartTime = DateTime.now();
     controller.resetBoard();
 
     if (_isStockfishReady) {
@@ -238,13 +379,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         backgroundImage: NetworkImage(currentUser!.photoURL!),
         onBackgroundImageError: (exception, stackTrace) {
         },
-        child: currentUser!.photoURL == null
-            ? Icon(
-          Icons.person,
-          color: _playerColor == PlayerColor.white ? Colors.black : Colors.white,
-          size: 30,
-        )
-            : null,
       );
     } else {
       return CircleAvatar(

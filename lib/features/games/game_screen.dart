@@ -350,7 +350,6 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  // Resto de métodos sin cambios...
   void _showFriendGameDialog(BuildContext context) {
     showDialog(
       context: context,
