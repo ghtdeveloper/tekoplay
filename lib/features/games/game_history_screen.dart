@@ -476,7 +476,6 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
               : TabBarView(
                 controller: _tabController,
                 children: [
-                  // Pestaña "Todos"
                   RefreshIndicator(
                     onRefresh: _loadGameHistory,
                     child: Column(
