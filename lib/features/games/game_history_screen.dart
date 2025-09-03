@@ -450,7 +450,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
             Tab(text: S.of(context).all, icon: Icon(Icons.all_inclusive)),
             ...GameTypeModel.values.map((gameType) {
               return Tab(text: gameType.displayName);
-            }).toList(),
+            }),
           ],
         ),
       ),
