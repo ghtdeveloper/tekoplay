@@ -9,6 +9,7 @@ class UserModel {
   final String id;
   final String name;
   final String urlPhoto;
+  final String email;
   final DateTime createdAt;
   final int currency;
   final Map<GameTypeModel, GameStats> gameStats;
@@ -17,6 +18,7 @@ class UserModel {
     required this.id,
     required this.name,
     required this.urlPhoto,
+    required this.email,
     required this.createdAt,
     this.currency = 500,
     Map<GameTypeModel, GameStats>? gameStats,
@@ -51,6 +53,7 @@ class UserModel {
       id: doc.id,
       name: data['name'] ?? '',
       urlPhoto: data['urlPhoto']??'',
+      email: data['email']??'',
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       currency: data['currency'] ?? 500,
       gameStats: gameStats,
@@ -66,6 +69,7 @@ class UserModel {
     return {
       'name': name,
       'urlPhoto':urlPhoto,
+      'email':email,
       'createdAt': Timestamp.fromDate(createdAt),
       'currency': currency,
       'gameStats': gameStatsData,
@@ -76,6 +80,7 @@ class UserModel {
     String? id,
     String? name,
     String? urlPhoto,
+    String? email,
     DateTime? createdAt,
     int? currency,
     Map<GameTypeModel, GameStats>? gameStats,
@@ -84,6 +89,7 @@ class UserModel {
       id: id ?? this.id,
       name: name ?? this.name,
       urlPhoto: urlPhoto ?? this.urlPhoto,
+      email: email ?? this.email,
       createdAt: createdAt ?? this.createdAt,
       currency: currency ?? this.currency,
       gameStats: gameStats ?? this.gameStats,

@@ -44,6 +44,7 @@ class FirestoreService {
               firebaseUser.email?.split('@').first ??
               'Usuario',
           urlPhoto: firebaseUser.photoURL ?? '',
+          email: firebaseUser.email?? '',
           createdAt: DateTime.now(),
           currency: 500,
         );
@@ -409,4 +410,316 @@ class FirestoreService {
       return false;
     }
   }
+
+  // Extensión para tu FirestoreService existente
+// Agregar estos métodos a tu clase FirestoreService
+
+  // Buscar usuario por email
+  Future<UserModel?> findUserByEmail(String email) async {
+    try {
+      final usersQuery = await _firestore
+          .collection(_usersCollection)
+          .where('email', isEqualTo: email.trim().toLowerCase())
+          .limit(1)
+          .get();
+
+      if (usersQuery.docs.isNotEmpty) {
+        return UserModel.fromFirestore(usersQuery.docs.first);
+      }
+      return null;
+    } catch (e) {
+      print('Error finding user by email: $e');
+      return null;
+    }
+  }
+
+  // Buscar usuario por nombre de usuario
+  Future<List<UserModel>> searchUsersByUsername(String username) async {
+    try {
+      final usersQuery = await _firestore
+          .collection(_usersCollection)
+          .where('name', isGreaterThanOrEqualTo: username)
+          .where('name', isLessThanOrEqualTo: username + '\uf8ff')
+          .limit(10)
+          .get();
+
+      return usersQuery.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
+    } catch (e) {
+      print('Error searching users: $e');
+      return [];
+    }
+  }
+
+  // Obtener estadísticas de jugador para multijugador
+  Future<Map<String, dynamic>?> getPlayerMultiplayerStats(String userId) async {
+    try {
+      // Obtener estadísticas de partidas multijugador
+      final multiplayerMatchesQuery = await _firestore
+          .collection(_gameMatchesCollection)
+          .where('userId', isEqualTo: userId)
+          .where('additionalData.isMultiplayer', isEqualTo: true)
+          .get();
+
+      int totalMultiplayerGames = multiplayerMatchesQuery.docs.length;
+      int wins = 0;
+      int losses = 0;
+      int draws = 0;
+      int totalTime = 0;
+
+      for (final doc in multiplayerMatchesQuery.docs) {
+        final match = GameMatch.fromFirestore(doc);
+
+        switch (match.result) {
+          case GameResultModel.win:
+            wins++;
+            break;
+          case GameResultModel.loss:
+            losses++;
+            break;
+          case GameResultModel.draw:
+            draws++;
+            break;
+        }
+
+        totalTime += match.durationMinutes;
+      }
+
+      double winRate = totalMultiplayerGames > 0 ? (wins / totalMultiplayerGames) * 100 : 0;
+      int averageGameTime = totalMultiplayerGames > 0 ? (totalTime / totalMultiplayerGames).round() : 0;
+
+      return {
+        'totalGames': totalMultiplayerGames,
+        'wins': wins,
+        'losses': losses,
+        'draws': draws,
+        'winRate': winRate,
+        'averageGameTime': averageGameTime,
+      };
+    } catch (e) {
+      print('Error getting multiplayer stats: $e');
+      return null;
+    }
+  }
+
+  // Guardar token de dispositivo para notificaciones
+  Future<bool> saveDeviceToken(String userId, String token, String platform) async {
+    try {
+      await _firestore.collection('user_tokens').doc(userId).set({
+        'token': token,
+        'platform': platform,
+        'userId': userId,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'active': true,
+      }, SetOptions(merge: true));
+
+      return true;
+    } catch (e) {
+      print('Error saving device token: $e');
+      return false;
+    }
+  }
+
+  // Eliminar token de dispositivo (logout)
+  Future<bool> removeDeviceToken(String userId) async {
+    try {
+      await _firestore.collection('user_tokens').doc(userId).update({
+        'active': false,
+        'deactivatedAt': FieldValue.serverTimestamp(),
+      });
+
+      return true;
+    } catch (e) {
+      print('Error removing device token: $e');
+      return false;
+    }
+  }
+
+  // Obtener historial de invitaciones
+  Future<List<Map<String, dynamic>>> getInvitationHistory(String userId) async {
+    try {
+      // Invitaciones enviadas
+      final sentQuery = await _firestore
+          .collection('game_invitations')
+          .where('fromUserId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get();
+
+      // Invitaciones recibidas
+      final receivedQuery = await _firestore
+          .collection('game_invitations')
+          .where('toUserId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get();
+
+      final allInvitations = [
+        ...sentQuery.docs.map((doc) {
+          final data = doc.data();
+          data['type'] = 'sent';
+          return data;
+        }),
+        ...receivedQuery.docs.map((doc) {
+          final data = doc.data();
+          data['type'] = 'received';
+          return data;
+        }),
+      ];
+
+      // Ordenar por fecha
+      allInvitations.sort((a, b) {
+        final aDate = (a['createdAt'] as Timestamp).toDate();
+        final bDate = (b['createdAt'] as Timestamp).toDate();
+        return bDate.compareTo(aDate);
+      });
+
+      return allInvitations;
+    } catch (e) {
+      print('Error getting invitation history: $e');
+      return [];
+    }
+  }
+
+  // Actualizar perfil de usuario
+  Future<bool> updateUserProfile({
+    required String userId,
+    String? displayName,
+    String? photoUrl,
+    String? bio,
+    Map<String, dynamic>? preferences,
+  }) async {
+    try {
+      Map<String, dynamic> updates = {};
+
+      if (displayName != null) updates['name'] = displayName;
+      if (photoUrl != null) updates['urlPhoto'] = photoUrl;
+      if (bio != null) updates['bio'] = bio;
+      if (preferences != null) updates['preferences'] = preferences;
+
+      if (updates.isNotEmpty) {
+        updates['updatedAt'] = FieldValue.serverTimestamp();
+
+        await _firestore
+            .collection(_usersCollection)
+            .doc(userId)
+            .update(updates);
+      }
+
+      return true;
+    } catch (e) {
+      print('Error updating user profile: $e');
+      return false;
+    }
+  }
+
+  // Obtener ranking de jugadores multijugador
+  Future<List<Map<String, dynamic>>> getMultiplayerLeaderboard({
+    required GameTypeModel gameType,
+    int limit = 20,
+  }) async {
+    try {
+      // Obtener usuarios ordenados por puntos del juego específico
+      final snapshot = await _firestore
+          .collection(_usersCollection)
+          .orderBy('gameStats.${gameType.id}.points', descending: true)
+          .limit(limit)
+          .get();
+
+      List<Map<String, dynamic>> leaderboard = [];
+
+      for (int i = 0; i < snapshot.docs.length; i++) {
+        final doc = snapshot.docs[i];
+        final user = UserModel.fromFirestore(doc);
+        final gameStats = user.getGameStats(gameType);
+
+        // Obtener estadísticas multijugador específicas
+        final multiplayerStats = await getPlayerMultiplayerStats(user.id);
+
+        leaderboard.add({
+          'rank': i + 1,
+          'userId': user.id,
+          'userName': user.name,
+          'userPhoto': user.urlPhoto,
+          'points': gameStats.points,
+          'totalGames': gameStats.gamesPlayed,
+          'winRate': gameStats.winRate,
+          'multiplayerStats': multiplayerStats,
+        });
+      }
+
+      return leaderboard;
+    } catch (e) {
+      print('Error getting multiplayer leaderboard: $e');
+      return [];
+    }
+  }
+
+  // Reportar jugador
+  Future<bool> reportPlayer({
+    required String reporterId,
+    required String reportedUserId,
+    required String reason,
+    required String gameId,
+    String? description,
+  }) async {
+    try {
+      await _firestore.collection('player_reports').add({
+        'reporterId': reporterId,
+        'reportedUserId': reportedUserId,
+        'reason': reason,
+        'gameId': gameId,
+        'description': description,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return true;
+    } catch (e) {
+      print('Error reporting player: $e');
+      return false;
+    }
+  }
+
+  // Obtener estadísticas del servidor
+  Future<Map<String, dynamic>?> getServerStats() async {
+    try {
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+
+      // Partidas jugadas hoy
+      final todayGamesQuery = await _firestore
+          .collection('multiplayer_games')
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+          .get();
+
+      // Usuarios activos (que han jugado en los últimos 7 días)
+      final weekAgo = now.subtract(Duration(days: 7));
+      final activeUsersQuery = await _firestore
+          .collection(_gameMatchesCollection)
+          .where('playedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(weekAgo))
+          .get();
+
+      final activeUserIds = activeUsersQuery.docs
+          .map((doc) => doc.data()['userId'] as String)
+          .toSet();
+
+      // Partidas en progreso
+      final activeGamesQuery = await _firestore
+          .collection('multiplayer_games')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      return {
+        'todayGames': todayGamesQuery.docs.length,
+        'activeUsers': activeUserIds.length,
+        'activeGames': activeGamesQuery.docs.length,
+        'lastUpdated': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      print('Error getting server stats: $e');
+      return null;
+    }
+  }
+
+
 }

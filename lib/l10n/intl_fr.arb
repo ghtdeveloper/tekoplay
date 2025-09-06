@@ -169,7 +169,34 @@
   "all": "Tous",
   "loadingHistory": "Chargement de l'historique...",
   "technicalSupport": "Support technique",
-  "contactSupport": "Contactez notre équipe d'assistance"
+  "contactSupport": "Contactez notre équipe d'assistance",
+  "userNotFound": "Utilisateur non authentifié",
+  "gameNotFound": "Jeu non trouvé",
+  "congrats": "Félicitations",
+  "rivals": "Adversaire",
+  "offlineOpponent": "Votre adversaire s'est déconnecté",
+  "yourTurn": "À votre tour",
+  "reconnecting": "Reconnexion...",
+  "movement": "Mouvements",
+  "qualifier": "Qualification",
+  "loadingGame": "Chargement de la partie...",
+  "waitingOpponent": "En attente de l'adversaire...",
+  "waitingForOpponentJoin": "En attente qu'un adversaire rejoigne...",
+  "gameCode": "Code de la partie",
+  "multiplayer": "Partie multijoueur",
+  "opponentTurn": "Tour de l'adversaire"
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

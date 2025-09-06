@@ -1,0 +1,575 @@
+// 1. SERVICIO DE NOTIFICACIONES
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../features/games/multiplayer_chess_screen.dart';
+import '../models/multiplayer_game_match_chess.dart';
+
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Future<void> initialize() async {
+    // Solicitar permisos de notificación
+    await _requestPermissions();
+
+    // Configurar notificaciones locales
+    await _initializeLocalNotifications();
+
+    // Configurar Firebase Messaging
+    await _initializeFirebaseMessaging();
+
+    // Guardar token del dispositivo
+    await _saveDeviceToken();
+  }
+
+  Future<void> _requestPermissions() async {
+    final settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+
+    print('Permisos de notificación: ${settings.authorizationStatus}');
+  }
+
+  Future<void> _initializeLocalNotifications() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
+    const initializationSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _localNotifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: _onNotificationTapped,
+    );
+  }
+
+  Future<void> _initializeFirebaseMessaging() async {
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+    final initialMessage = await _firebaseMessaging.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationTap(initialMessage);
+    }
+  }
+
+  Future<void> _saveDeviceToken() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    try {
+      final token = await _firebaseMessaging.getToken();
+      if (token != null) {
+        await _firestore.collection('user_tokens').doc(currentUser.uid).set({
+          'token': token,
+          'platform': 'android', // o 'ios' según la plataforma
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      // Escuchar cambios en el token
+      _firebaseMessaging.onTokenRefresh.listen((newToken) {
+        _firestore.collection('user_tokens').doc(currentUser.uid).update({
+          'token': newToken,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (e) {
+      print('Error saving device token: $e');
+    }
+  }
+
+  void _handleForegroundMessage(RemoteMessage message) {
+    print('Mensaje recibido en primer plano: ${message.notification?.title}');
+
+    // Mostrar notificación local
+    _showLocalNotification(
+      title: message.notification?.title ?? 'Notificación',
+      body: message.notification?.body ?? '',
+      data: message.data,
+    );
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    print('Notificación tocada: ${message.data}');
+
+    final data = message.data;
+    final type = data['type'];
+
+    // Navegar según el tipo de notificación
+    switch (type) {
+      case 'game_invitation':
+        _handleGameInvitationTap(data);
+        break;
+      case 'game_move':
+        _handleGameMoveTap(data);
+        break;
+      case 'game_finished':
+        _handleGameFinishedTap(data);
+        break;
+    }
+  }
+
+  void _onNotificationTapped(NotificationResponse details) {
+    // Manejar toque en notificación local
+    final payload = details.payload;
+    if (payload != null) {
+      // Parsear payload y navegar
+      print('Local notification tapped: $payload');
+    }
+  }
+
+  Future<void> _showLocalNotification({
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'game_notifications',
+      'Notificaciones de Juego',
+      channelDescription: 'Notificaciones para invitaciones y movimientos de juego',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      notificationDetails,
+      payload: data != null ? data.toString() : null,
+    );
+  }
+
+  void _handleGameInvitationTap(Map<String, dynamic> data) {
+    // Navegar a la pantalla de invitaciones o aceptar directamente
+    final invitationId = data['invitationId'];
+    print('Opening game invitation: $invitationId');
+    // TODO: Implementar navegación
+  }
+
+  void _handleGameMoveTap(Map<String, dynamic> data) {
+    // Navegar directamente al juego
+    final gameId = data['gameId'];
+    print('Opening game: $gameId');
+    // TODO: Implementar navegación
+  }
+
+  void _handleGameFinishedTap(Map<String, dynamic> data) {
+    // Navegar a la pantalla de resultados o historial
+    final gameId = data['gameId'];
+    print('Opening finished game: $gameId');
+    // TODO: Implementar navegación
+  }
+
+  // Enviar notificación a un usuario específico
+  Future<void> sendNotificationToUser({
+    required String userId,
+    required String title,
+    required String body,
+    required String type,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': userId,
+        'title': title,
+        'body': body,
+        'type': type,
+        'data': data ?? {},
+        'sent': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error sending notification: $e');
+    }
+  }
+
+  // Marcar notificaciones como leídas
+  Future<void> markAsRead(String notificationId) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).update({
+        'read': true,
+        'readAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error marking notification as read: $e');
+    }
+  }
+
+  // Obtener notificaciones del usuario
+  Stream<List<Map<String, dynamic>>> getUserNotifications(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  void handleGameInvitationNotification(BuildContext context, Map<String, dynamic> data) {
+    final invitationId = data['invitationId'] as String?;
+    final gameType = data['gameType'] as String?;
+    final fromUserName = data['fromUserName'] as String?;
+
+    if (invitationId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Invitación de juego'),
+        content: Text('$fromUserName te invita a jugar $gameType'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _declineInvitation(invitationId);
+            },
+            child: Text('Rechazar', style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _acceptInvitation(context, invitationId);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFFEC7A34),
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _acceptInvitation(BuildContext context, String invitationId) async {
+    try {
+      // Mostrar indicador de carga
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(child: CircularProgressIndicator()),
+      );
+
+      final result = await GameInvitationService().respondToInvitation(invitationId, true);
+
+      // Cerrar indicador de carga
+      Navigator.of(context).pop();
+
+      if (result != null && result['success'] == true && result['gameId'] != null) {
+        // Navegar a la pantalla de juego
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MultiplayerChessScreen(
+              gameId: result['gameId'],
+              isHost: false,
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al aceptar invitación'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      Navigator.of(context).pop(); // Cerrar loading si está abierto
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al procesar invitación'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _declineInvitation(String invitationId) async {
+    await GameInvitationService().respondToInvitation(invitationId, false);
+  }
+
+}
+
+class NotificationsWidget extends StatelessWidget {
+  const NotificationsWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) return SizedBox();
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: NotificationService().getUserNotifications(currentUser.uid),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return SizedBox();
+        }
+
+        final notifications = snapshot.data!;
+        final unreadCount = notifications.where((n) => n['read'] != true).length;
+
+        return Stack(
+          children: [
+            IconButton(
+              icon: Icon(Icons.notifications, color: Colors.white),
+              onPressed: () {
+                _showNotificationsDialog(context, notifications);
+              },
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Container(
+                  padding: EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  constraints: BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    unreadCount > 99 ? '99+' : '$unreadCount',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showNotificationsDialog(BuildContext context, List<Map<String, dynamic>> notifications) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Invitaciones',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Icon(Icons.close, size: 24),
+            ),
+          ],
+        ),
+        content: Container(
+          width: double.maxFinite, // Esto es clave para evitar el texto vertical
+          height: 400,
+          child: notifications.isEmpty
+              ? Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.notifications_none, size: 48, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'No hay invitaciones',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            ],
+          )
+              : ListView.builder(
+            itemCount: notifications.length,
+            itemBuilder: (context, index) {
+              final notification = notifications[index];
+              final isRead = notification['read'] == true;
+              final title = notification['title']?.toString() ?? 'Sin título';
+              final body = notification['body']?.toString() ?? '';
+
+              return Container(
+                width: double.infinity,
+                margin: EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isRead ? Colors.grey[100] : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          _getNotificationIcon(notification['type']),
+                          color: isRead ? Colors.grey : Color(0xFFEC7A34),
+                          size: 24,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: double.infinity,
+                                child: Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  softWrap: true,
+                                  overflow: TextOverflow.visible, // No corta el texto
+                                ),
+                              ),
+                              if (body.isNotEmpty) ...[
+                                SizedBox(height: 4),
+                                Container(
+                                  width: double.infinity,
+                                  child: Text(
+                                    body,
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                    softWrap: true,
+                                    overflow: TextOverflow.visible,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (!isRead)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                      ],
+                    ),
+                    // Botones de invitación
+                    if (notification['type'] == 'invitation') ...[
+                      SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                // Lógica para rechazar
+                                Navigator.of(context).pop();
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: BorderSide(color: Colors.red),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                              child: Text('Rechazar'),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                // Lógica para aceptar
+                                Navigator.of(context).pop();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color(0xFFEC7A34),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                              child: Text('Aceptar'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    // Tap para marcar como leído
+                    GestureDetector(
+                      onTap: () async {
+                        if (!isRead) {
+                          await NotificationService().markAsRead(notification['id']);
+                        }
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        height: 20,
+                        color: Colors.transparent,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _getNotificationIcon(String? type) {
+    switch (type) {
+      case 'game_invitation':
+        return Icons.mail;
+      case 'game_move':
+        return Icons.sports_esports;
+      case 'game_finished':
+        return Icons.flag;
+      default:
+        return Icons.notifications;
+    }
+  }
+}

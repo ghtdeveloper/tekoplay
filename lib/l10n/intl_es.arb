@@ -170,6 +170,27 @@
   "all": "Todos",
   "loadingHistory": "Cargando historial...",
   "technicalSupport": "Soporte Técnico",
-  "contactSupport": "Contacta con nuestro equipo de soporte"
+  "contactSupport": "Contacta con nuestro equipo de soporte",
+  "userNotFound": "Usuario no autenticado",
+  "gameNotFound": "Juego no encontrado",
+  "congrats": "Felicidades",
+  "rivals": "Oponente",
+  "offlineOpponent": "Tu oponente se desconectó",
+  "yourTurn": "Tu turno",
+  "reconnecting": "Reconectando....",
+  "movement": "Movimientos",
+  "qualifier": "Clasificatoria",
+  "loadingGame": "Cargando partida...",
+  "waitingOpponent": "Esperando oponente...",
+  "waitingForOpponentJoin": "Esperando que se una un oponente...",
+  "gameCode": "Código de partida",
+  "multiplayer": "Partida Multijugador",
+  "opponentTurn": "Turno del oponente"
+
+
+
+
+
+
 
 }

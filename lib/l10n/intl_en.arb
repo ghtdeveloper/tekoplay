@@ -170,7 +170,37 @@
   "all": "All",
   "loadingHistory": "Loading history...",
   "technicalSupport": "Technical Support",
-  "contactSupport": "Contact our support team"
+  "contactSupport": "Contact our support team",
+  "userNotFound": "User not authenticated",
+  "gameNotFound": "Game not found",
+  "congrats": "Congratulations",
+  "rivals": "Opponent",
+  "offlineOpponent": "Your opponent has disconnected",
+  "yourTurn": "Your turn",
+  "reconnecting": "Reconnecting...",
+  "movement": "Moves",
+  "qualifier": "Qualifier",
+  "loadingGame": "Loading game...",
+  "waitingOpponent": "Waiting for opponent...",
+  "waitingForOpponentJoin": "Waiting for an opponent to join...",
+  "gameCode": "Game code",
+  "multiplayer": "Multiplayer game",
+  "opponentTurn": "Opponent's turn"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
