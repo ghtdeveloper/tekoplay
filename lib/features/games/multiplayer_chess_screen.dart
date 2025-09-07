@@ -372,7 +372,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color:
-            isPlayerTurn ? Colors.green.withOpacity(0.2) : Colors.transparent,
+            isPlayerTurn ? Colors.black.withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         border: isPlayerTurn ? Border.all(color: Colors.green, width: 2) : null,
       ),
@@ -440,7 +440,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

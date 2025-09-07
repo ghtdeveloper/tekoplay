@@ -99,7 +99,7 @@ class _RankingScreenState extends State<RankingScreen>
 
     return Card(
       margin: EdgeInsets.all(16),
-      color: rankColor.withOpacity(0.1),
+      color: Colors.black.withValues(alpha: 0.1),
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Row(
@@ -163,7 +163,7 @@ class _RankingScreenState extends State<RankingScreen>
 
         switch (position) {
           case 1:
-            cardColor = Colors.amber.withOpacity(0.1);
+            cardColor = Colors.black.withValues(alpha: 0.1);
             leadingWidget = Icon(
               Icons.emoji_events,
               color: Colors.amber,
@@ -171,7 +171,7 @@ class _RankingScreenState extends State<RankingScreen>
             );
             break;
           case 2:
-            cardColor = Colors.grey.withOpacity(0.1);
+            cardColor = Colors.black.withValues(alpha: 0.1);
             leadingWidget = Icon(
               Icons.emoji_events,
               color: Colors.grey,
@@ -179,7 +179,7 @@ class _RankingScreenState extends State<RankingScreen>
             );
             break;
           case 3:
-            cardColor = Colors.orange.withOpacity(0.1);
+            cardColor = Colors.black.withValues(alpha: 0.1);
             leadingWidget = Icon(
               Icons.emoji_events,
               color: Colors.orange,
@@ -204,7 +204,7 @@ class _RankingScreenState extends State<RankingScreen>
 
         return Card(
           margin: EdgeInsets.symmetric(vertical: 4),
-          color: isCurrentUser ? Colors.blue.withOpacity(0.1) : cardColor,
+          color: isCurrentUser ? Colors.black.withValues(alpha: 0.1) : cardColor,
           child: ListTile(
             leading: leadingWidget,
             title: Row(

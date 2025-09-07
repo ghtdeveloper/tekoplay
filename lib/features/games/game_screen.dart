@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:tekoplay/features/games/chess_tutorial_screen.dart';
 
 import '../../core/models/multiplayer_game_match_chess.dart';
-import '../../core/models/user.dart';
 import '../../core/service/auth_service.dart';
 import '../../core/service/firestore_service.dart';
 import '../../core/service/notification_service.dart';
@@ -41,7 +40,6 @@ class _GameScreenState extends State<GameScreen> {
   late String gameType;
   late String matchType;
   User? _currentUser;
-  UserModel? _userData;
   String? _currentPhotoUrl;
 
   bool get isChess => gameType == S.of(context).chess;
@@ -67,7 +65,6 @@ class _GameScreenState extends State<GameScreen> {
       final userData = await FirestoreService().getUser(user.uid);
       if (userData != null && mounted) {
         setState(() {
-          _userData = userData;
           _currentPhotoUrl = userData.urlPhoto;
         });
       }
@@ -124,11 +121,6 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-  void _refreshUserPhoto() async {
-    if (_currentUser != null) {
-      setState(() {});
-    }
-  }
 
   Widget _buildActiveGamesWidget() {
     if (_currentUser == null) return SizedBox();
@@ -431,9 +423,9 @@ class _GameScreenState extends State<GameScreen> {
                       child: Container(
                         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: _currentUser != null ? BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          border: Border.all( color: Colors.black.withValues(alpha: 0.1),),
                         ) : null,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,

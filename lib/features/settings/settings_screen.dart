@@ -811,7 +811,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 )
                                 : Text(
-                                  S.of(context).send ?? 'Enviar',
+                                  S.of(context).send,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
@@ -934,7 +934,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
