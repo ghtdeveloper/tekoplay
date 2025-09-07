@@ -185,7 +185,27 @@
   "waitingForOpponentJoin": "Esperando que se una un oponente...",
   "gameCode": "Código de partida",
   "multiplayer": "Partida Multijugador",
-  "opponentTurn": "Turno del oponente"
+  "opponentTurn": "Turno del oponente",
+  "invitations": "Invitaciones",
+  "noInvitation": "No hay invitaciones",
+  "invitesYou": "te invita",
+  "invitationRejected": "Invitación rechazada",
+  "reject": "Rechazar",
+  "errorAcceptedInvitation": "Error al aceptar invitación",
+  "opponentEmail": "Email del oponente",
+  "successfulSentInvitation": "¡Invitación enviada exitosamente!",
+  "sending": "Enviando...",
+  "sentInvitation": "Enviar invitación",
+  "createPublicGame": "Crear partida pública",
+  "searchPublicGame": "Crear partida pública",
+  "errorCreatePublicGame": "Error al crear la partida",
+  "publicGame":"Partidas Públicas",
+  "noPublicGame": "No hay partidas disponibles",
+  "createdAgo": "Creado hace",
+  "join": "Unirse",
+  "errorJoinGame": "No se pudo unir a la partida"
+
+
 
 
 

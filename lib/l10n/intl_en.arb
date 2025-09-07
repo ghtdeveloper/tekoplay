@@ -185,7 +185,40 @@
   "waitingForOpponentJoin": "Waiting for an opponent to join...",
   "gameCode": "Game code",
   "multiplayer": "Multiplayer game",
-  "opponentTurn": "Opponent's turn"
+  "opponentTurn": "Opponent's turn",
+  "invitations": "Invitations",
+  "noInvitation": "No invitations",
+  "invitesYou": "invites you",
+  "invitationRejected": "Invitation rejected",
+  "reject": "Reject",
+  "errorAcceptedInvitation": "Error accepting invitation",
+  "opponentEmail": "Opponent's email",
+  "successfulSentInvitation": "Invitation sent successfully!",
+  "sending": "Sending...",
+  "sentInvitation": "Send invitation",
+  "createPublicGame": "Create public game",
+  "searchPublicGame": "Search public game",
+  "errorCreatePublicGame": "Error creating the game",
+  "publicGame": "Public games",
+  "noPublicGame": "No games available",
+  "createdAgo": "Created",
+  "join": "Join",
+  "errorJoinGame": "Could not join the game"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

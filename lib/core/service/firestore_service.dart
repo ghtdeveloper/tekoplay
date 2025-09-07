@@ -501,6 +501,19 @@ class FirestoreService {
     }
   }
 
+  Future<bool> updateUserProfilePhoto(String userId, String? photoUrl) async {
+    try {
+      await _firestore.collection(_usersCollection).doc(userId).update({
+        'urlPhoto': photoUrl ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      print('Error updating profile photo: $e');
+      return false;
+    }
+  }
+
   // Guardar token de dispositivo para notificaciones
   Future<bool> saveDeviceToken(String userId, String token, String platform) async {
     try {

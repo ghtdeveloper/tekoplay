@@ -184,7 +184,42 @@
   "waitingForOpponentJoin": "En attente qu'un adversaire rejoigne...",
   "gameCode": "Code de la partie",
   "multiplayer": "Partie multijoueur",
-  "opponentTurn": "Tour de l'adversaire"
+  "opponentTurn": "Tour de l'adversaire",
+  "invitations": "Invitations",
+  "noInvitation": "Aucune invitation",
+  "invitesYou": "vous invite",
+  "invitationRejected": "Invitation refusée",
+  "reject": "Refuser",
+  "errorAcceptedInvitation": "Erreur lors de l'acceptation de l'invitation",
+  "opponentEmail": "E-mail de l'adversaire",
+  "successfulSentInvitation": "Invitation envoyée avec succès !",
+  "sending": "Envoi...",
+  "sentInvitation": "Envoyer une invitation",
+  "createPublicGame": "Créer une partie publique",
+  "searchPublicGame": "Rechercher une partie publique",
+  "errorCreatePublicGame": "Erreur lors de la création de la partie",
+  "publicGame": "Parties publiques",
+  "noPublicGame": "Aucune partie disponible",
+  "createdAgo": "Créé il y a",
+  "join": "Rejoindre",
+  "errorJoinGame": "Impossible de rejoindre la partie"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

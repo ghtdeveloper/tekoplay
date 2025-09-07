@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:tekoplay/features/games/chess_tutorial_screen.dart';
 
 import '../../core/models/multiplayer_game_match_chess.dart';
+import '../../core/models/user.dart';
 import '../../core/service/auth_service.dart';
+import '../../core/service/firestore_service.dart';
 import '../../core/service/notification_service.dart';
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
@@ -39,6 +41,8 @@ class _GameScreenState extends State<GameScreen> {
   late String gameType;
   late String matchType;
   User? _currentUser;
+  UserModel? _userData;
+  String? _currentPhotoUrl;
 
   bool get isChess => gameType == S.of(context).chess;
 
@@ -54,10 +58,20 @@ class _GameScreenState extends State<GameScreen> {
     _setupStreams();
   }
 
-  void _loadCurrentUser() {
+  void _loadCurrentUser() async {
+    final user = AuthService().getCurrentUser();
     setState(() {
-      _currentUser = AuthService().getCurrentUser();
+      _currentUser = user;
     });
+    if (user != null) {
+      final userData = await FirestoreService().getUser(user.uid);
+      if (userData != null && mounted) {
+        setState(() {
+          _userData = userData;
+          _currentPhotoUrl = userData.urlPhoto;
+        });
+      }
+    }
   }
 
   void _initializeNotifications() {
@@ -66,14 +80,12 @@ class _GameScreenState extends State<GameScreen> {
 
   void _setupStreams() {
     if (_currentUser != null) {
-      // Stream de invitaciones
       _invitationsSubscription = GameInvitationService()
           .getPendingInvitations(_currentUser!.uid)
           .listen((invitations) {
         if (mounted) setState(() {});
       });
 
-      // Stream de partidas activas
       _activeGamesSubscription = MultiplayerGameService()
           .getActiveGames(_currentUser!.uid)
           .listen((games) {
@@ -90,15 +102,18 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _buildUserAvatar() {
-    if (_currentUser?.photoURL != null && _currentUser!.photoURL!.isNotEmpty) {
+    String? photoUrl = _currentPhotoUrl ?? _currentUser?.photoURL;
+
+    if (photoUrl != null && photoUrl.isNotEmpty) {
       return CircleAvatar(
         radius: 60,
         backgroundColor: Colors.grey[300],
-        backgroundImage: NetworkImage(_currentUser!.photoURL!),
-        onBackgroundImageError: (exception, stackTrace) {},
-        child: _currentUser!.photoURL == null || _currentUser!.photoURL!.isEmpty
-            ? const Icon(Icons.person, color: Colors.white, size: 60)
-            : null,
+        backgroundImage: NetworkImage(photoUrl),
+        onBackgroundImageError: (exception, stackTrace) {
+          setState(() {
+            _currentPhotoUrl = null;
+          });
+        },
       );
     } else {
       return CircleAvatar(
@@ -106,6 +121,12 @@ class _GameScreenState extends State<GameScreen> {
         backgroundImage: AssetImage('assets/images/img_perfil_unknown.png'),
         backgroundColor: Colors.grey[300],
       );
+    }
+  }
+
+  void _refreshUserPhoto() async {
+    if (_currentUser != null) {
+      setState(() {});
     }
   }
 
@@ -515,7 +536,6 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  // 7. Agregar estos métodos al final de la clase _GameScreenState:
   void _showNotificationsDialog(BuildContext context, List<Map<String, dynamic>> invitations) {
     showDialog(
       context: context,
@@ -530,7 +550,7 @@ class _GameScreenState extends State<GameScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Invitaciones', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(S.of(context).invitations, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   IconButton(icon: Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
                 ],
               ),
@@ -543,7 +563,7 @@ class _GameScreenState extends State<GameScreen> {
                     children: [
                       Icon(Icons.notifications_none, size: 48, color: Colors.grey),
                       SizedBox(height: 16),
-                      Text('No hay invitaciones', style: TextStyle(color: Colors.grey)),
+                      Text(S.of(context).noInvitation, style: TextStyle(color: Colors.grey)),
                     ],
                   ),
                 )
@@ -554,7 +574,7 @@ class _GameScreenState extends State<GameScreen> {
                     return Card(
                       child: ListTile(
                         leading: Icon(Icons.sports_esports, color: Color(0xFFEC7A34)),
-                        title: Text('${invitation['fromUserName']} te invita'),
+                        title: Text('${invitation['fromUserName']} ${S.of(context).invitesYou}'),
                         subtitle: Text('${invitation['gameType']}'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -565,15 +585,14 @@ class _GameScreenState extends State<GameScreen> {
                                 if (result != null && result['success'] == true) {
                                   Navigator.of(context).pop();
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Invitación rechazada'), backgroundColor: Colors.orange),
+                                    SnackBar(content: Text(S.of(context).invitationRejected), backgroundColor: Colors.orange),
                                   );
                                 }
                               },
-                              child: Text('Rechazar', style: TextStyle(color: Colors.red)),
+                              child: Text(S.of(context).reject, style: TextStyle(color: Colors.red)),
                             ),
                             ElevatedButton(
                               onPressed: () async {
-                                // Mostrar indicador de carga
                                 showDialog(
                                   context: context,
                                   barrierDismissible: false,
@@ -584,11 +603,9 @@ class _GameScreenState extends State<GameScreen> {
 
                                 final result = await GameInvitationService().respondToInvitation(invitation['id'], true);
 
-                                // Cerrar indicador de carga
                                 Navigator.of(context).pop();
 
                                 if (result != null && result['success'] == true && result['gameId'] != null) {
-                                  // Cerrar diálogo de notificaciones
                                   Navigator.of(context).pop();
 
                                   // Navegar a la pantalla de juego
@@ -597,14 +614,14 @@ class _GameScreenState extends State<GameScreen> {
                                     MaterialPageRoute(
                                       builder: (context) => MultiplayerChessScreen(
                                         gameId: result['gameId'],
-                                        isHost: false, // El que acepta siempre es guest
+                                        isHost: false,
                                       ),
                                     ),
                                   );
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                        content: Text('Error al aceptar invitación'),
+                                        content: Text(S.of(context).errorAcceptedInvitation),
                                         backgroundColor: Colors.red
                                     ),
                                   );
@@ -614,7 +631,7 @@ class _GameScreenState extends State<GameScreen> {
                                 backgroundColor: Color(0xFFEC7A34),
                                 foregroundColor: Colors.white,
                               ),
-                              child: Text('Aceptar'),
+                              child: Text(S.of(context).accept),
                             ),
                           ],
                         ),
@@ -649,7 +666,6 @@ class _GameScreenState extends State<GameScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -671,11 +687,10 @@ class _GameScreenState extends State<GameScreen> {
                       enabled: !isLoading,
                       keyboardType: TextInputType.emailAddress,
                       onChanged: (value) {
-                        // Actualizar el estado cuando cambie el texto
                         setState(() {});
                       },
                       decoration: InputDecoration(
-                        labelText: 'Email del oponente',
+                        labelText: S.of(context).opponentEmail,
                         hintText: 'ejemplo@email.com',
                         prefixIcon: Icon(Icons.email),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -683,7 +698,6 @@ class _GameScreenState extends State<GameScreen> {
                     ),
                     SizedBox(height: 20),
 
-                    // Botón enviar invitación
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -703,7 +717,7 @@ class _GameScreenState extends State<GameScreen> {
                             Navigator.of(context).pop();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('¡Invitación enviada exitosamente!'),
+                                content: Text(S.of(context).successfulSentInvitation),
                                 backgroundColor: Colors.green,
                               ),
                             );
@@ -716,7 +730,7 @@ class _GameScreenState extends State<GameScreen> {
                         icon: isLoading
                             ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                             : Icon(Icons.send),
-                        label: Text(isLoading ? 'Enviando...' : 'Enviar invitación'),
+                        label: Text(isLoading ? S.of(context).sending : S.of(context).sentInvitation),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
@@ -749,7 +763,7 @@ class _GameScreenState extends State<GameScreen> {
                           _createPublicGame(context);
                         },
                         icon: Icon(Icons.public),
-                        label: Text('Crear partida pública'),
+                        label: Text(S.of(context).createPublicGame),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
@@ -769,7 +783,7 @@ class _GameScreenState extends State<GameScreen> {
                           _showPublicGamesDialog(context);
                         },
                         icon: Icon(Icons.search),
-                        label: Text('Buscar partidas públicas'),
+                        label: Text(S.of(context).searchPublicGame),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
@@ -808,12 +822,12 @@ class _GameScreenState extends State<GameScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al crear la partida'), backgroundColor: Colors.red),
+          SnackBar(content: Text(S.of(context).errorCreatePublicGame), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al crear la partida'), backgroundColor: Colors.red),
+        SnackBar(content: Text(S.of(context).errorCreatePublicGame), backgroundColor: Colors.red),
       );
     }
   }
@@ -834,7 +848,7 @@ class _GameScreenState extends State<GameScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Partidas Públicas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    Text(S.of(context).publicGame, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                     IconButton(icon: Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
                   ],
                 ),
@@ -857,7 +871,7 @@ class _GameScreenState extends State<GameScreen> {
                             children: [
                               Icon(Icons.search_off, size: 48, color: Colors.grey),
                               SizedBox(height: 16),
-                              Text('No hay partidas disponibles', style: TextStyle(color: Colors.grey)),
+                              Text(S.of(context).noPublicGame, style: TextStyle(color: Colors.grey)),
                             ],
                           ),
                         );
@@ -876,7 +890,7 @@ class _GameScreenState extends State<GameScreen> {
                                 child: game.hostPhotoUrl == null ? Icon(Icons.person) : null,
                               ),
                               title: Text(game.hostName),
-                              subtitle: Text('Creado hace ${_getTimeAgo(game.createdAt)}'),
+                              subtitle: Text('${S.of(context).createdAgo} ${_getTimeAgo(game.createdAt)}'),
                               trailing: ElevatedButton(
                                 onPressed: () async {
                                   Navigator.of(context).pop();
@@ -886,7 +900,7 @@ class _GameScreenState extends State<GameScreen> {
                                   backgroundColor: Color(0xFFEC7A34),
                                   foregroundColor: Colors.white,
                                 ),
-                                child: Text('Unirse'),
+                                child: Text(S.of(context).join),
                               ),
                             ),
                           );
@@ -923,12 +937,12 @@ class _GameScreenState extends State<GameScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo unir a la partida'), backgroundColor: Colors.red),
+          SnackBar(content: Text(S.of(context).errorJoinGame), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al unirse a la partida'), backgroundColor: Colors.red),
+        SnackBar(content: Text(S.of(context).errorJoinGame), backgroundColor: Colors.red),
       );
     }
   }

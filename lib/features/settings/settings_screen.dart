@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app.dart';
 import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
+import '../games/widget_profile_image_editor.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Function(double)? onVolumeChangedLive;
@@ -23,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _appVersion = '';
   double _musicVolume = 0.5;
   User? _currentUser;
+  String? _currentPhotoUrl;
 
   @override
   void initState() {
@@ -50,6 +51,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  bool _isEmailPasswordLogin(User? user) {
+    if (user == null) return false;
+    return user.providerData.length == 1 &&
+        user.providerData.first.providerId == 'password';
+  }
+
   Future<void> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
     setState(() {
@@ -57,10 +64,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  void _loadCurrentUser() {
+  void _loadCurrentUser() async {
+    final user = AuthService().getCurrentUser();
     setState(() {
-      _currentUser = AuthService().getCurrentUser();
+      _currentUser = user;
     });
+    if (user != null) {
+      final userData = await FirestoreService().getUser(user.uid);
+      if (userData != null && mounted) {
+        setState(() {
+          _currentPhotoUrl = userData.urlPhoto;
+        });
+      }
+    }
   }
 
   Future<void> _signInWithGoogle() async {
@@ -71,6 +87,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (user != null) {
         setState(() {
           _currentUser = user;
+          _currentPhotoUrl = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -105,6 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (user != null) {
         setState(() {
           _currentUser = user;
+          _currentPhotoUrl = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -283,7 +301,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: nameController,
                       enabled: !isLoading,
                       decoration: InputDecoration(
-                        labelText: S.of(context).name ?? 'Nombre',
+                        labelText: S.of(context).name,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -356,6 +374,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     Navigator.of(context).pop();
 
                                     if (user != null) {
+                                      setState(() {
+                                        _currentUser = user;
+                                        _currentPhotoUrl =
+                                            null;
+                                      });
+                                      _loadCurrentUser();
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
@@ -900,6 +924,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildUserSection() {
+    bool isEmailPasswordOnly = _isEmailPasswordLogin(_currentUser);
+
     return Container(
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(16.0),
@@ -916,17 +942,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 25,
-            backgroundColor: const Color(0xFFEC7A34),
-            backgroundImage:
-                _currentUser?.photoURL != null
-                    ? NetworkImage(_currentUser!.photoURL!)
-                    : null,
-            child:
-                _currentUser?.photoURL == null
-                    ? const Icon(Icons.person, color: Colors.white, size: 30)
-                    : null,
+          ProfileImageEditor(
+            userId: _currentUser!.uid,
+            currentImageUrl: _currentPhotoUrl ?? _currentUser!.photoURL,
+            isEmailLogin: isEmailPasswordOnly,
+            onImageUpdated: (newImageUrl) {
+              setState(() {
+                _currentPhotoUrl = newImageUrl;
+              });
+              _loadCurrentUser();
+            },
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -934,7 +959,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _currentUser?.displayName ?? S.of(context).user,
+                  _currentUser?.displayName ?? 'Usuario',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -946,6 +971,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _currentUser?.email ?? '',
                   style: const TextStyle(fontSize: 14, color: Colors.black54),
                 ),
+                if (isEmailPasswordOnly)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Toca la foto para cambiarla',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFEC7A34),
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
