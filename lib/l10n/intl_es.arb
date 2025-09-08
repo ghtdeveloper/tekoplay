@@ -223,7 +223,19 @@
   "cancelSearch": "Cancelar búsqueda",
   "onlineGame": "Partida online",
   "playing": "Jugando",
-  "outOfTime": "Sin tiempo"
+  "outOfTime": "Sin tiempo",
+  "errorAcceptInvitation": "Error al aceptar invitación",
+  "errorProcessInvitation": "Error al procesar invitación",
+  "gameInvitation": "Invitación de juego",
+  "invitesYouToPlay": "te invita a jugar"
+
+
+
+
+
+
+
+
 
 
 

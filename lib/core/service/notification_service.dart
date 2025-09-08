@@ -1,10 +1,10 @@
-// 1. SERVICIO DE NOTIFICACIONES
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import '../../generated/l10n.dart';
 import '../../features/games/multiplayer_chess_screen.dart';
 import '../models/multiplayer_game_match_chess.dart';
 
@@ -18,16 +18,9 @@ class NotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> initialize() async {
-    // Solicitar permisos de notificación
     await _requestPermissions();
-
-    // Configurar notificaciones locales
     await _initializeLocalNotifications();
-
-    // Configurar Firebase Messaging
     await _initializeFirebaseMessaging();
-
-    // Guardar token del dispositivo
     await _saveDeviceToken();
   }
 
@@ -82,12 +75,11 @@ class NotificationService {
       if (token != null) {
         await _firestore.collection('user_tokens').doc(currentUser.uid).set({
           'token': token,
-          'platform': 'android', // o 'ios' según la plataforma
+          'platform': 'android',
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
 
-      // Escuchar cambios en el token
       _firebaseMessaging.onTokenRefresh.listen((newToken) {
         _firestore.collection('user_tokens').doc(currentUser.uid).update({
           'token': newToken,
@@ -102,7 +94,6 @@ class NotificationService {
   void _handleForegroundMessage(RemoteMessage message) {
     print('Mensaje recibido en primer plano: ${message.notification?.title}');
 
-    // Mostrar notificación local
     _showLocalNotification(
       title: message.notification?.title ?? 'Notificación',
       body: message.notification?.body ?? '',
@@ -116,25 +107,15 @@ class NotificationService {
     final data = message.data;
     final type = data['type'];
 
-    // Navegar según el tipo de notificación
     switch (type) {
       case 'game_invitation':
         _handleGameInvitationTap(data);
-        break;
-      case 'game_move':
-        _handleGameMoveTap(data);
-        break;
-      case 'game_finished':
-        _handleGameFinishedTap(data);
-        break;
     }
   }
 
   void _onNotificationTapped(NotificationResponse details) {
-    // Manejar toque en notificación local
     final payload = details.payload;
     if (payload != null) {
-      // Parsear payload y navegar
       print('Local notification tapped: $payload');
     }
   }
@@ -169,32 +150,15 @@ class NotificationService {
       title,
       body,
       notificationDetails,
-      payload: data != null ? data.toString() : null,
+      payload: data?.toString(),
     );
   }
 
   void _handleGameInvitationTap(Map<String, dynamic> data) {
-    // Navegar a la pantalla de invitaciones o aceptar directamente
     final invitationId = data['invitationId'];
     print('Opening game invitation: $invitationId');
-    // TODO: Implementar navegación
   }
 
-  void _handleGameMoveTap(Map<String, dynamic> data) {
-    // Navegar directamente al juego
-    final gameId = data['gameId'];
-    print('Opening game: $gameId');
-    // TODO: Implementar navegación
-  }
-
-  void _handleGameFinishedTap(Map<String, dynamic> data) {
-    // Navegar a la pantalla de resultados o historial
-    final gameId = data['gameId'];
-    print('Opening finished game: $gameId');
-    // TODO: Implementar navegación
-  }
-
-  // Enviar notificación a un usuario específico
   Future<void> sendNotificationToUser({
     required String userId,
     required String title,
@@ -217,7 +181,6 @@ class NotificationService {
     }
   }
 
-  // Marcar notificaciones como leídas
   Future<void> markAsRead(String notificationId) async {
     try {
       await _firestore.collection('notifications').doc(notificationId).update({
@@ -256,15 +219,27 @@ class NotificationService {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Invitación de juego'),
-        content: Text('$fromUserName te invita a jugar $gameType'),
+        title: Text(S.of(context).gameInvitation),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$fromUserName ${S.of(context).invitesYouToPlay} $gameType',
+                style: TextStyle(fontSize: 16),
+                softWrap: true,
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _declineInvitation(invitationId);
             },
-            child: Text('Rechazar', style: TextStyle(color: Colors.red)),
+            child: Text(S.of(context).reject, style: TextStyle(color: Colors.red)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -275,7 +250,7 @@ class NotificationService {
               backgroundColor: Color(0xFFEC7A34),
               foregroundColor: Colors.white,
             ),
-            child: Text('Aceptar'),
+            child: Text(S.of(context).accept),
           ),
         ],
       ),
@@ -284,7 +259,6 @@ class NotificationService {
 
   Future<void> _acceptInvitation(BuildContext context, String invitationId) async {
     try {
-      // Mostrar indicador de carga
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -293,11 +267,9 @@ class NotificationService {
 
       final result = await GameInvitationService().respondToInvitation(invitationId, true);
 
-      // Cerrar indicador de carga
       Navigator.of(context).pop();
 
       if (result != null && result['success'] == true && result['gameId'] != null) {
-        // Navegar a la pantalla de juego
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -309,13 +281,13 @@ class NotificationService {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al aceptar invitación'), backgroundColor: Colors.red),
+          SnackBar(content: Text(S.of(context).errorAcceptInvitation), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       Navigator.of(context).pop(); // Cerrar loading si está abierto
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al procesar invitación'), backgroundColor: Colors.red),
+        SnackBar(content: Text(S.of(context).errorProcessInvitation), backgroundColor: Colors.red),
       );
     }
   }
@@ -395,7 +367,7 @@ class NotificationsWidget extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Invitaciones',
+             S.of(context).invitations,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -407,8 +379,8 @@ class NotificationsWidget extends StatelessWidget {
             ),
           ],
         ),
-        content: Container(
-          width: double.maxFinite, // Esto es clave para evitar el texto vertical
+        content: SizedBox(
+          width: double.maxFinite,
           height: 400,
           child: notifications.isEmpty
               ? Column(
@@ -417,7 +389,7 @@ class NotificationsWidget extends StatelessWidget {
               Icon(Icons.notifications_none, size: 48, color: Colors.grey),
               SizedBox(height: 16),
               Text(
-                'No hay invitaciones',
+               S.of(context).noInvitation,
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
             ],
@@ -455,7 +427,7 @@ class NotificationsWidget extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
+                              SizedBox(
                                 width: double.infinity,
                                 child: Text(
                                   title,
@@ -464,7 +436,7 @@ class NotificationsWidget extends StatelessWidget {
                                     fontSize: 14,
                                   ),
                                   softWrap: true,
-                                  overflow: TextOverflow.visible, // No corta el texto
+                                  overflow: TextOverflow.visible,
                                 ),
                               ),
                               if (body.isNotEmpty) ...[
@@ -496,7 +468,6 @@ class NotificationsWidget extends StatelessWidget {
                           ),
                       ],
                     ),
-                    // Botones de invitación
                     if (notification['type'] == 'invitation') ...[
                       SizedBox(height: 12),
                       Row(
@@ -504,7 +475,6 @@ class NotificationsWidget extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () {
-                                // Lógica para rechazar
                                 Navigator.of(context).pop();
                               },
                               style: OutlinedButton.styleFrom(
@@ -514,14 +484,13 @@ class NotificationsWidget extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                               ),
-                              child: Text('Rechazar'),
+                              child: Text(S.of(context).reject),
                             ),
                           ),
                           SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () {
-                                // Lógica para aceptar
                                 Navigator.of(context).pop();
                               },
                               style: ElevatedButton.styleFrom(
@@ -531,13 +500,12 @@ class NotificationsWidget extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                               ),
-                              child: Text('Aceptar'),
+                              child: Text(S.of(context).accept),
                             ),
                           ),
                         ],
                       ),
                     ],
-                    // Tap para marcar como leído
                     GestureDetector(
                       onTap: () async {
                         if (!isRead) {

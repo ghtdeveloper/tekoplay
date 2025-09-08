@@ -222,7 +222,15 @@
   "cancelSearch": "Annuler la recherche",
   "onlineGame": "Partie en ligne",
   "playing": "En jeu",
-  "outOfTime": "Temps écoulé"
+  "outOfTime": "Temps écoulé",
+  "errorAcceptInvitation": "Erreur lors de l'acceptation de l'invitation",
+  "errorProcessInvitation": "Erreur lors du traitement de l'invitation",
+  "gameInvitation": "Invitation de jeu",
+  "invitesYouToPlay": "vous invite à jouer"
+
+
+
+
 
 
 
