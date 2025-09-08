@@ -227,7 +227,11 @@
   "errorAcceptInvitation": "Error accepting invitation",
   "errorProcessInvitation": "Error processing invitation",
   "gameInvitation": "Game invitation",
-  "invitesYouToPlay": "invites you to play"
+  "invitesYouToPlay": "invites you to play",
+  "dominoVsCpu": "Domino vs CPU",
+  "tapTileToStart": "Tap a tile to start"
+
+
 
 
 

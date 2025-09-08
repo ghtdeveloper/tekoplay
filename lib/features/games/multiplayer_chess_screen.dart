@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/models/multiplayer_game_match_chess.dart';
+import '../../core/service/firestore_service.dart';
+import '../../core/utils/game_type.dart';
 import '../../generated/l10n.dart';
 import '../../core/utils/game_result.dart';
 
@@ -34,10 +36,12 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   Timer? _reconnectTimer;
   bool _isConnected = true;
   bool _isProcessingMove = false;
+  DateTime? _gameStartTime;
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   MultiplayerGameService get _gameService => MultiplayerGameService();
+  final FirestoreService _firestoreService = FirestoreService();
 
   PlayerColor? _myColor;
   String? _opponentName;
@@ -47,6 +51,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _gameStartTime = DateTime.now();
     _initializeGame();
   }
 
@@ -232,9 +237,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   Future<void> _finishGame(GameResultModel result, String? winnerId) async {
     if (_gameEnded) return;
-
     _gameEnded = true;
-
     try {
       await _gameService.finishGame(
         gameId: widget.gameId,
@@ -248,19 +251,94 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   void _handleGameEnd(MultiplayerGameMatch game) {
     String message;
+    GameResultModel gameResult;
 
     if (game.result == GameResultModel.draw) {
       message = S.of(context).drawMsg;
+      gameResult = GameResultModel.draw;
     } else if (game.winnerId == currentUser!.uid) {
       message = '${S.of(context).youWonCheckMate}\n  ${S.of(context).congrats}';
+      gameResult = GameResultModel.win;
     } else {
       message = S
           .of(context)
           .cpuWonCheckMate
           .replaceAll('CPU', _opponentName ?? S.of(context).rivals);
+      gameResult = GameResultModel.loss;
+    }
+    _recordGameResult(gameResult);
+    _showGameEndDialog(message);
+  }
+
+  Future<void> _recordGameResult(GameResultModel result) async {
+    if (currentUser == null) {
+      print('Usuario no autenticado, no se registrará la partida');
+      return;
     }
 
-    _showGameEndDialog(message);
+    if (_gameStartTime == null) {
+      print('Tiempo de juego no válido, no se registrará la partida');
+      return;
+    }
+
+    try {
+      final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
+      int pointsEarned = 0;
+
+      switch (result) {
+        case GameResultModel.win:
+          pointsEarned = 15;
+          break;
+        case GameResultModel.loss:
+          pointsEarned = -5;
+          break;
+        case GameResultModel.draw:
+          pointsEarned = 5;
+          break;
+      }
+
+      if (_currentGame?.isRanked == true) {
+        pointsEarned = (pointsEarned * 1.5).round();
+      }
+
+      final success = await _firestoreService.recordGameMatch(
+        userId: currentUser!.uid,
+        gameType: GameTypeModel.chess,
+        result: result,
+        pointsEarned: pointsEarned,
+        durationMinutes: gameDuration > 0 ? gameDuration : 1,
+        opponentName: _opponentName ?? 'Jugador desconocido',
+        additionalData: {
+          'gameMode': 'multiplayer',
+          'isRanked': _currentGame?.isRanked ?? false,
+          'betAmount': _currentGame?.betAmount,
+          'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
+          'opponentId': _currentGame?.hostId == currentUser!.uid
+              ? _currentGame?.guestId
+              : _currentGame?.hostId,
+          'gameId': widget.gameId,
+          'finalFEN': controller.getFen(),
+          'totalMoves': _currentGame?.moves.length ?? 0,
+        },
+      );
+
+      if (success) {
+        print('Partida multijugador registrada exitosamente');
+      } else {
+        print('Error al registrar la partida en Firestore');
+      }
+    } catch (e) {
+      print('Error al registrar la partida: $e');
+      if (mounted && currentUser != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar el resultado de la partida'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _showGameEndDialog(String message) {

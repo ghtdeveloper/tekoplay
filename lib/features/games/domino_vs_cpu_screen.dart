@@ -3,21 +3,40 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/models/domino_tile.dart';
+import '../../core/service/firestore_service.dart';
+import '../../core/utils/game_result.dart';
+import '../../core/utils/game_type.dart';
 import '../../generated/l10n.dart';
 
 enum GameState { playerTurn, computerTurn, gameOver }
 enum GameResult { playerWins, computerWins, draw, none }
 
+class PlayedDominoTile {
+  final DominoTile tile;
+  final bool isVertical;
+  final Offset position;
+  final bool isLeftSide;
+  PlayedDominoTile({
+    required this.tile,
+    required this.isVertical,
+    required this.position,
+    required this.isLeftSide,
+  });
+}
+
 class DominoVsComputerController {
   List<DominoTile> playerTiles = [];
   List<DominoTile> computerTiles = [];
-  List<DominoTile> playedTiles = [];
+  List<PlayedDominoTile> playedTiles = [];
   List<DominoTile> boneyard = [];
   int? leftEnd;
   int? rightEnd;
   GameState gameState = GameState.playerTurn;
   GameResult gameResult = GameResult.none;
   String difficulty = 'muy fácil';
+
+  double boardWidth = 0;
+  double boardHeight = 0;
 
   void initializeGame({required String selectedDifficulty}) {
     difficulty = selectedDifficulty;
@@ -88,7 +107,15 @@ class DominoVsComputerController {
   }
 
   void _playFirstTile(DominoTile tile, bool isPlayer) {
-    playedTiles.add(tile);
+    final centerPosition = Offset(boardWidth / 2, boardHeight / 2);
+
+    playedTiles.add(PlayedDominoTile(
+      tile: tile,
+      isVertical: false,
+      position: centerPosition,
+      isLeftSide: false,
+    ));
+
     leftEnd = tile.left;
     rightEnd = tile.right;
     tile.isPlayed = true;
@@ -106,33 +133,13 @@ class DominoVsComputerController {
         tile.left == rightEnd || tile.right == rightEnd;
   }
 
-  bool playTile(DominoTile tile, {required bool isLeft, required bool isPlayer}) {
+  bool playTileAutomatically(DominoTile tile, {required bool isPlayer}) {
     if (!canPlayTile(tile)) return false;
 
     if (playedTiles.isEmpty) {
-      playedTiles.add(tile);
-      leftEnd = tile.left;
-      rightEnd = tile.right;
+      _playFirstTile(tile, isPlayer);
     } else {
-      if (isLeft) {
-        if (tile.right == leftEnd) {
-          leftEnd = tile.left;
-        } else if (tile.left == leftEnd) {
-          leftEnd = tile.right;
-        } else {
-          return false;
-        }
-        playedTiles.insert(0, tile);
-      } else {
-        if (tile.left == rightEnd) {
-          rightEnd = tile.right;
-        } else if (tile.right == rightEnd) {
-          rightEnd = tile.left;
-        } else {
-          return false;
-        }
-        playedTiles.add(tile);
-      }
+      _placeTileInBestPosition(tile);
     }
 
     tile.isPlayed = true;
@@ -144,6 +151,102 @@ class DominoVsComputerController {
 
     _checkGameEnd();
     return true;
+  }
+
+  void _placeTileInBestPosition(DominoTile tile) {
+    bool canPlayLeft = tile.left == leftEnd || tile.right == leftEnd;
+    bool canPlayRight = tile.left == rightEnd || tile.right == rightEnd;
+
+    bool playOnLeft = canPlayLeft;
+    if (canPlayLeft && canPlayRight) {
+      playOnLeft = Random().nextBool();
+    }
+
+    if (playOnLeft && canPlayLeft) {
+      _placeOnLeftSide(tile);
+    } else if (canPlayRight) {
+      _placeOnRightSide(tile);
+    }
+  }
+
+  void _placeOnLeftSide(DominoTile tile) {
+    final leftmostTile = _getLeftmostTile();
+    final newPosition = _calculateNewPosition(leftmostTile, true);
+
+    bool needsVertical = _shouldPlaceVertical(leftmostTile, true);
+
+    if (tile.right == leftEnd) {
+      leftEnd = tile.left;
+    } else {
+      leftEnd = tile.right;
+    }
+
+    playedTiles.insert(0, PlayedDominoTile(
+      tile: tile,
+      isVertical: needsVertical,
+      position: newPosition,
+      isLeftSide: true,
+    ));
+  }
+
+  void _placeOnRightSide(DominoTile tile) {
+    final rightmostTile = _getRightmostTile();
+    final newPosition = _calculateNewPosition(rightmostTile, false);
+
+    bool needsVertical = _shouldPlaceVertical(rightmostTile, false);
+
+    if (tile.left == rightEnd) {
+      rightEnd = tile.right;
+    } else {
+      rightEnd = tile.left;
+    }
+
+    playedTiles.add(PlayedDominoTile(
+      tile: tile,
+      isVertical: needsVertical,
+      position: newPosition,
+      isLeftSide: false,
+    ));
+  }
+
+  PlayedDominoTile _getLeftmostTile() {
+    return playedTiles.first;
+  }
+
+  PlayedDominoTile _getRightmostTile() {
+    return playedTiles.last;
+  }
+
+  Offset _calculateNewPosition(PlayedDominoTile referenceTile, bool isLeft) {
+    const double tileWidth = 40.0;
+    const double tileHeight = 70.0;
+    const double spacing = 5.0;
+
+    double newX, newY;
+
+    if (isLeft) {
+      if (referenceTile.isVertical) {
+        newX = referenceTile.position.dx - tileWidth - spacing;
+        newY = referenceTile.position.dy;
+      } else {
+        newX = referenceTile.position.dx - tileWidth - spacing;
+        newY = referenceTile.position.dy;
+      }
+    } else {
+      if (referenceTile.isVertical) {
+        newX = referenceTile.position.dx + tileHeight + spacing;
+        newY = referenceTile.position.dy;
+      } else {
+        newX = referenceTile.position.dx + tileWidth + spacing;
+        newY = referenceTile.position.dy;
+      }
+    }
+
+    return Offset(newX, newY);
+  }
+
+  bool _shouldPlaceVertical(PlayedDominoTile referenceTile, bool isLeft) {
+    return playedTiles.length % 3 == 0;
   }
 
   bool drawFromBoneyard(bool isPlayer) {
@@ -225,23 +328,16 @@ class DominoVsComputerController {
     return playableTiles.first;
   }
 
-  bool shouldComputerPlayLeft(DominoTile tile) {
-    if (tile.left == leftEnd || tile.right == leftEnd) {
-      if (tile.left == rightEnd || tile.right == rightEnd) {
-        return Random().nextBool();
-      } else {
-        return true;
-      }
-    } else {
-      return false;
-    }
+  void setBoardDimensions(double width, double height) {
+    boardWidth = width;
+    boardHeight = height;
   }
 }
 
 class DominoVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
 
-  const DominoVsComputerScreen(this.selectedDifficulty,{super.key});
+  const DominoVsComputerScreen(this.selectedDifficulty, {super.key});
 
   @override
   State<DominoVsComputerScreen> createState() => _DominoVsComputerScreenState();
@@ -249,16 +345,23 @@ class DominoVsComputerScreen extends StatefulWidget {
 
 class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
   final DominoVsComputerController _controller = DominoVsComputerController();
-  DominoTile? _selectedTile;
   bool _isLoading = false;
-
-  // Firebase Auth user
+  DateTime? _gameStartTime;
   User? get currentUser => FirebaseAuth.instance.currentUser;
-
+  final FirestoreService _firestoreService = FirestoreService();
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeGameWithDimensions();
+    });
+  }
+
+  void _initializeGameWithDimensions() {
+    final size = MediaQuery.of(context).size;
+    _controller.setBoardDimensions(size.width - 32, 200);
     _controller.initializeGame(selectedDifficulty: widget.selectedDifficulty);
+    _gameStartTime = DateTime.now();
     _checkComputerTurn();
   }
 
@@ -277,16 +380,14 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
     final computerMove = _controller.getBestComputerMove();
 
     if (computerMove != null) {
-      final shouldPlayLeft = _controller.shouldComputerPlayLeft(computerMove);
-      _controller.playTile(computerMove, isLeft: shouldPlayLeft, isPlayer: false);
+      _controller.playTileAutomatically(computerMove, isPlayer: false);
       _controller.gameState = GameState.playerTurn;
     } else {
       if (_controller.drawFromBoneyard(false)) {
         await Future.delayed(const Duration(milliseconds: 300));
         final newMove = _controller.getBestComputerMove();
         if (newMove != null) {
-          final shouldPlayLeft = _controller.shouldComputerPlayLeft(newMove);
-          _controller.playTile(newMove, isLeft: shouldPlayLeft, isPlayer: false);
+          _controller.playTileAutomatically(newMove, isPlayer: false);
         }
       }
       _controller.gameState = GameState.playerTurn;
@@ -302,21 +403,13 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
   void _onTileSelected(DominoTile tile) {
     if (_controller.gameState != GameState.playerTurn) return;
 
-    setState(() {
-      if (_selectedTile == tile) {
-        _selectedTile = null;
-      } else {
-        _selectedTile = tile;
-      }
-    });
-  }
+    if (!_controller.canPlayTile(tile)) {
+      _showSnack(S.of(context).notAllowed);
+      return;
+    }
 
-  void _onPlayAreaTapped(bool isLeft) {
-    if (_selectedTile == null || _controller.gameState != GameState.playerTurn) return;
-
-    if (_controller.playTile(_selectedTile!, isLeft: isLeft, isPlayer: true)) {
+    if (_controller.playTileAutomatically(tile, isPlayer: true)) {
       setState(() {
-        _selectedTile = null;
         _controller.gameState = GameState.computerTurn;
       });
 
@@ -344,6 +437,103 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
     }
   }
 
+  Future<void> _recordGameResult(GameResult dominoResult) async {
+    if (currentUser == null) {
+      print('Usuario no autenticado, no se registrará la partida');
+      return;
+    }
+
+    if (_gameStartTime == null) {
+      print('Tiempo de juego no válido, no se registrará la partida');
+      return;
+    }
+
+    try {
+      final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
+      GameResultModel gameResultModel;
+      int pointsEarned = 0;
+
+      switch (dominoResult) {
+        case GameResult.playerWins:
+          gameResultModel = GameResultModel.win;
+          pointsEarned = 12;
+          break;
+        case GameResult.computerWins:
+          gameResultModel = GameResultModel.loss;
+          pointsEarned = -8;
+          break;
+        case GameResult.draw:
+          gameResultModel = GameResultModel.draw;
+          pointsEarned = 6;
+          break;
+        case GameResult.none:
+          return;
+      }
+
+      switch (widget.selectedDifficulty.toLowerCase()) {
+        case 'muy fácil':
+          pointsEarned = (pointsEarned * 0.8).round();
+          break;
+        case 'normal':
+          break;
+        case 'difícil':
+          pointsEarned = (pointsEarned * 1.3).round();
+          break;
+      }
+
+      final success = await _firestoreService.recordGameMatch(
+        userId: currentUser!.uid,
+        gameType: GameTypeModel.domino,
+        result: gameResultModel,
+        pointsEarned: pointsEarned,
+        durationMinutes: gameDuration > 0 ? gameDuration : 1,
+        opponentName: 'CPU (${widget.selectedDifficulty})',
+        additionalData: {
+          'difficulty': widget.selectedDifficulty,
+          'gameMode': 'vs_computer',
+          'tilesRemaining': {
+            'player': _controller.playerTiles.length,
+            'computer': _controller.computerTiles.length,
+          },
+          'boneyardRemaining': _controller.boneyard.length,
+          'totalTilesPlayed': _controller.playedTiles.length,
+          'finalScore': {
+            'playerPoints': _controller.playerTiles.fold(0, (sum, tile) => sum + tile.total),
+            'computerPoints': _controller.computerTiles.fold(0, (sum, tile) => sum + tile.total),
+          },
+          'gameEndReason': _getGameEndReason(),
+        },
+      );
+
+      if (success) {
+        print('Partida de dominó registrada exitosamente');
+      } else {
+        print('Error al registrar la partida en Firestore');
+      }
+    } catch (e) {
+      print('Error al registrar la partida: $e');
+      if (mounted && currentUser != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar el resultado de la partida'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  String _getGameEndReason() {
+    if (_controller.playerTiles.isEmpty) {
+      return 'player_finished_tiles';
+    } else if (_controller.computerTiles.isEmpty) {
+      return 'computer_finished_tiles';
+    } else {
+      return 'blocked_game';
+    }
+  }
+
   void _showGameOverDialog() {
     String title;
     String message;
@@ -364,6 +554,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
       default:
         return;
     }
+    _recordGameResult(_controller.gameResult);
 
     showDialog(
       context: context,
@@ -377,7 +568,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
               Navigator.pop(context);
               _resetGame();
             },
-            child:  Text(S.of(context).newGame),
+            child: Text(S.of(context).newGame),
           ),
           TextButton(
             onPressed: () {
@@ -393,11 +584,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
 
   void _resetGame() {
     setState(() {
-      _selectedTile = null;
       _isLoading = false;
+      _gameStartTime = null;
     });
-    _controller.initializeGame(selectedDifficulty: widget.selectedDifficulty);
-    _checkComputerTurn();
+    _initializeGameWithDimensions();
   }
 
   void _showSnack(String msg, {bool isSuccess = false}) {
@@ -419,8 +609,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
         radius: 20,
         backgroundColor: Colors.grey[300],
         backgroundImage: NetworkImage(currentUser!.photoURL!),
-        onBackgroundImageError: (exception, stackTrace) {
-        },
+        onBackgroundImageError: (exception, stackTrace) {},
         child: currentUser!.photoURL == null
             ? const Icon(Icons.person, color: Colors.white, size: 20)
             : null,
@@ -449,9 +638,9 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
         elevation: 0,
-        title: Text(
-          'Dominó vs Computadora',
-          style: const TextStyle(color: Colors.white),
+        title:  Text(
+         S.of(context).dominoVsCpu,
+          style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -530,9 +719,11 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
                 children: [
                   ElevatedButton.icon(
                     onPressed: _controller.gameState == GameState.playerTurn &&
-                        _controller.boneyard.isNotEmpty ? _drawTile : null,
+                        _controller.boneyard.isNotEmpty
+                        ? _drawTile
+                        : null,
                     icon: const Icon(Icons.add),
-                    label:  Text(S.of(context).stole),
+                    label: Text(S.of(context).stole),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
@@ -549,7 +740,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
                       }
                     },
                     icon: const Icon(Icons.skip_next),
-                    label:  Text(S.of(context).pass),
+                    label: Text(S.of(context).pass),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
@@ -560,35 +751,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildPlayerInfo(String name, int tilesCount, bool isActive) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.green[600] : Colors.white24,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            '$tilesCount ${S.of(context).tokens}',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -636,80 +798,23 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
             child: CircularProgressIndicator(color: Colors.white),
           ),
 
-        if (_controller.playedTiles.isNotEmpty) ...[
-          Positioned(
-            left: 20,
-            top: 0,
-            bottom: 0,
-            child: GestureDetector(
-              onTap: () => _onPlayAreaTapped(true),
-              child: Container(
-                width: 60,
-                decoration: BoxDecoration(
-                  color: _selectedTile != null && _controller.gameState == GameState.playerTurn
-                      ? Colors.white24 : Colors.white12,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white38, width: 1),
-                ),
-                child: const Center(
-                  child: Icon(Icons.arrow_back, color: Colors.white70),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 20,
-            top: 0,
-            bottom: 0,
-            child: GestureDetector(
-              onTap: () => _onPlayAreaTapped(false),
-              child: Container(
-                width: 60,
-                decoration: BoxDecoration(
-                  color: _selectedTile != null && _controller.gameState == GameState.playerTurn
-                      ? Colors.white24 : Colors.white12,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white38, width: 1),
-                ),
-                child: const Center(
-                  child: Icon(Icons.arrow_forward, color: Colors.white70),
-                ),
-              ),
-            ),
-          ),
-        ],
-
-        if (_controller.playedTiles.isEmpty && _selectedTile != null)
-          Center(
-            child: GestureDetector(
-              onTap: () => _onPlayAreaTapped(true),
-              child: Container(
-                width: 80,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.white12,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white38, width: 2),
-                ),
-                child: const Center(
-                  child: Icon(Icons.add, color: Colors.white70, size: 30),
-                ),
-              ),
+        if (_controller.playedTiles.isEmpty)
+           Center(
+            child: Text(
+              S.of(context).tapTileToStart,
+              style: TextStyle(color: Colors.white70, fontSize: 16),
             ),
           ),
 
-
-        Center(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: _controller.playedTiles.map((tile) =>
-                  _buildDominoTile(tile, isInPlay: true)
-              ).toList(),
-            ),
+        ..._controller.playedTiles.map((playedTile) => Positioned(
+          left: playedTile.position.dx,
+          top: playedTile.position.dy,
+          child: _buildDominoTile(
+            playedTile.tile,
+            isInPlay: true,
+            isVertical: playedTile.isVertical,
           ),
-        ),
+        )),
 
         if (_controller.playedTiles.isNotEmpty) ...[
           Positioned(
@@ -736,67 +841,79 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
     return ListView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.all(8),
-      children: _controller.playerTiles.map((tile) =>
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: GestureDetector(
-              onTap: () => _onTileSelected(tile),
-              child: _buildDominoTile(tile, isSelected: _selectedTile == tile),
-            ),
-          ),
-      ).toList(),
+      children: _controller.playerTiles
+          .map((tile) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: GestureDetector(
+          onTap: () => _onTileSelected(tile),
+          child: _buildDominoTile(tile),
+        ),
+      ))
+          .toList(),
     );
   }
 
-  Widget _buildDominoTile(DominoTile tile, {bool isSelected = false, bool isInPlay = false}) {
-    return Container(
-      width: 60,
-      height: 80,
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.yellow[700] : Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isSelected ? Colors.yellow[900]! : Colors.grey[400]!,
-          width: isSelected ? 3 : 1,
+  Widget _buildDominoTile(DominoTile tile, {bool isSelected = false, bool isInPlay = false, bool isVertical = false}) {
+    const double tileWidth = 40.0;
+    const double tileHeight = 70.0;
+
+    return Transform.rotate(
+      angle: isVertical ? pi / 2 : 0,
+      child: Container(
+        width: tileWidth,
+        height: tileHeight,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.yellow[700] : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.yellow[900]! : Colors.grey[400]!,
+            width: isSelected ? 3 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 4,
+              offset: const Offset(2, 2),
+            ),
+            if (isSelected)
+              BoxShadow(
+                color: Colors.yellow.withOpacity(0.5),
+                blurRadius: 8,
+                spreadRadius: 2,
+              ),
+          ],
         ),
-        boxShadow: isSelected ? [
-          BoxShadow(
-            color: Colors.yellow.withOpacity(0.5),
-            blurRadius: 8,
-            spreadRadius: 2,
-          )
-        ] : null,
-      ),
-      child: Column(
-        children: [
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(7)),
-              ),
-              child: Center(
-                child: _buildDots(tile.left),
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(7)),
+                ),
+                child: Center(
+                  child: _buildDots(tile.left),
+                ),
               ),
             ),
-          ),
-          Container(
-            height: 2,
-            color: Colors.grey[600],
-          ),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
-              ),
-              child: Center(
-                child: _buildDots(tile.right),
+            Container(
+              height: 2,
+              color: Colors.grey[600],
+            ),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
+                ),
+                child: Center(
+                  child: _buildDots(tile.right),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -813,20 +930,20 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen> {
     };
 
     return Stack(
-      children: dotPositions[number]!.map((alignment) =>
-          Align(
-            alignment: alignment,
-            child: Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                shape: BoxShape.circle,
-              ),
-            ),
+      children: dotPositions[number]!
+          .map((alignment) => Align(
+        alignment: alignment,
+        child: Container(
+          width: 5,
+          height: 5,
+          margin: const EdgeInsets.all(1.5),
+          decoration: const BoxDecoration(
+            color: Colors.black,
+            shape: BoxShape.circle,
           ),
-      ).toList(),
+        ),
+      ))
+          .toList(),
     );
   }
 }

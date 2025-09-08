@@ -227,7 +227,11 @@
   "errorAcceptInvitation": "Error al aceptar invitación",
   "errorProcessInvitation": "Error al procesar invitación",
   "gameInvitation": "Invitación de juego",
-  "invitesYouToPlay": "te invita a jugar"
+  "invitesYouToPlay": "te invita a jugar",
+  "dominoVsCpu": "Dominó vs CPU",
+  "tapTileToStart": "Toca una ficha para comenzar"
+
+
 
 
 

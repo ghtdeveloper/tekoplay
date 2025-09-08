@@ -5,6 +5,7 @@ import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/models/multiplayer_game_match_chess.dart';
 import '../../core/service/auth_service.dart';
+import '../../core/service/firestore_service.dart';
 import '../../core/service/online_match_chess_game_service.dart';
 import '../../generated/l10n.dart';
 import '../../core/utils/game_result.dart';
@@ -44,12 +45,14 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   StreamSubscription<MultiplayerGameMatch?>? _gameSubscription;
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
+  final FirestoreService _firestoreService = FirestoreService();
   bool _isMyTurn = false;
   PlayerColor? _myColor;
   String? _opponentName;
   String? _opponentPhotoUrl;
   bool _gameEnded = false;
   bool _isProcessingMove = false;
+  DateTime? _gameStartTime;
 
   int _myTimeSeconds = 0;
   int _opponentTimeSeconds = 0;
@@ -341,6 +344,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _opponentName = game.getOpponentName(currentUser!.uid);
     _opponentPhotoUrl = isHost ? game.guestPhotoUrl : game.hostPhotoUrl;
     controller.loadFen(game.currentFen);
+    _gameStartTime = DateTime.now();
     if (_selectedTimeMinutes != null) {
       _myTimeSeconds = _selectedTimeMinutes! * 60;
       _opponentTimeSeconds = _selectedTimeMinutes! * 60;
@@ -510,16 +514,98 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _playerTimer?.cancel();
 
     String message;
+    GameResultModel gameResult;
+
     if (game.result == GameResultModel.draw) {
       message = S.of(context).drawMsg;
+      gameResult = GameResultModel.draw;
     } else if (game.winnerId == currentUser!.uid) {
       message = S.of(context).youWon;
+      gameResult = GameResultModel.win;
     } else {
       message = S.of(context).youLost;
+      gameResult = GameResultModel.loss;
     }
+
+    _recordGameResult(gameResult);
 
     _showGameEndDialog(message);
   }
+
+  Future<void> _recordGameResult(GameResultModel result) async {
+    if (currentUser == null) {
+      print('Usuario no autenticado, no se registrará la partida');
+      return;
+    }
+
+    if (_gameStartTime == null) {
+      print('Tiempo de juego no válido, no se registrará la partida');
+      return;
+    }
+
+    try {
+      final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
+      int pointsEarned = 0;
+      switch (result) {
+        case GameResultModel.win:
+          pointsEarned = 20;
+          break;
+        case GameResultModel.loss:
+          pointsEarned = -5;
+          break;
+        case GameResultModel.draw:
+          pointsEarned = 8;
+          break;
+      }
+
+      final isRanked = true;
+
+      final success = await _firestoreService.recordGameMatch(
+        userId: currentUser!.uid,
+        gameType: GameTypeModel.chess,
+        result: result,
+        pointsEarned: pointsEarned,
+        durationMinutes: gameDuration > 0 ? gameDuration : 1,
+        opponentName: _opponentName ?? 'Jugador en línea',
+        additionalData: {
+          'gameMode': 'online_matchmaking',
+          'isRanked': isRanked,
+          'timeControl': _selectedTimeMinutes != null
+              ? '${_selectedTimeMinutes!} minutos'
+              : 'Sin límite',
+          'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
+          'opponentId': _currentGame?.hostId == currentUser!.uid
+              ? _currentGame?.guestId
+              : _currentGame?.hostId,
+          'gameId': _currentGame?.id,
+          'finalFEN': controller.getFen(),
+          'totalMoves': _currentGame?.moves.length ?? 0,
+          'timeLeft': {
+            'myTime': _myTimeSeconds,
+            'opponentTime': _opponentTimeSeconds,
+          },
+        },
+      );
+
+      if (success) {
+        print('Partida online registrada exitosamente');
+      } else {
+        print('Error al registrar la partida en Firestore');
+      }
+    } catch (e) {
+      print('Error al registrar la partida: $e');
+      if (mounted && currentUser != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar el resultado de la partida'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
 
   void _cancelMatchmaking(String reason) {
     _matchmakingTimer?.cancel();
@@ -578,6 +664,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                     _selectedTimeMinutes = null;
                     _currentGame = null;
                     _gameEnded = false;
+                    _gameStartTime = null;
                     _cleanupTimers();
                   });
                 },
