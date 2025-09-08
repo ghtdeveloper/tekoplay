@@ -141,7 +141,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _handleGameEnd(game);
     }
 
-    // Verificar si el oponente se desconectó
     if (game.status == 'waiting' && previousGame?.status == 'active') {
       _showOpponentDisconnected();
     }

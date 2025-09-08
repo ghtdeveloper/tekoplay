@@ -5,6 +5,7 @@ import 'package:tekoplay/core/utils/game_result.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
 import '../models/game_stats.dart';
 import '../models/game_match.dart';
+import '../models/multiplayer_game_match_chess.dart';
 import '../models/user.dart';
 
 class FirestoreService {
@@ -731,6 +732,313 @@ class FirestoreService {
     } catch (e) {
       print('Error getting server stats: $e');
       return null;
+    }
+  }
+
+  Future<List<MultiplayerGameMatch>> findWaitingOnlineGames({
+    required String gameType,
+    required int userRanking,
+    int? timeMinutes,
+    int rankingTolerance = 20,
+  }) async {
+    try {
+      // Crear query base
+      Query query = _firestore
+          .collection('multiplayer_games')
+          .where('status', isEqualTo: 'waiting')
+          .where('gameType', isEqualTo: gameType)
+          .where('gameSettings.isOnlineMatchmaking', isEqualTo: true);
+
+      // Filtrar por tiempo si se especifica
+      if (timeMinutes != null) {
+        query = query.where('gameSettings.timeMinutes', isEqualTo: timeMinutes);
+      }
+
+      // Ejecutar query
+      final snapshot = await query
+          .orderBy('createdAt', descending: false) // Los más antiguos primero
+          .limit(10)
+          .get();
+
+      // Filtrar manualmente por ranking (Firestore tiene limitaciones con múltiples where)
+      final games = snapshot.docs
+          .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
+          .where((game) {
+        final hostRanking = game.gameSettings?['hostRanking'] as int? ?? 1000;
+        return (hostRanking - userRanking).abs() <= rankingTolerance;
+      })
+          .toList();
+
+      return games;
+    } catch (e) {
+      print('Error finding waiting online games: $e');
+      return [];
+    }
+  }
+
+  /// Crea un juego online para matchmaking automático
+  Future<String?> createOnlineMatchmakingGame({
+    required String hostId,
+    required String hostName,
+    String? hostPhotoUrl,
+    required String gameType,
+    required int hostRanking,
+    int? timeMinutes,
+    bool isRanked = true,
+  }) async {
+    try {
+      final gameRef = _firestore.collection('multiplayer_games').doc();
+
+      final gameData = {
+        'id': gameRef.id,
+        'gameType': gameType,
+        'hostId': hostId,
+        'hostName': hostName,
+        'hostPhotoUrl': hostPhotoUrl,
+        'guestId': null,
+        'guestName': null,
+        'guestPhotoUrl': null,
+        'status': 'waiting',
+        'currentTurn': 'host',
+        'currentFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        'moves': [],
+        'createdAt': FieldValue.serverTimestamp(),
+        'startedAt': null,
+        'finishedAt': null,
+        'winnerId': null,
+        'result': null,
+        'lastMoveNotation': null,
+        'isRanked': isRanked,
+        'betAmount': null,
+        'gameSettings': {
+          'isOnlineMatchmaking': true,
+          'hostRanking': hostRanking,
+          'timeMinutes': timeMinutes,
+          'rankingTolerance': 20,
+          'createdForMatchmaking': true,
+        },
+      };
+
+      await gameRef.set(gameData);
+      return gameRef.id;
+    } catch (e) {
+      print('Error creating online matchmaking game: $e');
+      return null;
+    }
+  }
+
+  /// Une un jugador a un juego de matchmaking y determina quién juega con blancas
+  Future<Map<String, dynamic>?> joinOnlineMatchmakingGame({
+    required String gameId,
+    required String guestId,
+    required String guestName,
+    String? guestPhotoUrl,
+    required int guestRanking,
+  }) async {
+    try {
+      final gameRef = _firestore.collection('multiplayer_games').doc(gameId);
+
+      return await _firestore.runTransaction((transaction) async {
+        final gameDoc = await transaction.get(gameRef);
+
+        if (!gameDoc.exists) {
+          throw Exception('Game not found');
+        }
+
+        final gameData = gameDoc.data()!;
+        final hostRanking = gameData['gameSettings']['hostRanking'] as int? ?? 1000;
+
+        // Determinar colores basado en ranking (mayor ranking = blancas)
+        final bool hostPlaysWhite = hostRanking >= guestRanking;
+
+        // Configurar el FEN inicial según quién juega con blancas
+        String initialFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        String currentTurn = hostPlaysWhite ? 'host' : 'guest';
+
+        // Actualizar el juego
+        transaction.update(gameRef, {
+          'guestId': guestId,
+          'guestName': guestName,
+          'guestPhotoUrl': guestPhotoUrl,
+          'status': 'active',
+          'startedAt': FieldValue.serverTimestamp(),
+          'currentTurn': currentTurn,
+          'currentFen': initialFen,
+          'gameSettings': {
+            ...gameData['gameSettings'],
+            'guestRanking': guestRanking,
+            'hostPlaysWhite': hostPlaysWhite,
+            'guestPlaysWhite': !hostPlaysWhite,
+          },
+        });
+
+        return {
+          'success': true,
+          'hostPlaysWhite': hostPlaysWhite,
+          'guestPlaysWhite': !hostPlaysWhite,
+          'currentTurn': currentTurn,
+        };
+      });
+    } catch (e) {
+      print('Error joining online matchmaking game: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Cancela un juego de matchmaking que está esperando
+  Future<bool> cancelOnlineMatchmakingGame(String gameId, String userId) async {
+    try {
+      final gameRef = _firestore.collection('multiplayer_games').doc(gameId);
+      final gameDoc = await gameRef.get();
+
+      if (!gameDoc.exists) return false;
+
+      final gameData = gameDoc.data()!;
+
+      // Solo el host puede cancelar un juego en espera
+      if (gameData['hostId'] != userId || gameData['status'] != 'waiting') {
+        return false;
+      }
+
+      await gameRef.update({
+        'status': 'cancelled',
+        'finishedAt': FieldValue.serverTimestamp(),
+      });
+
+      return true;
+    } catch (e) {
+      print('Error canceling online matchmaking game: $e');
+      return false;
+    }
+  }
+
+  /// Obtiene estadísticas de matchmaking
+  Future<Map<String, dynamic>?> getMatchmakingStats() async {
+    try {
+      final now = DateTime.now();
+      final last24Hours = now.subtract(Duration(hours: 24));
+
+      // Juegos creados en las últimas 24 horas
+      final recentGamesQuery = await _firestore
+          .collection('multiplayer_games')
+          .where('gameSettings.isOnlineMatchmaking', isEqualTo: true)
+          .where('createdAt', isGreaterThan: Timestamp.fromDate(last24Hours))
+          .get();
+
+      // Juegos actualmente esperando
+      final waitingGamesQuery = await _firestore
+          .collection('multiplayer_games')
+          .where('status', isEqualTo: 'waiting')
+          .where('gameSettings.isOnlineMatchmaking', isEqualTo: true)
+          .get();
+
+      // Juegos activos de matchmaking
+      final activeGamesQuery = await _firestore
+          .collection('multiplayer_games')
+          .where('status', isEqualTo: 'active')
+          .where('gameSettings.isOnlineMatchmaking', isEqualTo: true)
+          .get();
+
+      return {
+        'gamesLast24Hours': recentGamesQuery.docs.length,
+        'currentlyWaiting': waitingGamesQuery.docs.length,
+        'currentlyPlaying': activeGamesQuery.docs.length,
+        'lastUpdated': now.toIso8601String(),
+      };
+    } catch (e) {
+      print('Error getting matchmaking stats: $e');
+      return null;
+    }
+  }
+
+  /// Limpia juegos de matchmaking antiguos (más de 2 minutos esperando)
+  Future<int> cleanupOldMatchmakingGames() async {
+    try {
+      final twoMinutesAgo = DateTime.now().subtract(Duration(minutes: 2));
+
+      final oldGamesQuery = await _firestore
+          .collection('multiplayer_games')
+          .where('status', isEqualTo: 'waiting')
+          .where('gameSettings.isOnlineMatchmaking', isEqualTo: true)
+          .where('createdAt', isLessThan: Timestamp.fromDate(twoMinutesAgo))
+          .get();
+
+      int deletedCount = 0;
+      final batch = _firestore.batch();
+
+      for (final doc in oldGamesQuery.docs) {
+        batch.update(doc.reference, {
+          'status': 'expired',
+          'finishedAt': FieldValue.serverTimestamp(),
+        });
+        deletedCount++;
+      }
+
+      if (deletedCount > 0) {
+        await batch.commit();
+      }
+
+      return deletedCount;
+    } catch (e) {
+      print('Error cleaning up old matchmaking games: $e');
+      return 0;
+    }
+  }
+
+  /// Obtiene el ranking de un usuario para un tipo de juego específico
+  Future<int> getUserGameRanking(String userId, GameTypeModel gameType) async {
+    try {
+      final user = await getUser(userId);
+      if (user == null) return 1000; // Ranking por defecto
+
+      final gameStats = user.getGameStats(gameType);
+      return gameStats.points;
+    } catch (e) {
+      print('Error getting user game ranking: $e');
+      return 1000; // Ranking por defecto en caso de error
+    }
+  }
+
+  /// Registra el resultado de un juego con tiempo para estadísticas
+  Future<bool> recordTimedGameMatch({
+    required String userId,
+    required GameTypeModel gameType,
+    required GameResultModel result,
+    required int pointsEarned,
+    required int durationMinutes,
+    String? opponentId,
+    String? opponentName,
+    int? gameTimeMinutes,
+    int? timeUsedSeconds,
+    Map<String, dynamic>? additionalData,
+  }) async {
+    try {
+      Map<String, dynamic> extendedData = additionalData ?? {};
+
+      if (gameTimeMinutes != null) {
+        extendedData['gameTimeMinutes'] = gameTimeMinutes;
+      }
+
+      if (timeUsedSeconds != null) {
+        extendedData['timeUsedSeconds'] = timeUsedSeconds;
+        extendedData['timeRemaining'] = (gameTimeMinutes ?? 0) * 60 - timeUsedSeconds;
+      }
+
+      extendedData['isTimedGame'] = gameTimeMinutes != null;
+
+      return await recordGameMatch(
+        userId: userId,
+        gameType: gameType,
+        result: result,
+        pointsEarned: pointsEarned,
+        durationMinutes: durationMinutes,
+        opponentId: opponentId,
+        opponentName: opponentName,
+        additionalData: extendedData,
+      );
+    } catch (e) {
+      print('Error recording timed game match: $e');
+      return false;
     }
   }
 

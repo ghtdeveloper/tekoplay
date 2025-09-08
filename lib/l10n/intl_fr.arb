@@ -202,7 +202,47 @@
   "noPublicGame": "Aucune partie disponible",
   "createdAgo": "Créé il y a",
   "join": "Rejoindre",
-  "errorJoinGame": "Impossible de rejoindre la partie"
+  "errorJoinGame": "Impossible de rejoindre la partie",
+  "noTime": "Temps écoulé",
+  "selectGameTime": "Sélectionnez le temps de jeu",
+  "searchGame": "Rechercher une partie",
+  "errorSearchGame": "Erreur lors de la recherche de partie",
+  "opponentNotFound": "Aucun adversaire trouvé",
+  "connectionError": "Erreur de connexion",
+  "errorSendMove": "Erreur lors de l'envoi du mouvement",
+  "errorMakeMove": "Erreur lors de l'exécution du mouvement",
+  "youWon": "Vous avez gagné !\nFélicitations",
+  "youLost": "Vous avez perdu\nBien essayé",
+  "error": "Erreur",
+  "playAgain": "Rejouer",
+  "searchingOpponent": "Recherche d'adversaire",
+  "searchCanceled": "Recherche annulée",
+  "time": "Temps",
+  "timeSettings": "Paramètres du temps",
+  "cancelSearch": "Annuler la recherche",
+  "onlineGame": "Partie en ligne",
+  "playing": "En jeu",
+  "outOfTime": "Temps écoulé"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

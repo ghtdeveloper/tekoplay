@@ -120,6 +120,7 @@ class MultiplayerGameMatch {
     String? winnerId,
     GameResultModel? result,
     String? lastMoveNotation,
+    Map<String, dynamic>? gameSettings,
   }) {
     return MultiplayerGameMatch(
       id: id,
@@ -139,7 +140,7 @@ class MultiplayerGameMatch {
       finishedAt: finishedAt ?? this.finishedAt,
       winnerId: winnerId ?? this.winnerId,
       result: result ?? this.result,
-      gameSettings: gameSettings,
+      gameSettings: gameSettings ?? this.gameSettings,
       lastMoveNotation: lastMoveNotation ?? this.lastMoveNotation,
       isRanked: isRanked,
       betAmount: betAmount,
@@ -629,4 +630,61 @@ class MultiplayerGameService {
       return false;
     }
   }
+}
+
+enum OnlineMatchmakingState {
+  idle,
+  searching,
+  found,
+  connecting,
+  connected,
+  playing,
+  finished,
+  error,
+}
+
+enum TimeResult {
+  normal,
+  timeout,
+  aborted,
+}
+
+class GameTimePreset {
+  final int? minutes;
+  final String displayName;
+  final String description;
+
+  const GameTimePreset({
+    required this.minutes,
+    required this.displayName,
+    required this.description,
+  });
+
+  static const List<GameTimePreset> presets = [
+    GameTimePreset(
+      minutes: null,
+      displayName: 'Sin tiempo',
+      description: 'Partida sin límite de tiempo',
+    ),
+    GameTimePreset(
+      minutes: 1,
+      displayName: '1 minuto',
+      description: 'Partida rápida de 1 minuto',
+    ),
+    GameTimePreset(
+      minutes: 3,
+      displayName: '3 minutos',
+      description: 'Partida blitz de 3 minutos',
+    ),
+    GameTimePreset(
+      minutes: 5,
+      displayName: '5 minutos',
+      description: 'Partida rápida de 5 minutos',
+    ),
+    GameTimePreset(
+      minutes: 10,
+      displayName: '10 minutos',
+      description: 'Partida estándar de 10 minutos',
+    ),
+  ];
 }

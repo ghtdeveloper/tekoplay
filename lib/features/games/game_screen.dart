@@ -16,6 +16,7 @@ import 'chess_vs_cpu_screen.dart';
 import 'domino_tutorial_screen.dart';
 import 'domino_vs_cpu_screen.dart';
 import 'multiplayer_chess_screen.dart';
+import 'online_chess_screen.dart';
 import 'ranking_screen.dart';
 import 'game_history_screen.dart';
 
@@ -265,17 +266,7 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                 ),
 
-                CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Colors.grey[300],
-                  backgroundImage: _currentUser!.photoURL != null
-                      ? NetworkImage(_currentUser!.photoURL!)
-                      : AssetImage('assets/images/img_perfil_unknown.png') as ImageProvider,
-                  child: _currentUser!.photoURL == null
-                      ? Icon(Icons.person, color: Colors.white, size: 40)
-                      : null,
-                ),
-
+                _buildUserAvatar(),
                 SizedBox(height: 12),
 
                 Text(
@@ -600,7 +591,6 @@ class _GameScreenState extends State<GameScreen> {
                                 if (result != null && result['success'] == true && result['gameId'] != null) {
                                   Navigator.of(context).pop();
 
-                                  // Navegar a la pantalla de juego
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
@@ -1173,138 +1163,19 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showOnlineGameDialog(BuildContext context) {
-    final TextEditingController roomCodeController = TextEditingController();
     if (isChess) {
-      _showOnlineDialogChess(context, roomCodeController);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OnlineChessScreen(),
+        ),
+      );
     } else if (isDomino) {
+      final TextEditingController roomCodeController = TextEditingController();
       _showOnlineDialogDomino(context, roomCodeController);
     }
   }
 
-  void _showOnlineDialogChess(
-      BuildContext context,
-      TextEditingController roomCodeController,
-      ) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                Text(
-                  S.of(context).playOnline,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: Colors.black87,
-                  ),
-                ),
-                SizedBox(height: 20),
-
-                TextField(
-                  controller: roomCodeController,
-                  decoration: InputDecoration(
-                    labelText: S.of(context).roomCode,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 20),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      final roomCode = roomCodeController.text.trim();
-                      if (roomCode.isNotEmpty) {
-                        print('Unirse a la sala con código: $roomCode');
-                        Navigator.of(context).pop();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(S.of(context).pleaseEnterValidCode),
-                          ),
-                        );
-                      }
-                    },
-                    icon: Icon(Icons.login),
-                    label: Text(
-                      S.of(context).joinRoom,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC7A34),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: 20),
-
-                Divider(),
-
-                SizedBox(height: 10),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      final generatedRoomCode = 'ROOM12345';
-                      Clipboard.setData(ClipboardData(text: generatedRoomCode));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            '${S.of(context).generatedAndCopiedCode} : $generatedRoomCode',
-                          ),
-                        ),
-                      );
-                      print('Sala creada: $generatedRoomCode');
-                      Navigator.of(context).pop();
-                    },
-                    icon: Icon(Icons.add),
-                    label: Text(
-                      S.of(context).createNewRoom,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC7A34),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   void _showOnlineDialogDomino(
       BuildContext context,

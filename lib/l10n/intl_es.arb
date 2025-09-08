@@ -203,7 +203,48 @@
   "noPublicGame": "No hay partidas disponibles",
   "createdAgo": "Creado hace",
   "join": "Unirse",
-  "errorJoinGame": "No se pudo unir a la partida"
+  "errorJoinGame": "No se pudo unir a la partida",
+  "noTime": "Sin tiempo",
+  "selectGameTime": "Selecciona el tiempo de partida",
+  "searchGame": "Buscar partida",
+  "errorSearchGame": "Error al buscar partida",
+  "opponentNotFound": "No se encontró oponente",
+  "connectionError": "Error de conexión",
+  "errorSendMove": "Error al enviar movimiento",
+  "errorMakeMove": "Error al realizar movimiento",
+  "youWon": "¡Ganaste!\nFelicitaciones",
+  "youLost": "Perdiste\nBuen intento",
+  "error": "Error",
+  "playAgain": "Jugar de nuevo",
+  "searchingOpponent": "Buscando oponente",
+  "searchCanceled": "Búsqueda cancelada",
+  "time": "Tiempo",
+  "timeSettings": "Configuración de tiempo",
+  "cancelSearch": "Cancelar búsqueda",
+  "onlineGame": "Partida online",
+  "playing": "Jugando",
+  "outOfTime": "Sin tiempo"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

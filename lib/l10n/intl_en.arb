@@ -203,7 +203,48 @@
   "noPublicGame": "No games available",
   "createdAgo": "Created",
   "join": "Join",
-  "errorJoinGame": "Could not join the game"
+  "errorJoinGame": "Could not join the game",
+  "noTime": "Out of time",
+  "selectGameTime": "Select game time",
+  "searchGame": "Search game",
+  "errorSearchGame": "Error searching game",
+  "opponentNotFound": "No opponent found",
+  "connectionError": "Connection error",
+  "errorSendMove": "Error sending move",
+  "errorMakeMove": "Error making move",
+  "youWon": "You won!\nCongratulations",
+  "youLost": "You lost\nGood try",
+  "error": "Error",
+  "playAgain": "Play again",
+  "searchingOpponent": "Searching opponent",
+  "searchCanceled": "Search canceled",
+  "time": "Time",
+  "timeSettings": "Time settings",
+  "cancelSearch": "Cancel search",
+  "onlineGame": "Online game",
+  "playing": "Playing",
+  "outOfTime": "Out of time"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
