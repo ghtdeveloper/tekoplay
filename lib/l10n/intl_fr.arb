@@ -228,7 +228,15 @@
   "gameInvitation": "Invitation de jeu",
   "invitesYouToPlay": "vous invite à jouer",
   "dominoVsCpu": "Domino contre CPU",
-  "tapTileToStart": "Touchez une tuile pour commencer"
+  "tapTileToStart": "Touchez une tuile pour commencer",
+  "playingAsGuest": "En jouant comme invité !",
+  "yourTemporaryName": "Votre nom temporaire",
+  "loginToAccessFeatures": "Pour accéder à toutes les fonctionnalités et sauvegarder votre progression, connectez-vous avec votre compte.",
+  "continueAsGuest": "Continuer comme invité"
+
+
+
+
 
 
 

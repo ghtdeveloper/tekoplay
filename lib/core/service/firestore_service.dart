@@ -19,6 +19,8 @@ class FirestoreService {
   final String _usersCollection = 'users';
   final String _gameMatchesCollection = 'game_matches';
   final String _technicalIssueCollection = 'supports';
+  final String _countersCollection = 'counters';
+  final String _anonymousUsersCollection = 'anonymous_usernames';
 
   Future<UserModel?> createOrGetUser(User firebaseUser) async {
     try {
@@ -62,6 +64,130 @@ class FirestoreService {
       return null;
     }
   }
+
+
+  /// Genera un nombre único incremental para usuarios anónimos
+  Future<String> generateUniquePlayerName() async {
+    try {
+      return await _firestore.runTransaction((transaction) async {
+        // Referencia al contador de jugadores anónimos
+        final counterRef = _firestore.collection(_countersCollection).doc('anonymous_players');
+        final counterDoc = await transaction.get(counterRef);
+
+        int nextNumber;
+        if (counterDoc.exists) {
+          nextNumber = (counterDoc.data()?['count'] ?? 0) + 1;
+        } else {
+          nextNumber = 1;
+        }
+
+        // Formatear el número con ceros a la izquierda (5 dígitos)
+        final playerName = 'Player${nextNumber.toString().padLeft(5, '0')}';
+
+        // Verificar que no exista (doble verificación)
+        final existingNameDoc = await _firestore
+            .collection(_anonymousUsersCollection)
+            .doc(playerName)
+            .get();
+
+        if (existingNameDoc.exists) {
+          // Si por alguna razón ya existe, generar uno aleatorio
+          return await _generateRandomPlayerName();
+        }
+
+        // Actualizar el contador
+        transaction.set(counterRef, {'count': nextNumber}, SetOptions(merge: true));
+
+        // Registrar el nombre como usado
+        transaction.set(
+            _firestore.collection(_anonymousUsersCollection).doc(playerName),
+            {
+              'name': playerName,
+              'createdAt': FieldValue.serverTimestamp(),
+              'isActive': true,
+            }
+        );
+
+        return playerName;
+      });
+    } catch (e) {
+      print('Error generating incremental player name: $e');
+      // Fallback a método aleatorio
+      return await _generateRandomPlayerName();
+    }
+  }
+
+
+  /// Genera un nombre aleatorio como alternativa
+  Future<String> _generateRandomPlayerName() async {
+    try {
+      for (int attempt = 0; attempt < 10; attempt++) {
+        // Generar número aleatorio de 5 dígitos
+        final random = DateTime.now().millisecondsSinceEpoch % 99999 + 1;
+        final playerName = 'Player${random.toString().padLeft(5, '0')}';
+
+        // Verificar que no exista
+        final existingDoc = await _firestore
+            .collection(_anonymousUsersCollection)
+            .doc(playerName)
+            .get();
+
+        if (!existingDoc.exists) {
+          // Registrar el nombre como usado
+          await _firestore.collection(_anonymousUsersCollection).doc(playerName).set({
+            'name': playerName,
+            'createdAt': FieldValue.serverTimestamp(),
+            'isActive': true,
+            'generationType': 'random',
+          });
+          return playerName;
+        }
+      }
+
+      // Si después de 10 intentos no se encuentra uno único, usar timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final playerName = 'Player${timestamp.toString().substring(timestamp.toString().length - 5)}';
+
+      await _firestore.collection(_anonymousUsersCollection).doc(playerName).set({
+        'name': playerName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isActive': true,
+        'generationType': 'timestamp',
+      });
+
+      return playerName;
+    } catch (e) {
+      print('Error generating random player name: $e');
+      // Último recurso: usar timestamp completo
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      return 'Player$timestamp';
+    }
+  }
+
+  /// Libera un nombre de usuario anónimo cuando ya no se use
+  Future<bool> releaseAnonymousPlayerName(String playerName) async {
+    try {
+      await _firestore.collection(_anonymousUsersCollection).doc(playerName).update({
+        'isActive': false,
+        'releasedAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      print('Error releasing player name: $e');
+      return false;
+    }
+  }
+
+  Future<bool> isPlayerNameAvailable(String playerName) async {
+    try {
+      final doc = await _firestore.collection(_anonymousUsersCollection).doc(playerName).get();
+      return !doc.exists || !(doc.data()?['isActive'] ?? false);
+    } catch (e) {
+      print('Error checking player name availability: $e');
+      return false;
+    }
+  }
+
 
   Future<TechnicalIssue?> createTechnicalIssue(
     User? firebaseUser,

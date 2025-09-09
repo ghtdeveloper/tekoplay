@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import '../../core/service/notification_service.dart';
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../home/home_screen.dart';
+import '../settings/settings_screen.dart';
 import 'chess_vs_cpu_screen.dart';
 import 'domino_tutorial_screen.dart';
 import 'domino_vs_cpu_screen.dart';
@@ -42,6 +44,10 @@ class _GameScreenState extends State<GameScreen> {
   late String matchType;
   User? _currentUser;
   String? _currentPhotoUrl;
+  String? _anonymousPlayerName;
+  bool _isAnonymousMode = false;
+  late AudioPlayer _audioPlayer;
+  double _currentVolume = 0.5;
 
   bool get isChess => gameType == S.of(context).chess;
 
@@ -55,6 +61,25 @@ class _GameScreenState extends State<GameScreen> {
     _loadCurrentUser();
     _initializeNotifications();
     _setupStreams();
+    if (AuthService().getCurrentUser() == null) {
+      _enableAnonymousMode();
+    }
+  }
+
+  Future<void> _updateVolume(double newVolume) async {
+    _currentVolume = newVolume;
+    await _audioPlayer.setVolume(newVolume);
+    setState(() {});
+  }
+
+  void _enableAnonymousMode() async {
+    final playerName = await AuthService().enableAnonymousMode();
+    if (playerName != null && mounted) {
+      setState(() {
+        _anonymousPlayerName = playerName;
+        _isAnonymousMode = true;
+      });
+    }
   }
 
   void _loadCurrentUser() async {
@@ -94,6 +119,9 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    if (_isAnonymousMode) {
+      AuthService().disableAnonymousMode();
+    }
     _invitationsSubscription?.cancel();
     _activeGamesSubscription?.cancel();
     super.dispose();
@@ -345,6 +373,141 @@ class _GameScreenState extends State<GameScreen> {
       },
     );
   }
+  Widget _buildUserNameSection() {
+    final displayName = _currentUser?.displayName ?? _anonymousPlayerName ?? S.of(context).anonymous;
+    final isInteractive = _currentUser != null;
+
+    return GestureDetector(
+      onTap: isInteractive ? () => _showUserOptionsDialog(context) : () => _showAnonymousUserDialog(context),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isAnonymousMode) ...[
+              Icon(
+                Icons.person_outline,
+                color: Colors.white70,
+                size: 16,
+              ),
+              SizedBox(width: 4),
+            ],
+            Text(
+              displayName,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: _isAnonymousMode ? Colors.white70 : Colors.white,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+            if (isInteractive) ...[
+              SizedBox(width: 8),
+              Icon(
+                Icons.keyboard_arrow_down,
+                color: Colors.white,
+                size: 20,
+              ),
+            ] else if (_isAnonymousMode) ...[
+              SizedBox(width: 8),
+              Icon(
+                Icons.info_outline,
+                color: Colors.white70,
+                size: 16,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  void _showAnonymousUserDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.person_outline,
+                size: 48,
+                color: Color(0xFFEC7A34),
+              ),
+              SizedBox(height: 16),
+              Text(
+                S.of(context).playingAsGuest,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '${S.of(context).yourTemporaryName}: $_anonymousPlayerName',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                S.of(context).loginToAccessFeatures,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14),
+              ),
+              SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(S.of(context).continueAsGuest),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SettingsScreen(
+                              onVolumeChangedLive: (newVolume) {
+                                _updateVolume(newVolume);
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color(0xFFEC7A34),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(S.of(context).login),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -408,42 +571,7 @@ class _GameScreenState extends State<GameScreen> {
                     SizedBox(height: 8),
                     _buildMatchTypeIndicator(),
                     SizedBox(height: 8),
-
-                    GestureDetector(
-                      onTap: _currentUser != null ? () => _showUserOptionsDialog(context) : null,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: _currentUser != null ? BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all( color: Colors.black.withValues(alpha: 0.1),),
-                        ) : null,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _currentUser?.displayName ?? S.of(context).anonymous,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                            ),
-                            if (_currentUser != null) ...[
-                              SizedBox(width: 8),
-                              Icon(
-                                Icons.keyboard_arrow_down,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
+                   _buildUserNameSection(),
                   ],
                 ),
               ),

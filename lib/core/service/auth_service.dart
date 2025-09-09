@@ -12,6 +12,8 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirestoreService _firestoreService = FirestoreService();
+  String? _anonymousPlayerName;
+  bool _isAnonymousMode = false;
 
   Future<User?> signInWithGoogle() async {
     try {
@@ -63,6 +65,34 @@ class AuthService {
       print("Error en Facebook Sign-In: $e");
       return null;
     }
+  }
+
+  /// Activa el modo anónimo y genera un nombre único
+  Future<String?> enableAnonymousMode() async {
+    try {
+      _anonymousPlayerName ??= await _firestoreService.generateUniquePlayerName();
+      _isAnonymousMode = true;
+      return _anonymousPlayerName;
+    } catch (e) {
+      print('Error enabling anonymous mode: $e');
+      return null;
+    }
+  }
+
+  /// Desactiva el modo anónimo
+  Future<void> disableAnonymousMode() async {
+    if (_anonymousPlayerName != null) {
+      await _firestoreService.releaseAnonymousPlayerName(_anonymousPlayerName!);
+      _anonymousPlayerName = null;
+    }
+    _isAnonymousMode = false;
+  }
+
+  String? getCurrentDisplayName() {
+    if (_isAnonymousMode && _anonymousPlayerName != null) {
+      return _anonymousPlayerName;
+    }
+    return getCurrentUser()?.displayName;
   }
 
   Future<User?> registerWithEmail(String email, String password, String displayName) async {
