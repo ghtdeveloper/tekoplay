@@ -232,7 +232,43 @@
   "playingAsGuest": "En jouant comme invité !",
   "yourTemporaryName": "Votre nom temporaire",
   "loginToAccessFeatures": "Pour accéder à toutes les fonctionnalités et sauvegarder votre progression, connectez-vous avec votre compte.",
-  "continueAsGuest": "Continuer comme invité"
+  "continueAsGuest": "Continuer comme invité",
+  "loginToSaveProgress": "Connectez-vous pour sauvegarder votre progression",
+  "errorLogin": "Erreur lors de la connexion",
+  "loggedInAs": "Connecté en tant que",
+  "pleaseFillAllFields": "Veuillez remplir tous les champs",
+  "errorCreateAccount": "Erreur lors de la création du compte",
+  "accountCreated": "Compte créé avec succès. Vérifiez votre e-mail.",
+  "tapHereForFeatures": "Touchez ici pour accéder à toutes les fonctionnalités",
+  "verifyYourEmail": "Vérifiez votre e-mail",
+  "invalidCredentials": "Identifiants incorrects",
+  "understood": "Compris",
+  "verificationEmailSent": "Nous avons envoyé un lien de vérification à votre e-mail. Veuillez vérifier votre e-mail pour activer votre compte et accéder à toutes les fonctionnalités.",
+  "accountCreatedUpdt": "Compte créé avec succès !",
+  "resendEmail": "Renvoyer l'e-mail",
+  "errorResendEmail": "Erreur lors du renvoi de l'e-mail",
+  "verificationEmailResent": "E-mail de vérification renvoyé",
+  "verifyEmail": "Vérifiez votre e-mail",
+  "emailVerifiedSuccess": "E-mail vérifié avec succès ! Vous pouvez maintenant accéder à toutes les fonctionnalités.",
+  "tapPhotoToChange": "Touchez la photo pour la changer"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -22,8 +22,6 @@ import 'online_chess_screen.dart';
 import 'ranking_screen.dart';
 import 'game_history_screen.dart';
 
-StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
-StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
 
 class GameScreen extends StatefulWidget {
   final String gameType;
@@ -44,11 +42,15 @@ class _GameScreenState extends State<GameScreen> {
   late String matchType;
   User? _currentUser;
   String? _currentPhotoUrl;
+  int? _currentCurrency;
   String? _anonymousPlayerName;
   bool _isAnonymousMode = false;
   late AudioPlayer _audioPlayer;
   double _currentVolume = 0.5;
-
+  bool _isDisposed = false;
+  bool _isInitialized = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
+  StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
   bool get isChess => gameType == S.of(context).chess;
 
   bool get isDomino => gameType == S.of(context).domino;
@@ -58,74 +60,164 @@ class _GameScreenState extends State<GameScreen> {
     super.initState();
     gameType = widget.gameType;
     matchType = widget.matchType;
-    _loadCurrentUser();
-    _initializeNotifications();
-    _setupStreams();
-    if (AuthService().getCurrentUser() == null) {
-      _enableAnonymousMode();
-    }
+    _initializeAsync();
   }
 
-  Future<void> _updateVolume(double newVolume) async {
-    _currentVolume = newVolume;
-    await _audioPlayer.setVolume(newVolume);
-    setState(() {});
-  }
-
-  void _enableAnonymousMode() async {
-    final playerName = await AuthService().enableAnonymousMode();
-    if (playerName != null && mounted) {
-      setState(() {
-        _anonymousPlayerName = playerName;
-        _isAnonymousMode = true;
-      });
-    }
-  }
-
-  void _loadCurrentUser() async {
-    final user = AuthService().getCurrentUser();
-    setState(() {
-      _currentUser = user;
-    });
-    if (user != null) {
-      final userData = await FirestoreService().getUser(user.uid);
-      if (userData != null && mounted) {
+  Future<void> _initializeAsync() async {
+    try {
+      if (_isDisposed) return;
+      _audioPlayer = AudioPlayer();
+       _loadCurrentUser();
+      if (_isDisposed) return;
+      _initializeNotifications();
+      if (_isDisposed) return;
+      _setupStreams();
+      if (_isDisposed) return;
+      if (AuthService().getCurrentUser() == null) {
+        _enableAnonymousMode();
+      }
+      if (_isDisposed) return;
+      if (mounted) {
         setState(() {
-          _currentPhotoUrl = userData.urlPhoto;
+          _isInitialized = true;
+        });
+      }
+    } catch (e) {
+      print('Error en inicialización: $e');
+      if (mounted && !_isDisposed) {
+        setState(() {
+          _isInitialized = true;
         });
       }
     }
   }
 
+
+  Future<void> _updateVolume(double newVolume) async {
+    if (_isDisposed) return;
+    try {
+      _currentVolume = newVolume;
+      await _audioPlayer.setVolume(newVolume);
+      if (mounted) setState(() {});
+    } catch (e) {
+      print('Error actualizando volumen: $e');
+    }
+  }
+
+  void _enableAnonymousMode() async {
+    if (_isDisposed) return;
+
+    try {
+      final playerName = await AuthService().enableAnonymousMode();
+      if (playerName != null && mounted && !_isDisposed) {
+        setState(() {
+          _anonymousPlayerName = playerName;
+          _isAnonymousMode = true;
+        });
+      }
+    } catch (e) {
+      print('Error en modo anónimo: $e');
+    }
+  }
+
+  Future<void> _loadCurrentUser() async {
+    if (_isDisposed) return;
+
+    try {
+      final user = AuthService().getCurrentUser();
+      if (_isDisposed) return;
+
+      if (mounted) {
+        setState(() {
+          _currentUser = user;
+        });
+      }
+
+      if (user != null && !_isDisposed) {
+        final userData = await FirestoreService().getUser(user.uid);
+        if (userData != null && mounted && !_isDisposed) {
+          setState(() {
+            _currentPhotoUrl = userData.urlPhoto;
+            _currentCurrency = userData.currency;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error cargando usuario: $e');
+    }
+  }
+
   void _initializeNotifications() {
-    NotificationService().initialize();
+    if (_isDisposed) return;
+
+    try {
+      NotificationService().initialize();
+    } catch (e) {
+      print('Error inicializando notificaciones: $e');
+    }
   }
 
   void _setupStreams() {
-    if (_currentUser != null) {
+    if (_isDisposed || _currentUser == null) return;
+    try {
+      _invitationsSubscription?.cancel();
+      _activeGamesSubscription?.cancel();
       _invitationsSubscription = GameInvitationService()
           .getPendingInvitations(_currentUser!.uid)
-          .listen((invitations) {
-        if (mounted) setState(() {});
-      });
+          .handleError((error) {
+        print('Error en stream de invitaciones: $error');
+      })
+          .listen(
+            (invitations) {
+          if (mounted && !_isDisposed) {
+            setState(() {
+            });
+          }
+        },
+        onError: (error) {
+          print('Error en subscription de invitaciones: $error');
+        },
+      );
 
       _activeGamesSubscription = MultiplayerGameService()
           .getActiveGames(_currentUser!.uid)
-          .listen((games) {
-        if (mounted) setState(() {});
-      });
+          .handleError((error) {
+        print('Error en stream de juegos: $error');
+      })
+          .listen(
+            (games) {
+          if (mounted && !_isDisposed) {
+            setState(() {
+            });
+          }
+        },
+        onError: (error) {
+          print('Error en subscription de juegos: $error');
+        },
+      );
+
+    } catch (e) {
+      print('Error configurando streams: $e');
     }
   }
 
   @override
   void dispose() {
-    if (_isAnonymousMode) {
-      AuthService().disableAnonymousMode();
-    }
+    _isDisposed = true;
     _invitationsSubscription?.cancel();
     _activeGamesSubscription?.cancel();
+    _audioPlayer.dispose();
+    if (_isAnonymousMode) {
+      try {
+        AuthService().disableAnonymousMode();
+      } catch (e) {
+        print('Error deshabilitando modo anónimo: $e');
+      }
+    }
+
     super.dispose();
   }
+
 
   Widget _buildUserAvatar() {
     String? photoUrl = _currentPhotoUrl ?? _currentUser?.photoURL;
@@ -136,9 +228,11 @@ class _GameScreenState extends State<GameScreen> {
         backgroundColor: Colors.grey[300],
         backgroundImage: NetworkImage(photoUrl),
         onBackgroundImageError: (exception, stackTrace) {
-          setState(() {
-            _currentPhotoUrl = null;
-          });
+          if (mounted && !_isDisposed) {
+            setState(() {
+              _currentPhotoUrl = null;
+            });
+          }
         },
       );
     } else {
@@ -150,95 +244,6 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-
-  Widget _buildActiveGamesWidget() {
-    if (_currentUser == null) return SizedBox();
-
-    return StreamBuilder<List<MultiplayerGameMatch>>(
-      stream: MultiplayerGameService().getActiveGames(_currentUser!.uid),
-      builder: (context, snapshot) {
-        final games = snapshot.data ?? [];
-        if (games.isEmpty) return SizedBox();
-
-        return Container(
-          margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Partidas activas (${games.length})',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              SizedBox(height: 8),
-              Container(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: games.length,
-                  itemBuilder: (context, index) {
-                    final game = games[index];
-                    final opponentName = game.getOpponentName(_currentUser!.uid) ?? "Oponente";
-
-                    return Container(
-                      width: 180,
-                      margin: EdgeInsets.only(right: 8),
-                      child: Card(
-                        color: game.isPlayerTurn(_currentUser!.uid) ? Colors.green[50] : Colors.white,
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => MultiplayerChessScreen(
-                                  gameId: game.id,
-                                  isHost: game.hostId == _currentUser!.uid,
-                                ),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'vs $opponentName',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Movimientos: ${game.moves.length}',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                                ),
-                                SizedBox(height: 8),
-                                Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: game.isPlayerTurn(_currentUser!.uid) ? Colors.green : Colors.orange,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    game.isPlayerTurn(_currentUser!.uid) ? 'Tu turno' : 'Esperando',
-                                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildMatchTypeIndicator() {
     return Container(
@@ -511,6 +516,25 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return Scaffold(
+        backgroundColor: Color(0xFFEC7A34),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text(
+                'Cargando...',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Color(0xFFEC7A34),
       body: SafeArea(
@@ -527,16 +551,19 @@ class _GameScreenState extends State<GameScreen> {
                   IconButton(
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => MainScreen()),
-                      );
+                      if (!_isDisposed) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) => MainScreen()),
+                        );
+                      }
                     },
                   ),
+                  if (matchType != S.of(context).bet)
                   Row(
                     children: [
                       Text(
-                        '500',
+                        '${(_currentCurrency ?? 0.0).toInt()}',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -558,7 +585,6 @@ class _GameScreenState extends State<GameScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildUserAvatar(),
-                    _buildActiveGamesWidget(),
                     SizedBox(height: 10),
                     Text(
                       gameType,
@@ -571,7 +597,7 @@ class _GameScreenState extends State<GameScreen> {
                     SizedBox(height: 8),
                     _buildMatchTypeIndicator(),
                     SizedBox(height: 8),
-                   _buildUserNameSection(),
+                    _buildUserNameSection(),
                   ],
                 ),
               ),
@@ -585,22 +611,30 @@ class _GameScreenState extends State<GameScreen> {
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_vs_friend.png',
                     label: S.of(context).vsFriend,
-                    onPressed: () => _showFriendGameDialog(context),
+                    onPressed: () {
+                      if (!_isDisposed) _showFriendGameDialog(context);
+                    },
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_lessons.png',
                     label: S.of(context).tutorial,
-                    onPressed: () => _showTutorial(context),
+                    onPressed: () {
+                      if (!_isDisposed) _showTutorial(context);
+                    },
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_vs_computer.png',
                     label: S.of(context).vsCpu,
-                    onPressed: () => _showComputerGameDialog(context),
+                    onPressed: () {
+                      if (!_isDisposed) _showComputerGameDialog(context);
+                    },
                   ),
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_online.png',
                     label: S.of(context).online,
-                    onPressed: () => _showOnlineGameDialog(context),
+                    onPressed: () {
+                      if (!_isDisposed) _showOnlineGameDialog(context);
+                    },
                   ),
                 ],
               ),
@@ -612,11 +646,18 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _buildNotificationsIcon() {
-    if (_currentUser == null) return Icon(Icons.message, size: 30.0, color: Colors.white);
+    if (_currentUser == null || !_isInitialized) {
+      return Icon(Icons.message, size: 30.0, color: Colors.white);
+    }
 
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: GameInvitationService().getPendingInvitations(_currentUser!.uid),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          print('Error en StreamBuilder de notificaciones: ${snapshot.error}');
+          return Icon(Icons.notifications, color: Colors.white, size: 30);
+        }
+
         final invitations = snapshot.data ?? [];
         final hasInvitations = invitations.isNotEmpty;
 
@@ -624,7 +665,11 @@ class _GameScreenState extends State<GameScreen> {
           children: [
             IconButton(
               icon: Icon(Icons.notifications, color: Colors.white, size: 30),
-              onPressed: () => _showNotificationsDialog(context, invitations),
+              onPressed: () {
+                if (!_isDisposed) {
+                  _showNotificationsDialog(context, invitations);
+                }
+              },
             ),
             if (hasInvitations)
               Positioned(

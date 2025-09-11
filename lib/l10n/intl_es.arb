@@ -234,6 +234,42 @@
   "yourTemporaryName": "Tu nombre temporal",
   "loginToAccessFeatures": "Para acceder a todas las funciones y guardar tu progreso, inicia sesión con tu cuenta.",
   "continueAsGuest": "Continuar como invitado",
+  "loginToSaveProgress": "Inicia sesión para guardar tu progreso",
+  "errorLogin": "Error al iniciar sesión",
+  "loggedInAs": "Sesión iniciada como",
+  "pleaseFillAllFields": "Por favor completa todos los campos",
+  "errorCreateAccount": "Error al crear la cuenta",
+  "accountCreated": "Cuenta creada exitosamente. Verifica tu email.",
+  "tapHereForFeatures": "Toca aquí para acceder a todas las funciones",
+  "verifyYourEmail": "Verifica tu correo electrónico",
+  "invalidCredentials": "Credenciales incorrectas",
+  "understood": "Entendido",
+  "verificationEmailSent": "Hemos enviado un enlace de verificación a tu correo electrónico. Por favor, verifica tu correo para activar tu cuenta y acceder a todas las funciones.",
+  "accountCreatedUpdt": "¡Cuenta creada exitosamente!",
+  "resendEmail": "Reenviar email",
+  "errorResendEmail": "Error al reenviar email",
+  "verificationEmailResent": "Email de verificación reenviado",
+  "verifyEmail": "Verifica tu correo electrónico",
+  "emailVerifiedSuccess": "¡Email verificado correctamente! Ahora puedes acceder a todas las funciones.",
+  "tapPhotoToChange": "Toca la foto para cambiarla"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

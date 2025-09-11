@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:tekoplay/core/service/firestore_service.dart';
 import 'package:tekoplay/core/utils/constants.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import '../../app.dart';
 import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
@@ -19,18 +20,250 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObserver {
   String _appVersion = '';
   double _musicVolume = 0.5;
   User? _currentUser;
   String? _currentPhotoUrl;
+  bool _isEmailVerified = true;
+  Timer? _emailVerificationTimer;
+  bool _isEmailVerificationDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAppVersion();
     _loadMusicVolume();
     _loadCurrentUser();
+    _startEmailVerificationCheck();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _emailVerificationTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startEmailVerificationCheck() {
+    _emailVerificationTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      await _checkEmailVerification();
+    });
+  }
+
+  Future<void> _checkEmailVerification() async {
+    final user = AuthService().getCurrentUser();
+    if (user != null) {
+      await user.reload();
+      final updatedUser = FirebaseAuth.instance.currentUser;
+
+      if (updatedUser != null) {
+        final wasVerified = _isEmailVerified;
+        final isVerified = await AuthService().canAccessApp();
+
+        if (!wasVerified && isVerified) {
+          await AuthService().checkEmailVerificationAndCreateUser();
+
+          if (_isEmailVerificationDialogOpen && mounted) {
+            Navigator.of(context).pop();
+            _isEmailVerificationDialogOpen = false;
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(S.of(context).emailVerifiedSuccess),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+
+        setState(() {
+          _currentUser = updatedUser;
+          _isEmailVerified = isVerified;
+        });
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _checkEmailVerification();
+    }
+  }
+
+  // Dialog para mostrar cuando el email no está verificado
+  void _showEmailVerificationDialog(BuildContext context) {
+    _isEmailVerificationDialogOpen = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.email_outlined,
+                  size: 64,
+                  color: Color(0xFFEC7A34),
+                ),
+                SizedBox(height: 16),
+                Text(
+                 S.of(context).verifyEmail,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  S.of(context).verificationEmailSent,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black54,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 24),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final success = await AuthService().resendEmailVerification();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success
+                                ? S.of(context).verificationEmailResent
+                                : S.of(context).errorResendEmail),
+                            backgroundColor: success ? Colors.green : Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    icon: Icon(Icons.refresh),
+                    label: Text(S.of(context).resendEmail),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 12),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      _isEmailVerificationDialogOpen = false;
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade300,
+                      foregroundColor: Colors.black87,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(S.of(context).close),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).then((_) {
+      _isEmailVerificationDialogOpen = false;
+    });
+  }
+
+
+  void _showEmailVerificationSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.mark_email_read_outlined,
+                  size: 64,
+                  color: Colors.green,
+                ),
+                SizedBox(height: 16),
+                Text(
+                 S.of(context).accountCreatedUpdt,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 12),
+                Text(
+                 S.of(context).verificationEmailSent,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black54,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 24),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFFEC7A34),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(S.of(context).understood),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _loadMusicVolume() async {
@@ -66,9 +299,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _loadCurrentUser() async {
     final user = AuthService().getCurrentUser();
+    final canAccess = await AuthService().canAccessApp();
+
     setState(() {
       _currentUser = user;
+      _isEmailVerified = canAccess;
     });
+
     if (user != null) {
       final userData = await FirestoreService().getUser(user.uid);
       if (userData != null && mounted) {
@@ -87,6 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (user != null) {
         setState(() {
           _currentUser = user;
+          _isEmailVerified = true;
           _currentPhotoUrl = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -122,6 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (user != null) {
         setState(() {
           _currentUser = user;
+          _isEmailVerified = true;
           _currentPhotoUrl = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -289,9 +528,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed:
-                              isLoading
-                                  ? null
-                                  : () => Navigator.of(context).pop(),
+                          isLoading
+                              ? null
+                              : () => Navigator.of(context).pop(),
                         ),
                       ],
                     ),
@@ -340,84 +579,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed:
-                            isLoading
-                                ? null
-                                : () async {
-                                  if (emailController.text.trim().isEmpty ||
-                                      passwordController.text.trim().isEmpty ||
-                                      nameController.text.trim().isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S.of(context).fillAllFields,
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                    return;
-                                  }
+                        isLoading
+                            ? null
+                            : () async {
+                          if (emailController.text.trim().isEmpty ||
+                              passwordController.text.trim().isEmpty ||
+                              nameController.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  S.of(context).fillAllFields,
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
 
-                                  setDialogState(() {
-                                    isLoading = true;
-                                  });
+                          setDialogState(() {
+                            isLoading = true;
+                          });
 
-                                  try {
-                                    final user = await AuthService()
-                                        .registerWithEmail(
-                                          emailController.text.trim(),
-                                          passwordController.text.trim(),
-                                          nameController.text.trim(),
-                                        );
+                          try {
+                            final user = await AuthService()
+                                .registerWithEmail(
+                              emailController.text.trim(),
+                              passwordController.text.trim(),
+                              nameController.text.trim(),
+                            );
 
-                                    if (!mounted) return;
+                            if (!mounted) return;
 
-                                    Navigator.of(context).pop();
+                            Navigator.of(context).pop();
 
-                                    if (user != null) {
-                                      setState(() {
-                                        _currentUser = user;
-                                        _currentPhotoUrl =
-                                            null;
-                                      });
-                                      _loadCurrentUser();
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            S
-                                                .of(context)
-                                                .accountCreatedCheckEmail,
-                                          ),
-                                          backgroundColor: Colors.green,
-                                          duration: const Duration(seconds: 4),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            S.of(context).errorCreatingAccount,
-                                          ),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (!mounted) return;
-                                    Navigator.of(context).pop();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S.of(context).errorCreatingAccount,
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                },
+                            if (user != null) {
+                              setState(() {
+                                _currentUser = user;
+                                _isEmailVerified = false;
+                                _currentPhotoUrl = null;
+                              });
+
+                              _showEmailVerificationSuccessDialog(context);
+                            } else {
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    S.of(context).errorCreatingAccount,
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  S.of(context).errorCreatingAccount,
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
@@ -427,24 +654,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         child:
-                            isLoading
-                                ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : Text(
-                                  S.of(context).createAccount,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
+                        isLoading
+                            ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : Text(
+                          S.of(context).createAccount,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -494,9 +721,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed:
-                              isLoading
-                                  ? null
-                                  : () => Navigator.of(context).pop(),
+                          isLoading
+                              ? null
+                              : () => Navigator.of(context).pop(),
                         ),
                       ],
                     ),
@@ -533,12 +760,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed:
-                            isLoading
-                                ? null
-                                : () {
-                                  Navigator.of(context).pop();
-                                  _showForgotPasswordDialog(context);
-                                },
+                        isLoading
+                            ? null
+                            : () {
+                          Navigator.of(context).pop();
+                          _showForgotPasswordDialog(context);
+                        },
                         child: Text(
                           S.of(context).forgotPassword,
                           style: const TextStyle(
@@ -555,76 +782,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed:
-                            isLoading
-                                ? null
-                                : () async {
-                                  if (emailController.text.trim().isEmpty ||
-                                      passwordController.text.trim().isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S.of(context).fillAllFields,
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                    return;
-                                  }
+                        isLoading
+                            ? null
+                            : () async {
+                          if (emailController.text.trim().isEmpty ||
+                              passwordController.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  S.of(context).fillAllFields,
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
 
-                                  setDialogState(() {
-                                    isLoading = true;
-                                  });
+                          setDialogState(() {
+                            isLoading = true;
+                          });
 
-                                  try {
-                                    final user = await AuthService()
-                                        .signInWithEmail(
-                                          emailController.text.trim(),
-                                          passwordController.text.trim(),
-                                        );
+                          try {
+                            final user = await AuthService()
+                                .signInWithEmail(
+                              emailController.text.trim(),
+                              passwordController.text.trim(),
+                            );
 
-                                    if (!mounted) return;
+                            if (!mounted) return;
 
-                                    Navigator.of(context).pop();
+                            Navigator.of(context).pop();
 
-                                    if (user != null) {
-                                      setState(() {
-                                        _currentUser = user;
-                                      });
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            "${S.of(context).welcome} ${user.displayName ?? user.email}",
-                                          ),
-                                          backgroundColor: Colors.green,
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            S.of(context).emailNotVerified,
-                                          ),
-                                          backgroundColor: Colors.orange,
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (!mounted) return;
-                                    Navigator.of(context).pop();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S.of(context).errorSignInEmail,
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                },
+                            if (user != null) {
+                              setState(() {
+                                _currentUser = user;
+                                _isEmailVerified = true;
+                              });
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    "${S.of(context).welcome} ${user.displayName ?? user.email}",
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } else {
+                              final currentUser = AuthService().getCurrentUser();
+                              if (currentUser != null && !currentUser.emailVerified) {
+                                setState(() {
+                                  _currentUser = currentUser;
+                                  _isEmailVerified = false;
+                                });
+                                _showEmailVerificationDialog(context);
+                              } else {
+                                ScaffoldMessenger.of(
+                                  context,
+                                ).showSnackBar(
+                                  SnackBar(
+                                    content: Text(S.of(context).invalidCredentials),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  S.of(context).errorSignInEmail,
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
@@ -634,24 +869,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         child:
-                            isLoading
-                                ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : Text(
-                                  S.of(context).logIn,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
+                        isLoading
+                            ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : Text(
+                          S.of(context).logIn,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -700,9 +935,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed:
-                              isLoading
-                                  ? null
-                                  : () => Navigator.of(context).pop(),
+                          isLoading
+                              ? null
+                              : () => Navigator.of(context).pop(),
                         ),
                       ],
                     ),
@@ -736,60 +971,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed:
-                            isLoading
-                                ? null
-                                : () async {
-                                  if (emailController.text.trim().isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S.of(context).enterValidEmail,
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                    return;
-                                  }
+                        isLoading
+                            ? null
+                            : () async {
+                          if (emailController.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  S.of(context).enterValidEmail,
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
 
-                                  setDialogState(() {
-                                    isLoading = true;
-                                  });
+                          setDialogState(() {
+                            isLoading = true;
+                          });
 
-                                  try {
-                                    await FirebaseAuth.instance
-                                        .sendPasswordResetEmail(
-                                          email: emailController.text.trim(),
-                                        );
+                          try {
+                            await FirebaseAuth.instance
+                                .sendPasswordResetEmail(
+                              email: emailController.text.trim(),
+                            );
 
-                                    if (!mounted) return;
+                            if (!mounted) return;
 
-                                    Navigator.of(context).pop();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S.of(context).passwordResetSent,
-                                        ),
-                                        backgroundColor: Colors.green,
-                                        duration: const Duration(seconds: 4),
-                                      ),
-                                    );
-                                  } catch (e) {
-                                    if (!mounted) return;
-                                    setDialogState(() {
-                                      isLoading = false;
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S
-                                              .of(context)
-                                              .errorSendingPasswordReset,
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                },
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  S.of(context).passwordResetSent,
+                                ),
+                                backgroundColor: Colors.green,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            setDialogState(() {
+                              isLoading = false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  S
+                                      .of(context)
+                                      .errorSendingPasswordReset,
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
@@ -799,24 +1034,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         child:
-                            isLoading
-                                ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : Text(
-                                  S.of(context).send,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
+                        isLoading
+                            ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : Text(
+                          S.of(context).send,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -844,6 +1079,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: Column(
         children: [
+          if (_currentUser != null && !_isEmailVerified)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(16.0),
+              child: Card(
+                color: Colors.orange.shade50,
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.orange, width: 1),
+                ),
+                child: InkWell(
+                  onTap: () => _showEmailVerificationDialog(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_outlined,
+                          color: Colors.orange.shade700,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                               S.of(context).verifyYourEmail,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade700,
+                                ),
+                              ),
+                              Text(
+                                S.of(context).tapHereForFeatures,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.orange.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.orange.shade600,
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           if (_currentUser != null) _buildUserSection(),
 
           Expanded(
@@ -852,17 +1145,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 _currentUser == null
                     ? _buildSettingsCard(
-                      title: S.of(context).addAccount,
-                      subtitle: S.of(context).signInAccount,
-                      icon: Icons.account_circle_outlined,
-                      onTap: () => _showLoginDialog(context),
-                    )
+                  title: S.of(context).addAccount,
+                  subtitle: S.of(context).signInAccount,
+                  icon: Icons.account_circle_outlined,
+                  onTap: () => _showLoginDialog(context),
+                )
                     : _buildSettingsCard(
-                      title: S.of(context).signOut,
-                      subtitle: S.of(context).signOutAccount,
-                      icon: Icons.logout,
-                      onTap: () => _showLogoutDialog(context),
-                    ),
+                  title: S.of(context).signOut,
+                  subtitle: S.of(context).signOutAccount,
+                  icon: Icons.logout,
+                  onTap: () => _showLogoutDialog(context),
+                ),
 
                 _buildSettingsCard(
                   title: S.of(context).gameMusic,
@@ -876,14 +1169,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.language,
                   onTap: () {
                     _showLanguageDialog(context);
-                  },
-                ),
-                _buildSettingsCard(
-                  title: S.of(context).notifications,
-                  subtitle: S.of(context).customNotifications,
-                  icon: Icons.notification_important_sharp,
-                  onTap: () {
-                    _showNotificationsDialog(context);
                   },
                 ),
                 _buildSettingsCard(
@@ -975,7 +1260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      'Toca la foto para cambiarla',
+                     S.of(context).tapPhotoToChange,
                       style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFFEC7A34),
@@ -1529,9 +1814,9 @@ void _showLanguageDialog(BuildContext context) {
 }
 
 Future<void> _changeLanguage(
-  String selectedLanguage,
-  BuildContext context,
-) async {
+    String selectedLanguage,
+    BuildContext context,
+    ) async {
   Locale newLocale;
   switch (selectedLanguage) {
     case 'Inglés':

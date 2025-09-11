@@ -233,7 +233,44 @@
   "playingAsGuest": "Playing as guest!",
   "yourTemporaryName": "Your temporary name",
   "loginToAccessFeatures": "To access all features and save your progress, log in with your account.",
-  "continueAsGuest": "Continue as guest"
+  "continueAsGuest": "Continue as guest",
+  "loginToSaveProgress": "Log in to save your progress",
+  "errorLogin": "Error logging in",
+  "loggedInAs": "Logged in as",
+  "pleaseFillAllFields": "Please fill in all fields",
+  "errorCreateAccount": "Error creating account",
+  "accountCreated": "Account created successfully. Verify your email.",
+  "tapHereForFeatures": "Tap here to access all features",
+  "verifyYourEmail": "Verify your email",
+  "invalidCredentials": "Invalid credentials",
+  "understood": "Understood",
+  "verificationEmailSent": "We have sent a verification link to your email. Please check your email to activate your account and access all features.",
+  "accountCreatedUpdt": "Account created successfully!",
+  "resendEmail": "Resend email",
+  "errorResendEmail": "Error resending email",
+  "verificationEmailResent": "Verification email resent",
+  "verifyEmail": "Verify your email",
+  "emailVerifiedSuccess": "Email verified successfully! You can now access all features.",
+  "tapPhotoToChange": "Tap the photo to change it"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
