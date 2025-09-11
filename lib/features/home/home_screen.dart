@@ -618,7 +618,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                 _isEmailVerified = false;
                               });
 
-                              // Mostrar mensaje diferente para registro
                               _showEmailVerificationSuccessDialog(context);
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -1035,10 +1034,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: const Color(0xFFEC7A34),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications, color: Colors.white),
-            onPressed: () {},
-          ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () async {
