@@ -10,9 +10,11 @@ import '../../core/service/online_match_chess_game_service.dart';
 import '../../generated/l10n.dart';
 import '../../core/utils/game_result.dart';
 import '../../core/utils/game_type.dart';
+import '../adds/BannerAdWidget.dart';
 
 class OnlineChessScreen extends StatefulWidget {
-  const OnlineChessScreen({super.key});
+  final String matchType;
+  const OnlineChessScreen({super.key, required this.matchType});
 
   @override
   State<OnlineChessScreen> createState() => _OnlineChessScreenState();
@@ -23,10 +25,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   String? _lastMoveFrom;
   String? _lastMoveTo;
   String? _lastMovePromotion;
-  // Estados principales
+
   OnlineGameState _gameState = OnlineGameState.timeSelection;
 
-  // Configuración de tiempo
   int? _selectedTimeMinutes;
   final List<TimeOption> _timeOptions = [
     TimeOption(minutes: null, display: 'Sin tiempo'),
@@ -95,7 +96,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         child: Column(
           children: [
             Text(
-             S.of(context).selectGameTime,
+              S.of(context).selectGameTime,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 24,
@@ -239,11 +240,12 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   Future<String?> _findOrCreateGame(int userRanking) async {
     try {
-      final waitingGames = await OnlineMatchmakingChessService().findWaitingGames(
-        gameType: 'Ajedrez',
-        userRanking: userRanking,
-        timeMinutes: _selectedTimeMinutes,
-      );
+      final waitingGames = await OnlineMatchmakingChessService()
+          .findWaitingGames(
+            gameType: 'Ajedrez',
+            userRanking: userRanking,
+            timeMinutes: _selectedTimeMinutes,
+          );
 
       if (waitingGames.isNotEmpty) {
         final game = waitingGames.first;
@@ -302,8 +304,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     final wasMyTurn = _isMyTurn;
     _isMyTurn = game.isPlayerTurn(currentUser!.uid);
 
-    if (_isMyTurn && !_isProcessingMove) {
-    }
+    if (_isMyTurn && !_isProcessingMove) {}
 
     bool shouldSync = false;
 
@@ -326,13 +327,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _handleGameEnd(game);
     }
 
-
     if (wasMyTurn != _isMyTurn) {
       print(
         'Turn changed: ${wasMyTurn ? "My turn" : "Opponent turn"} -> ${_isMyTurn ? "My turn" : "Opponent turn"}',
       );
-      if (_isMyTurn) {
-      }
+      if (_isMyTurn) {}
     }
 
     setState(() {});
@@ -412,8 +411,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         print('Syncing board: $currentFen -> $targetFen');
         controller.loadFen(targetFen);
 
-        if (_isMyTurn) {
-        }
+        if (_isMyTurn) {}
       }
     } catch (e) {
       print('Error syncing game state: $e');
@@ -570,13 +568,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         additionalData: {
           'gameMode': 'online_matchmaking',
           'isRanked': isRanked,
-          'timeControl': _selectedTimeMinutes != null
-              ? '${_selectedTimeMinutes!} minutos'
-              : 'Sin límite',
+          'timeControl':
+              _selectedTimeMinutes != null
+                  ? '${_selectedTimeMinutes!} minutos'
+                  : 'Sin límite',
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
-          'opponentId': _currentGame?.hostId == currentUser!.uid
-              ? _currentGame?.guestId
-              : _currentGame?.hostId,
+          'opponentId':
+              _currentGame?.hostId == currentUser!.uid
+                  ? _currentGame?.guestId
+                  : _currentGame?.hostId,
           'gameId': _currentGame?.id,
           'finalFEN': controller.getFen(),
           'totalMoves': _currentGame?.moves.length ?? 0,
@@ -605,7 +605,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       }
     }
   }
-
 
   void _cancelMatchmaking(String reason) {
     _matchmakingTimer?.cancel();
@@ -681,7 +680,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
         elevation: 0,
-        title: Text(S.of(context).searchingOpponent, style: TextStyle(color: Colors.white)),
+        title: Text(
+          S.of(context).searchingOpponent,
+          style: TextStyle(color: Colors.white),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
         leading: IconButton(
           icon: Icon(Icons.arrow_back),
@@ -742,7 +744,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
         elevation: 0,
-        title: Text(S.of(context).onlineGame, style: TextStyle(color: Colors.white)),
+        title: Text(
+          S.of(context).onlineGame,
+          style: TextStyle(color: Colors.white),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
@@ -783,8 +788,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                 ),
               ),
             ),
-
+          const BannerAdWidget(),
           SizedBox(height: 16),
+
         ],
       ),
     );
@@ -900,7 +906,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 }
 
-
 enum OnlineGameState { timeSelection, searching, playing }
 
 class TimeOption {
@@ -909,5 +914,3 @@ class TimeOption {
 
   TimeOption({required this.minutes, required this.display});
 }
-
-

@@ -3,6 +3,7 @@ import 'package:tekoplay/core/service/firestore_service.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
 import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
+import '../adds/BannerAdWidget.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
@@ -308,6 +309,7 @@ class _RankingScreenState extends State<RankingScreen>
                           children: [
                             _buildUserRankCard(gameType),
                             Expanded(child: _buildLeaderboardList(gameType)),
+                            const BannerAdWidget(),
                           ],
                         ),
                       );

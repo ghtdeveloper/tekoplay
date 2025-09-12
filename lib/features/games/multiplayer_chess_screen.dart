@@ -9,6 +9,7 @@ import '../../core/service/firestore_service.dart';
 import '../../core/utils/game_type.dart';
 import '../../generated/l10n.dart';
 import '../../core/utils/game_result.dart';
+import '../adds/BannerAdWidget.dart';
 
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
@@ -690,7 +691,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 ),
               ),
             ),
-
+          const BannerAdWidget(),
           SizedBox(height: 16),
         ],
       ),

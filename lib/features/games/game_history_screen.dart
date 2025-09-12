@@ -6,6 +6,7 @@ import '../../core/models/game_stats.dart';
 import '../../core/service/auth_service.dart';
 import '../../core/models/game_match.dart';
 import '../../generated/l10n.dart';
+import '../adds/BannerAdWidget.dart';
 
 class GameHistoryScreen extends StatefulWidget {
   const GameHistoryScreen({super.key});
@@ -314,6 +315,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
                   : '${S.of(context).youHaventPlayed} ${gameType.displayName} ${S.of(context).still}',
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
+            const BannerAdWidget(),
           ],
         ),
       );
@@ -492,13 +494,18 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
                         children: [
                           _buildSummaryCard(gameType),
                           Expanded(child: _buildGameHistoryList(gameType)),
+                          const BannerAdWidget(),
                         ],
+
                       ),
                     );
                   }).toList(),
+
                 ],
               ),
+
     );
+
   }
 
   Widget getGameIcon(GameTypeModel gameType, {double size = 32}) {

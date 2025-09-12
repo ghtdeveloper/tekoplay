@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../core/models/domino_tile.dart';
 import '../../generated/l10n.dart';
+import '../adds/BannerAdWidget.dart';
 
 class DominoController {
   List<DominoTile> playerTiles = [];
@@ -298,6 +299,7 @@ class _DominoImmersiveTutorialScreenState
       body: SafeArea(
         child: Column(
           children: [
+            const BannerAdWidget(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Column(

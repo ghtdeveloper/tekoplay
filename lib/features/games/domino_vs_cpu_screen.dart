@@ -6,6 +6,8 @@ import '../../core/models/domino_tile.dart';
 import '../../core/service/firestore_service.dart';
 import '../../core/utils/game_result.dart';
 import '../../core/utils/game_type.dart';
+import '../adds/BannerAdWidget.dart';
+import '../adds/InterstitialAdHelper.dart';
 
 enum GameState { playerTurn, computerTurn, gameOver, roundEnd }
 enum GameResult { playerWins, computerWins, draw, none }
@@ -686,6 +688,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   DateTime? _gameStartTime;
   User? get currentUser => FirebaseAuth.instance.currentUser;
   final FirestoreService _firestoreService = FirestoreService();
+  late InterstitialAdHelper _interstitialHelper;
 
   // Animaciones
   late AnimationController _pointsAnimationController;
@@ -722,38 +725,43 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showRoundSelectionDialog();
     });
+    _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
 
   @override
   void dispose() {
     _pointsAnimationController.dispose();
+    _interstitialHelper.dispose();
     super.dispose();
   }
 
   void _showRoundSelectionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text('Selecciona las rondas'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('¿Al mejor de cuántas rondas quieres jugar?',
-                style: TextStyle(fontSize: 16)),
-            SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildRoundButton(3),
-                _buildRoundButton(5),
-                _buildRoundButton(7),
-              ],
-            ),
-          ],
+    _interstitialHelper.showAdIfReady(onComplete: () {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text('Selecciona las rondas'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('¿Al mejor de cuántas rondas quieres jugar?',
+                  style: TextStyle(fontSize: 16)),
+              SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildRoundButton(3),
+                  _buildRoundButton(5),
+                  _buildRoundButton(7),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    });
+
   }
 
   Widget _buildRoundButton(int rounds) {

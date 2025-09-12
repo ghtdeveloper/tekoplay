@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import '../../generated/l10n.dart';
+import '../adds/BannerAdWidget.dart';
 
 class ChessImmersiveTutorialScreen extends StatefulWidget {
   const ChessImmersiveTutorialScreen({super.key});
@@ -148,6 +149,7 @@ class _ChessImmersiveTutorialScreenState
       body: SafeArea(
         child: Column(
           children: [
+            const BannerAdWidget(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Column(
@@ -236,6 +238,7 @@ class _ChessImmersiveTutorialScreenState
                 ],
               ),
             ),
+            const BannerAdWidget(),
           ],
         ),
       ),

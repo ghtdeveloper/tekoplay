@@ -9,6 +9,7 @@ import 'dart:async';
 import '../../app.dart';
 import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
+import '../adds/BannerAdWidget.dart';
 import '../games/widget_profile_image_editor.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -1203,6 +1204,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
+          const BannerAdWidget(),
         ],
       ),
     );

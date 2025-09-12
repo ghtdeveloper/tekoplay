@@ -9,6 +9,8 @@ import '../../core/service/firestore_service.dart';
 import '../../generated/l10n.dart';
 import '../../core/utils/game_type.dart';
 import '../../core/utils/game_result.dart';
+import '../adds/BannerAdWidget.dart';
+import '../adds/InterstitialAdHelper.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
@@ -22,6 +24,7 @@ class ChessVsComputerScreen extends StatefulWidget {
 class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   late Stockfish _stockfish;
   ChessBoardController controller = ChessBoardController();
+  late InterstitialAdHelper _interstitialHelper;
 
   int playerScore = 0;
   int cpuScore = 0;
@@ -90,7 +93,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         if (_playerColor == PlayerColor.black) _makeCpuMove();
       }
     });
+    _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
+
+
 
   Future<void> _initializeStockfish() async {
     _stockfish.stdin = "uci";
@@ -354,21 +360,22 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   void _restartGame() {
-    _gameEnded = false;
-    _engineThinking = false;
-    _gameStartTime = DateTime.now();
-    controller.resetBoard();
+    _interstitialHelper.showAdIfReady(onComplete: () {
+      _gameEnded = false;
+      _engineThinking = false;
+      _gameStartTime = DateTime.now();
+      controller.resetBoard();
 
-    if (_isStockfishReady) {
-      final fen = controller.getFen();
-      _stockfish.stdin = "position fen $fen";
+      if (_isStockfishReady) {
+        final fen = controller.getFen();
+        _stockfish.stdin = "position fen $fen";
 
-      if (_playerColor == PlayerColor.black) {
-        _makeCpuMove();
+        if (_playerColor == PlayerColor.black) {
+          _makeCpuMove();
+        }
       }
-    }
-
-    setState(() {});
+      setState(() {});
+    });
   }
 
   Widget _buildPlayerAvatar() {
@@ -409,6 +416,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   void dispose() {
     if (_isStockfishReady) _stockfish.stdin = "quit";
     _stockfish.dispose();
+    _interstitialHelper.dispose();
     super.dispose();
   }
 
@@ -576,6 +584,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                 ),
               ),
             ),
+            const BannerAdWidget(),
           ],
         ),
       ),

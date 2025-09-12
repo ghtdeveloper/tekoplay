@@ -12,6 +12,7 @@ import '../../core/service/firestore_service.dart';
 import '../../core/service/notification_service.dart';
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
+import '../adds/BannerAdWidget.dart';
 import '../home/home_screen.dart';
 import '../settings/settings_screen.dart';
 import 'chess_vs_cpu_screen.dart';
@@ -540,6 +541,7 @@ class _GameScreenState extends State<GameScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            const BannerAdWidget(),
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16.0,
@@ -639,6 +641,7 @@ class _GameScreenState extends State<GameScreen> {
                 ],
               ),
             ),
+            const BannerAdWidget()
           ],
         ),
       ),
@@ -1132,7 +1135,9 @@ class _GameScreenState extends State<GameScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => OnlineChessScreen(),
+          builder: (context) => OnlineChessScreen(
+            matchType: matchType,
+          ),
         ),
       );
     } else if (isDomino) {

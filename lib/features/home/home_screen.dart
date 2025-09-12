@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 
 import '../../generated/l10n.dart';
+import '../adds/BannerAdWidget.dart';
+import '../adds/InterstitialAdHelper.dart';
 import '../games/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
@@ -23,6 +25,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   bool _isEmailVerified = true;
   Timer? _emailVerificationTimer;
   bool _isEmailVerificationDialogOpen = false;
+  late InterstitialAdHelper _interstitialHelper;
 
   @override
   void initState() {
@@ -31,6 +34,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _initMusic();
     _loadCurrentUser();
     _startEmailVerificationCheck();
+    _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
 
   @override
@@ -38,6 +42,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _audioPlayer.dispose();
     _emailVerificationTimer?.cancel();
+    _interstitialHelper.dispose();
     super.dispose();
   }
 
@@ -127,109 +132,111 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _showEmailVerificationDialog(context);
       return;
     }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                Text(
-                  S.of(context).selectGameType,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 30),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => GameScreen(
-                            gameType: gameType,
-                            matchType: S.of(context).fun,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: Icon(Icons.sports_esports),
-                    label: Text(
-                      S.of(context).fun,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CAF50),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: 15),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => GameScreen(
-                            gameType: gameType,
-                            matchType: S.of(context).bet,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: Icon(Icons.monetization_on),
-                    label: Text(
-                      S.of(context).bet,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF9800),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-              ],
+    _interstitialHelper.showAdIfReady(onComplete: () {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-          ),
-        );
-      },
-    );
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: IconButton(
+                      icon: Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  Text(
+                    S.of(context).selectGameType,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 30),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GameScreen(
+                              gameType: gameType,
+                              matchType: S.of(context).fun,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: Icon(Icons.sports_esports),
+                      label: Text(
+                        S.of(context).fun,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4CAF50),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: 15),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GameScreen(
+                              gameType: gameType,
+                              matchType: S.of(context).bet,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: Icon(Icons.monetization_on),
+                      label: Text(
+                        S.of(context).bet,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF9800),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    });
   }
+
 
   void _showEmailVerificationDialog(BuildContext context) {
     _isEmailVerificationDialogOpen = true;
@@ -1055,6 +1062,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ),
       body: Column(
         children: [
+          const BannerAdWidget(),
           if (_currentUser != null && !_isEmailVerified)
             Container(
               width: double.infinity,
@@ -1217,6 +1225,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
+          const BannerAdWidget(),
         ],
       ),
     );
