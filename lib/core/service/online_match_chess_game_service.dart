@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/multiplayer_game_match_chess.dart';
 
@@ -12,34 +11,108 @@ class OnlineMatchmakingChessService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  /// Busca partidas en espera con un rango de diferencia de hasta 300 puntos
   Future<List<MultiplayerGameMatch>> findWaitingGames({
     required String gameType,
     required int userRanking,
     required int? timeMinutes,
   }) async {
     try {
-      final query =
-      await _firestore
+      const int maxRankingDifference = 300;
+
+      final query = await _firestore
           .collection('multiplayer_games')
           .where('status', isEqualTo: 'waiting')
           .where('gameType', isEqualTo: gameType)
           .where('gameSettings.timeMinutes', isEqualTo: timeMinutes)
           .where(
         'gameSettings.hostRanking',
-        isGreaterThanOrEqualTo: userRanking - 20,
+        isGreaterThanOrEqualTo: userRanking - maxRankingDifference,
       )
           .where(
         'gameSettings.hostRanking',
-        isLessThanOrEqualTo: userRanking + 20,
+        isLessThanOrEqualTo: userRanking + maxRankingDifference,
       )
-          .limit(1)
+          .orderBy('gameSettings.hostRanking')
+          .orderBy('createdAt')
+          .limit(5)
           .get();
 
-      return query.docs
+      final games = query.docs
           .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
           .toList();
+
+      if (games.isNotEmpty) {
+        games.sort((a, b) {
+          final diffA = ((a.gameSettings!['hostRanking'] as int) - userRanking).abs();
+          final diffB = ((b.gameSettings!['hostRanking'] as int) - userRanking).abs();
+          return diffA.compareTo(diffB);
+        });
+      }
+
+      return games;
     } catch (e) {
       print('Error finding waiting games: $e');
+      return [];
+    }
+  }
+
+
+  Future<List<MultiplayerGameMatch>> findWaitingGamesProgressive({
+    required String gameType,
+    required int userRanking,
+    required int? timeMinutes,
+    int searchTimeSeconds = 0,
+  }) async {
+    try {
+      // Rangos progresivos basados en el tiempo de búsqueda
+      int rankingRange;
+      if (searchTimeSeconds < 15) {
+        rankingRange = 100; // Primeros 15 segundos: rango de ±100 puntos
+      } else if (searchTimeSeconds < 30) {
+        rankingRange = 200; // 15-30 segundos: rango de ±200 puntos
+      } else {
+        rankingRange = 300; // Después de 30 segundos: rango de ±300 puntos
+      }
+
+      final int minRanking = userRanking - rankingRange;
+      final int maxRanking = userRanking + rankingRange;
+
+      final query = await _firestore
+          .collection('multiplayer_games')
+          .where('status', isEqualTo: 'waiting')
+          .where('gameType', isEqualTo: gameType)
+          .where('gameSettings.timeMinutes', isEqualTo: timeMinutes)
+          .where(
+        'gameSettings.hostRanking',
+        isGreaterThanOrEqualTo: minRanking,
+      )
+          .where(
+        'gameSettings.hostRanking',
+        isLessThanOrEqualTo: maxRanking,
+      )
+          .orderBy('gameSettings.hostRanking')
+          .orderBy('createdAt')
+          .limit(5)
+          .get();
+
+      final games = query.docs
+          .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
+          .toList();
+
+      if (games.isNotEmpty) {
+        games.sort((a, b) {
+          final hostRankingA = a.gameSettings!['hostRanking'] as int;
+          final hostRankingB = b.gameSettings!['hostRanking'] as int;
+          final diffA = (hostRankingA - userRanking).abs();
+          final diffB = (hostRankingB - userRanking).abs();
+          return diffA.compareTo(diffB);
+        });
+      }
+
+      return games;
+    } catch (e) {
+      print('Error finding waiting games progressive: $e');
       return [];
     }
   }
