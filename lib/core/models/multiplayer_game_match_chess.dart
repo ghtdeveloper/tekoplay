@@ -28,6 +28,7 @@ class MultiplayerGameMatch {
   final String? lastMoveNotation;
   final bool isRanked;
   final int? betAmount;
+  final String? reason;
 
   MultiplayerGameMatch({
     required this.id,
@@ -51,6 +52,7 @@ class MultiplayerGameMatch {
     this.lastMoveNotation,
     this.isRanked = false,
     this.betAmount,
+    this.reason
   });
 
   factory MultiplayerGameMatch.fromFirestore(DocumentSnapshot doc) {
@@ -79,6 +81,7 @@ class MultiplayerGameMatch {
       lastMoveNotation: data['lastMoveNotation'],
       isRanked: data['isRanked'] ?? false,
       betAmount: data['betAmount'],
+      reason: data['reason'],
     );
   }
 
@@ -104,6 +107,7 @@ class MultiplayerGameMatch {
       'lastMoveNotation': lastMoveNotation,
       'isRanked': isRanked,
       'betAmount': betAmount,
+      'reason': reason,
     };
   }
 
@@ -121,6 +125,7 @@ class MultiplayerGameMatch {
     GameResultModel? result,
     String? lastMoveNotation,
     Map<String, dynamic>? gameSettings,
+    String? reason,
   }) {
     return MultiplayerGameMatch(
       id: id,
@@ -144,6 +149,7 @@ class MultiplayerGameMatch {
       lastMoveNotation: lastMoveNotation ?? this.lastMoveNotation,
       isRanked: isRanked,
       betAmount: betAmount,
+      reason: reason ?? this.reason
     );
   }
 
@@ -465,6 +471,7 @@ class MultiplayerGameService {
     required String gameId,
     required GameResultModel result,
     String? winnerId,
+    String? reason,
   }) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
@@ -474,7 +481,9 @@ class MultiplayerGameService {
         'result': result.toString().split('.').last,
         'winnerId': winnerId,
         'finishedAt': FieldValue.serverTimestamp(),
+        'reason':reason
       });
+
 
       final gameDoc = await gameRef.get();
       if (gameDoc.exists) {

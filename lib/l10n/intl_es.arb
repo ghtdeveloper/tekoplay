@@ -251,7 +251,18 @@
   "verificationEmailResent": "Email de verificación reenviado",
   "verifyEmail": "Verifica tu correo electrónico",
   "emailVerifiedSuccess": "¡Email verificado correctamente! Ahora puedes acceder a todas las funciones.",
-  "tapPhotoToChange": "Toca la foto para cambiarla"
+  "tapPhotoToChange": "Toca la foto para cambiarla",
+  "opponentLeft": "Oponente abandonó",
+  "opponentAbandoned": "El oponente abandonó la partida",
+  "opponentAbandonedMessage": "Tu oponente ha abandonado la partida.\n\n¡Has ganado automáticamente!",
+  "findNewOpponent": "Buscar nuevo oponente",
+  "abandonGame": "Abandonar partida",
+  "abandonGameWarning": "¿Estás seguro de que quieres abandonar la partida?\n\nSi abandonas, se contará como una derrota y perderás puntos.",
+  "continueGame": "Continuar jugando"
+
+
+
+
 
 
 

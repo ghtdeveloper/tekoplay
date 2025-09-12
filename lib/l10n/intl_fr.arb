@@ -250,7 +250,18 @@
   "verificationEmailResent": "E-mail de vérification renvoyé",
   "verifyEmail": "Vérifiez votre e-mail",
   "emailVerifiedSuccess": "E-mail vérifié avec succès ! Vous pouvez maintenant accéder à toutes les fonctionnalités.",
-  "tapPhotoToChange": "Touchez la photo pour la changer"
+  "tapPhotoToChange": "Touchez la photo pour la changer",
+  "opponentLeft": "L'adversaire a quitté",
+  "opponentAbandoned": "L'adversaire a abandonné la partie",
+  "opponentAbandonedMessage": "Votre adversaire a abandonné la partie.\n\nVous avez gagné automatiquement !",
+  "findNewOpponent": "Chercher un nouvel adversaire",
+  "abandonGame": "Abandonner la partie",
+  "abandonGameWarning": "Êtes-vous sûr de vouloir abandonner la partie ?\n\nSi vous quittez, cela comptera comme une défaite et vous perdrez des points.",
+  "continueGame": "Continuer à jouer"
+
+
+
+
 
 
 
