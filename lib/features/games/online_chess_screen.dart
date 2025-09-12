@@ -14,6 +14,7 @@ import '../../generated/l10n.dart';
 import '../../core/utils/game_result.dart';
 import '../../core/utils/game_type.dart';
 import '../adds/BannerAdWidget.dart';
+import '../adds/InterstitialAdHelper.dart';
 
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;
@@ -26,11 +27,10 @@ class OnlineChessScreen extends StatefulWidget {
 
 class _OnlineChessScreenState extends State<OnlineChessScreen>
     with WidgetsBindingObserver {
-  // Variables originales
   String? _lastMoveFrom;
   String? _lastMoveTo;
   String? _lastMovePromotion;
-
+  late InterstitialAdHelper _interstitialHelper;
   OnlineGameState _gameState = OnlineGameState.timeSelection;
 
   int? _selectedTimeMinutes;
@@ -88,6 +88,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeStockfish();
+    _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
 
   void _initializeStockfish() {
@@ -180,6 +181,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _stockfish!.stdin = "quit";
     }
     _stockfish?.dispose();
+    _interstitialHelper.dispose();
     super.dispose();
   }
 
@@ -591,25 +593,117 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _gameEnded = true;
     _playerTimer?.cancel();
 
-    if (_isPlayingAgainstBot) {
-      final result = isMyTimeout ? GameResultModel.loss : GameResultModel.win;
-      _recordGameResult(result);
-      _showGameEndDialog(
-        isMyTimeout ? S.of(context).youLost : S.of(context).youWon,
-      );
-    } else {
-      final result = isMyTimeout ? GameResultModel.loss : GameResultModel.win;
-      final winnerId =
-          isMyTimeout
-              ? _currentGame!.getOpponentId(currentUser!.uid)
-              : currentUser!.uid;
+    _showTimeoutDialog(isMyTimeout: isMyTimeout);
+
+    final result = isMyTimeout ? GameResultModel.loss : GameResultModel.win;
+    _recordGameResult(result);
+
+    if (!_isPlayingAgainstBot && _currentGame != null) {
+      final winnerId = isMyTimeout
+          ? _currentGame!.getOpponentId(currentUser!.uid)
+          : currentUser!.uid;
 
       MultiplayerGameService().finishGame(
         gameId: _currentGame!.id,
         result: result,
         winnerId: winnerId,
+        reason: 'timeout',
       );
     }
+  }
+
+
+  void _showTimeoutDialog({required bool isMyTimeout}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.timer_off,
+              color: isMyTimeout ? Colors.red : Colors.green,
+              size: 28,
+            ),
+            SizedBox(width: 12),
+            Text(
+              isMyTimeout ? S.of(context).timeOut : S.of(context).youWon,
+              style: TextStyle(
+                color: isMyTimeout ? Colors.red : Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isMyTimeout ? Colors.red[50] : Colors.green[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isMyTimeout ? Colors.red[200]! : Colors.green[200]!,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    isMyTimeout ? Icons.timer_off : Icons.emoji_events,
+                    size: 48,
+                    color: isMyTimeout ? Colors.red : Colors.green,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    isMyTimeout
+                        ? S.of(context).youLostByTimeout
+                        : S.of(context).opponentLostByTimeout,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isMyTimeout ? Colors.red[800] : Colors.green[800],
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    isMyTimeout
+                        ? S.of(context).timeRunOutMessage
+                        : S.of(context).opponentTimeRunOutMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            child: Text(S.of(context).exit),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _startNewGame();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.green,
+              backgroundColor: Colors.green[50],
+            ),
+            child: Text(S.of(context).playAgain),
+          ),
+        ],
+      ),
+    );
   }
 
   void _syncGameState() {
@@ -793,8 +887,12 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     String message;
     GameResultModel gameResult;
     bool opponentAbandoned = false;
+    bool isTimeout = false;
 
-    if (game.reason == 'abandoned' && game.winnerId == currentUser!.uid) {
+    if (game.reason == 'timeout') {
+      isTimeout = true;
+      return;
+    } else if (game.reason == 'abandoned' && game.winnerId == currentUser!.uid) {
       opponentAbandoned = true;
       message = S.of(context).opponentAbandoned;
       gameResult = GameResultModel.win;
@@ -1082,9 +1180,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   foregroundColor: Colors.green,
                   backgroundColor: Colors.green[50],
                 ),
-                child: Text(
-                  S.of(context).findNewOpponent,
-                ),
+                child: Text(S.of(context).findNewOpponent),
               ),
             ],
           ),

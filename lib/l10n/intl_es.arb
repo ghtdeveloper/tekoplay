@@ -258,7 +258,15 @@
   "findNewOpponent": "Buscar nuevo oponente",
   "abandonGame": "Abandonar partida",
   "abandonGameWarning": "¿Estás seguro de que quieres abandonar la partida?\n\nSi abandonas, se contará como una derrota y perderás puntos.",
-  "continueGame": "Continuar jugando"
+  "continueGame": "Continuar jugando",
+  "timeOut": "¡Tiempo agotado!",
+  "youLostByTimeout": "Perdiste por tiempo",
+  "opponentLostByTimeout": "Oponente perdió por tiempo",
+  "timeRunOutMessage": "Se te acabó el tiempo para hacer tu jugada",
+  "opponentTimeRunOutMessage": "Tu oponente se quedó sin tiempo"
+
+
+
 
 
 

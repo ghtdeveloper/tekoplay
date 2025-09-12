@@ -258,7 +258,14 @@
   "findNewOpponent": "Find new opponent",
   "abandonGame": "Abandon game",
   "abandonGameWarning": "Are you sure you want to abandon the game?\n\nIf you leave, it will count as a defeat and you will lose points.",
-  "continueGame": "Continue playing"
+  "continueGame": "Continue playing",
+  "timeOut": "Time out!",
+  "youLostByTimeout": "You lost by timeout",
+  "opponentLostByTimeout": "Opponent lost by timeout",
+  "timeRunOutMessage": "You ran out of time to make your move",
+  "opponentTimeRunOutMessage": "Your opponent ran out of time"
+
+
 
 
 
