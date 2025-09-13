@@ -275,7 +275,12 @@
   "popular": "POPULAR!",
   "diamonds": "diamonds",
   "diamondStore": "Diamond Store",
-  "getMoreDiamonds": "Get more diamonds!"
+  "getMoreDiamonds": "Get more diamonds!",
+  "loginRequired": "Login required",
+  "toUse": "To use",
+  "youNeedToLogin": "you need to log in",
+  "cancel": "Cancel"
+
 
 
 

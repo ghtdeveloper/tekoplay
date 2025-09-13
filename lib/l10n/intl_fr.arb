@@ -274,7 +274,12 @@
   "popular": "POPULAIRE !",
   "diamonds": "diamants",
   "diamondStore": "Boutique de diamants",
-  "getMoreDiamonds": "Obtenez plus de diamants !"
+  "getMoreDiamonds": "Obtenez plus de diamants !",
+  "loginRequired": "Connexion requise",
+  "toUse": "Pour utiliser",
+  "youNeedToLogin": "vous devez vous connecter",
+  "cancel": "Annuler"
+
 
 
 

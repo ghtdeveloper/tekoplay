@@ -365,6 +365,88 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+
+  void _showLoginRequiredDialog(BuildContext context, String feature) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_outline,
+                size: 48,
+                color: Color(0xFFEC7A34),
+              ),
+              SizedBox(height: 16),
+              Text(
+                S.of(context).loginRequired,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '${S.of(context).toUse} $feature ${S.of(context).youNeedToLogin}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(S.of(context).cancel),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SettingsScreen(
+                              onVolumeChangedLive: (newVolume) {
+                                _updateVolume(newVolume);
+                              },
+                            ),
+                          ),
+                        );
+                        _loadCurrentUser();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color(0xFFEC7A34),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(S.of(context).login),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showUserOptionsDialog(BuildContext context) {
     if (_currentUser == null) return;
 
@@ -976,6 +1058,12 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showFriendGameDialog(BuildContext context) {
+
+    if (_currentUser == null) {
+      _showLoginRequiredDialog(context, S.of(context).vsFriend);
+      return;
+    }
+
     final TextEditingController emailController = TextEditingController();
     bool isLoading = false;
 
@@ -1337,6 +1425,10 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showOnlineGameDialog(BuildContext context) {
+    if (_currentUser == null) {
+      _showLoginRequiredDialog(context, S.of(context).online);
+      return;
+    }
     if (isChess) {
       Navigator.push(
         context,
@@ -1354,6 +1446,11 @@ class _GameScreenState extends State<GameScreen> {
     BuildContext context,
     TextEditingController roomCodeController,
   ) {
+    if (_currentUser == null) {
+      _showLoginRequiredDialog(context, S.of(context).online);
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
