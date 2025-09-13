@@ -609,7 +609,6 @@ class _GameScreenState extends State<GameScreen> {
                       }
                     },
                   ),
-                  if (matchType != S.of(context).bet)
                   Row(
                     children: [
                       Text(
@@ -621,7 +620,12 @@ class _GameScreenState extends State<GameScreen> {
                         ),
                       ),
                       SizedBox(width: 5),
-                      Image.asset('assets/images/coin.png', height: 30.0),
+                      if(matchType == S.of(context).fun)
+                        Image.asset('assets/images/coin.png', height: 30.0)
+                      else if(matchType == S.of(context).bet)
+                        Image.asset('assets/images/diamond.png', height: 30.0)
+                      else
+                        SizedBox(width: 30.0),
                       IconButton(
                         icon: Icon(Icons.add_circle, color: Colors.white),
                         onPressed: () => _showCoinPurchaseDialog(),
