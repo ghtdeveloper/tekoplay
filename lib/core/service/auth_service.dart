@@ -19,21 +19,16 @@ class AuthService {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null;
-
       final GoogleSignInAuthentication googleAuth =
       await googleUser.authentication;
-
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-
       final userCredential = await _auth.signInWithCredential(credential);
-
       if (userCredential.user != null) {
         await _firestoreService.createOrGetUser(userCredential.user!);
       }
-
       return userCredential.user;
     } catch (e) {
       print("Error en Google Sign-In: $e");
@@ -46,16 +41,12 @@ class AuthService {
       final LoginResult result = await FacebookAuth.instance.login();
       if (result.status == LoginStatus.success) {
         final AccessToken accessToken = result.accessToken!;
-
         final OAuthCredential credential =
         FacebookAuthProvider.credential(accessToken.token);
-
         final userCredential = await _auth.signInWithCredential(credential);
-
         if (userCredential.user != null) {
           await _firestoreService.createOrGetUser(userCredential.user!);
         }
-
         return userCredential.user;
       } else {
         print("Facebook login cancelled o fallido: ${result.status}");
@@ -67,7 +58,6 @@ class AuthService {
     }
   }
 
-  /// Activa el modo anónimo y genera un nombre único
   Future<String?> enableAnonymousMode() async {
     try {
       _anonymousPlayerName ??= await _firestoreService.generateUniquePlayerName();
@@ -79,7 +69,7 @@ class AuthService {
     }
   }
 
-  /// Desactiva el modo anónimo
+
   Future<void> disableAnonymousMode() async {
     if (_anonymousPlayerName != null) {
       await _firestoreService.releaseAnonymousPlayerName(_anonymousPlayerName!);
@@ -87,7 +77,6 @@ class AuthService {
     }
     _isAnonymousMode = false;
   }
-
   String? getCurrentDisplayName() {
     if (_isAnonymousMode && _anonymousPlayerName != null) {
       return _anonymousPlayerName;
@@ -95,19 +84,15 @@ class AuthService {
     return getCurrentUser()?.displayName;
   }
 
-  // MODIFICADO: No crear en Firestore hasta verificar email
+
   Future<User?> registerWithEmail(String email, String password, String displayName) async {
     try {
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-
       await userCredential.user?.updateDisplayName(displayName);
       await userCredential.user?.sendEmailVerification();
-
-      // NO crear en Firestore aquí - solo después de verificar email
-
       return userCredential.user;
     } on FirebaseAuthException catch (e) {
       print("Error en registro: ${e.code} - ${e.message}");
@@ -118,21 +103,17 @@ class AuthService {
     }
   }
 
-  // MODIFICADO: Verificar email antes de permitir login
   Future<User?> signInWithEmail(String email, String password) async {
     try {
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-
       if (userCredential.user != null && userCredential.user!.emailVerified) {
-        // Crear usuario en Firestore si no existe (primera vez que se verifica)
         await _firestoreService.createOrGetUser(userCredential.user!);
         return userCredential.user;
       } else {
         print("El correo no ha sido verificado");
-        // NO cerrar sesión automáticamente para permitir reenvío de verificación
         return null;
       }
     } on FirebaseAuthException catch (e) {
@@ -144,7 +125,7 @@ class AuthService {
     }
   }
 
-  // NUEVO: Método para verificar el estado del email y crear usuario en Firestore
+
   Future<bool> checkEmailVerificationAndCreateUser() async {
     try {
       final user = getCurrentUser();
@@ -154,7 +135,6 @@ class AuthService {
       final updatedUser = _auth.currentUser;
 
       if (updatedUser != null && updatedUser.emailVerified) {
-        // Email verificado, crear usuario en Firestore si no existe
         await _firestoreService.createOrGetUser(updatedUser);
         return true;
       }
@@ -166,7 +146,6 @@ class AuthService {
     }
   }
 
-  // NUEVO: Método para reenviar email de verificación
   Future<bool> resendEmailVerification() async {
     try {
       final user = getCurrentUser();
@@ -181,23 +160,17 @@ class AuthService {
     }
   }
 
-  // NUEVO: Verificar si el usuario actual tiene email verificado
   bool isEmailVerified() {
     final user = getCurrentUser();
     return user?.emailVerified ?? false;
   }
 
-  // NUEVO: Verificar si el usuario puede acceder a funcionalidades
   Future<bool> canAccessApp() async {
     final user = getCurrentUser();
-    if (user == null) return true; // Usuario anónimo puede acceder
-
-    // Si es usuario de email, debe estar verificado
+    if (user == null) return true;
     if (user.providerData.any((provider) => provider.providerId == 'password')) {
       return user.emailVerified;
     }
-
-    // Usuarios de Google/Facebook pueden acceder
     return true;
   }
 
@@ -259,6 +232,7 @@ class AuthService {
 
   Future<bool> updateUserData({
     int? currency,
+    int? diamonds,
     Map<GameTypeModel, GameStats>? gameStats
   }) async {
     final user = getCurrentUser();
@@ -266,6 +240,7 @@ class AuthService {
       return await _firestoreService.updateUserData(
         user.uid,
         currency: currency,
+        diamonds: diamonds,
         gameStats: gameStats,
       );
     }

@@ -12,6 +12,7 @@ class UserModel {
   final String email;
   final DateTime createdAt;
   final int currency;
+  final int diamonds;
   final Map<GameTypeModel, GameStats> gameStats;
 
   UserModel({
@@ -21,6 +22,7 @@ class UserModel {
     required this.email,
     required this.createdAt,
     this.currency = 500,
+    this.diamonds = 0,
     Map<GameTypeModel, GameStats>? gameStats,
   }) : gameStats = gameStats ?? _initializeGameStats();
 
@@ -56,6 +58,7 @@ class UserModel {
       email: data['email']??'',
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       currency: data['currency'] ?? 500,
+      diamonds: data['diamonds'] ?? 25,
       gameStats: gameStats,
     );
   }
@@ -72,6 +75,7 @@ class UserModel {
       'email':email,
       'createdAt': Timestamp.fromDate(createdAt),
       'currency': currency,
+      'diamonds': diamonds,
       'gameStats': gameStatsData,
     };
   }
@@ -83,6 +87,7 @@ class UserModel {
     String? email,
     DateTime? createdAt,
     int? currency,
+    int? diamonds,
     Map<GameTypeModel, GameStats>? gameStats,
   }) {
     return UserModel(
@@ -92,6 +97,7 @@ class UserModel {
       email: email ?? this.email,
       createdAt: createdAt ?? this.createdAt,
       currency: currency ?? this.currency,
+      diamonds: diamonds ?? this.diamonds,
       gameStats: gameStats ?? this.gameStats,
     );
   }
