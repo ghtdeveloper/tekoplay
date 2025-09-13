@@ -60,13 +60,13 @@ class InterstitialAdHelper {
         onAdDismissedFullScreenContent: (InterstitialAd ad) {
           print('Interstitial ad dismissed.');
           ad.dispose();
-          _loadAd(); // Cargar el siguiente anuncio
+          _loadAd();
           onComplete?.call();
         },
         onAdFailedToShowFullScreenContent: (InterstitialAd ad, AdError error) {
           print('Interstitial ad failed to show: $error');
           ad.dispose();
-          _loadAd(); // Cargar el siguiente anuncio
+          _loadAd();
           onComplete?.call();
         },
       );

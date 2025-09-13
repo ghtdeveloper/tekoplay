@@ -32,6 +32,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   String? _lastMovePromotion;
   late InterstitialAdHelper _interstitialHelper;
   OnlineGameState _gameState = OnlineGameState.timeSelection;
+  int? _myRanking;
+  int? _opponentRanking;
 
   int? _selectedTimeMinutes;
   final List<TimeOption> _timeOptions = [
@@ -363,7 +365,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         }
       }
 
-      // Si es la primera búsqueda (segundo 1), crear una partida nueva
       if (_matchmakingSeconds == 1) {
         try {
           gameId = await _findOrCreateGame(userRanking);
@@ -377,7 +378,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         }
       }
 
-      // Después de 60 segundos, jugar contra bot
       if (_matchmakingSeconds >= 60 && !_isPlayingAgainstBot) {
         timer.cancel();
         _startBotGame();
@@ -396,6 +396,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       controller.resetBoard();
       _gameStartTime = DateTime.now();
 
+      _loadMyRankingAndGenerateBotRanking();
+
       if (_selectedTimeMinutes != null) {
         _myTimeSeconds = _selectedTimeMinutes! * 60;
         _opponentTimeSeconds = _selectedTimeMinutes! * 60;
@@ -408,6 +410,28 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _makeBotMove();
       }
     });
+  }
+
+  Future<void> _loadMyRankingAndGenerateBotRanking() async {
+    try {
+      final myGameStats = await AuthService().getCurrentUserGameStats(GameTypeModel.chess);
+      _myRanking = myGameStats?.points ?? 1000;
+
+      if (widget.matchType == S.of(context).bet) {
+        _opponentRanking = (_myRanking! + _random.nextInt(200) - 50).clamp(800, 2400);
+      } else if (widget.matchType == S.of(context).fun) {
+        _opponentRanking = (_myRanking! + _random.nextInt(400) - 300).clamp(600, 1800);
+      } else {
+        _opponentRanking = (_myRanking! + _random.nextInt(300) - 150).clamp(700, 2200);
+      }
+
+      setState(() {});
+    } catch (e) {
+      print('Error cargando mi ranking: $e');
+      _myRanking = 1000;
+      _opponentRanking = 1000 + _random.nextInt(400) - 200;
+      setState(() {});
+    }
   }
 
   void _makeBotMove() {
@@ -553,10 +577,31 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _opponentPhotoUrl = isHost ? game.guestPhotoUrl : game.hostPhotoUrl;
     controller.loadFen(game.currentFen);
     _gameStartTime = DateTime.now();
+
+    _loadPlayerRankings(game);
+
     if (_selectedTimeMinutes != null) {
       _myTimeSeconds = _selectedTimeMinutes! * 60;
       _opponentTimeSeconds = _selectedTimeMinutes! * 60;
       _startPlayerTimer();
+    }
+  }
+
+  Future<void> _loadPlayerRankings(MultiplayerGameMatch game) async {
+    try {
+      final myGameStats = await AuthService().getCurrentUserGameStats(GameTypeModel.chess);
+      _myRanking = myGameStats?.points ?? 1000;
+
+      final opponentId = game.getOpponentId(currentUser!.uid);
+      final opponentStats = await FirestoreService().getUserGameStats(opponentId!, GameTypeModel.chess);
+      _opponentRanking = opponentStats?.points ?? 1000;
+
+      setState(() {});
+    } catch (e) {
+      print('Error cargando rankings: $e');
+      _myRanking = 1000;
+      _opponentRanking = 1000;
+      setState(() {});
     }
   }
 
@@ -610,6 +655,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         reason: 'timeout',
       );
     }
+
+    _interstitialHelper.forceShowAd(onComplete: () {
+      _showTimeoutDialog(isMyTimeout: isMyTimeout);
+    });
   }
 
 
@@ -809,17 +858,20 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       final isWhiteTurn = controller.getFen().split(' ')[1] == 'w';
       final playerWon =
           (_myColor == PlayerColor.white && !isWhiteTurn) ||
-          (_myColor == PlayerColor.black && isWhiteTurn);
+              (_myColor == PlayerColor.black && isWhiteTurn);
 
       if (_isPlayingAgainstBot) {
         _recordGameResult(
           playerWon ? GameResultModel.win : GameResultModel.loss,
         );
-        _showGameEndDialog(
-          playerWon
-              ? '${S.of(context).youWonCheckMate}\n¡Jaque Mate!'
-              : '${S.of(context).cpuWonCheckMate}\n¡Jaque Mate!',
-        );
+
+        _interstitialHelper.showAdIfReady(onComplete: () {
+          _showGameEndDialog(
+            playerWon
+                ? '${S.of(context).youWonCheckMate}\n${S.of(context).youWonCheckMate}'
+                : '${S.of(context).cpuWonCheckMate}\n${S.of(context).youWonCheckMate}',
+          );
+        });
       }
     } else if (isDraw ||
         isStaleMate ||
@@ -827,17 +879,20 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         isInsufficientMaterial) {
       _gameEnded = true;
       String message =
-          isDraw
-              ? S.of(context).drawMsg
-              : isStaleMate
-              ? S.of(context).drawByStalemate
-              : isThreefoldRepetition
-              ? S.of(context).tieByReply
-              : S.of(context).tieByInsufficient;
+      isDraw
+          ? S.of(context).drawMsg
+          : isStaleMate
+          ? S.of(context).drawByStalemate
+          : isThreefoldRepetition
+          ? S.of(context).tieByReply
+          : S.of(context).tieByInsufficient;
 
       if (_isPlayingAgainstBot) {
         _recordGameResult(GameResultModel.draw);
-        _showGameEndDialog(message);
+
+        _interstitialHelper.forceShowAd(onComplete: () {
+          _showGameEndDialog(message);
+        });
       }
     }
   }
@@ -909,11 +964,13 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     _recordGameResult(gameResult);
 
-    if (opponentAbandoned) {
-      _showOpponentAbandonedDialog();
-    } else {
-      _showGameEndDialog(message);
-    }
+    _interstitialHelper.forceShowAd(onComplete: () {
+      if (opponentAbandoned) {
+        _showOpponentAbandonedDialog();
+      } else {
+        _showGameEndDialog(message);
+      }
+    });
   }
 
   Future<void> _recordGameResult(GameResultModel result) async {
@@ -1093,7 +1150,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     if (_isPlayingAgainstBot) {
       _recordGameResult(GameResultModel.loss);
-      Navigator.of(context).pop();
+
+      _interstitialHelper.forceShowAd(onComplete: () {
+        Navigator.of(context).pop();
+      });
       return;
     }
 
@@ -1113,7 +1173,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _recordGameResult(GameResultModel.loss);
       }
     }
-    Navigator.of(context).pop();
+
+    _interstitialHelper.forceShowAd(onComplete: () {
+      Navigator.of(context).pop();
+    });
   }
 
   void _showOpponentAbandonedDialog() {
@@ -1200,6 +1263,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _opponentName = null;
       _opponentPhotoUrl = null;
       _engineThinking = false;
+      _myRanking = null;
+      _opponentRanking = null;
       controller.resetBoard();
       _cleanupTimers();
     });
@@ -1231,7 +1296,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         leading: IconButton(
           icon: Icon(Icons.arrow_back),
           onPressed: () {
-            //TODO SHOW DIALOG CONFIRM EXIT
             _cancelMatchmaking(S.of(context).searchCanceled);
           },
         ),
@@ -1363,18 +1427,18 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   Widget _buildPlayerInfo({required bool isMe}) {
-    final name =
-        isMe
-            ? (currentUser?.displayName ?? S.of(context).you)
-            : (_opponentName ?? S.of(context).rivals);
+    final name = isMe
+        ? (currentUser?.displayName ?? S.of(context).you)
+        : (_opponentName ?? S.of(context).rivals);
 
     final photoUrl = isMe ? currentUser?.photoURL : _opponentPhotoUrl;
     final isPlayerTurn = isMe ? _isMyTurn : !_isMyTurn;
+    final ranking = isMe ? _myRanking : _opponentRanking;
 
     String? botAvatar;
     if (!isMe && _isPlayingAgainstBot && _opponentName != null) {
       final botProfile = _botProfiles.firstWhere(
-        (p) => p['name'] == _opponentName,
+            (p) => p['name'] == _opponentName,
         orElse: () => _botProfiles[0],
       );
       botAvatar = botProfile['avatar'];
@@ -1384,8 +1448,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color:
-            isPlayerTurn ? Colors.black.withOpacity(0.2) : Colors.transparent,
+        color: isPlayerTurn ? Colors.black.withOpacity(0.2) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         border: isPlayerTurn ? Border.all(color: Colors.green, width: 2) : null,
       ),
@@ -1395,12 +1458,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             radius: 24,
             backgroundColor: Colors.grey[300],
             backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-            child:
-                photoUrl == null
-                    ? (_isPlayingAgainstBot && !isMe && botAvatar != null
-                        ? Text(botAvatar, style: TextStyle(fontSize: 24))
-                        : Icon(Icons.person, size: 24))
-                    : null,
+            child: photoUrl == null
+                ? (_isPlayingAgainstBot && !isMe && botAvatar != null
+                ? Text(botAvatar, style: TextStyle(fontSize: 24))
+                : Icon(Icons.person, size: 24))
+                : null,
           ),
           SizedBox(width: 12),
           Expanded(
@@ -1409,12 +1471,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               children: [
                 Row(
                   children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     if (_isPlayingAgainstBot && !isMe)
@@ -1428,14 +1493,58 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                           color: Colors.blue,
                           borderRadius: BorderRadius.circular(4),
                         ),
+                        child: Text(
+                          'BOT',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                   ],
                 ),
-                if (isPlayerTurn)
-                  Text(
-                    '${S.of(context).playing}...',
-                    style: TextStyle(color: Colors.green[300], fontSize: 12),
-                  ),
+                Row(
+                  children: [
+                    // Mostrar ranking
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getRankingColor(ranking),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.emoji_events,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            ranking?.toString() ?? '---',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    // Estado del turno
+                    if (isPlayerTurn)
+                      Expanded(
+                        child: Text(
+                          '${S.of(context).playing}...',
+                          style: TextStyle(color: Colors.green[300], fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1443,6 +1552,20 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       ),
     );
   }
+
+  ui.Color _getRankingColor(int? ranking) {
+    if (ranking == null) return Colors.grey;
+
+    if (ranking >= 2000) return Colors.purple;
+    if (ranking >= 1800) return Colors.blue;
+    if (ranking >= 1600) return Colors.green;
+    if (ranking >= 1400) return Colors.orange;
+    if (ranking >= 1200) return Colors.yellow[700]!;
+    return Colors.red;
+  }
+
+
+
 
   Widget _buildTimer(int seconds, {required bool isMyTimer}) {
     final minutes = seconds ~/ 60;
