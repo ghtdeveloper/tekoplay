@@ -14,6 +14,7 @@ import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../adds/BannerAdWidget.dart';
 import '../coins/coin_purchase_dialog.dart';
+import '../coins/diamond_purchase_dialog.dart';
 import '../home/home_screen.dart';
 import '../settings/settings_screen.dart';
 import 'chess_vs_cpu_screen.dart';
@@ -23,7 +24,6 @@ import 'multiplayer_chess_screen.dart';
 import 'online_chess_screen.dart';
 import 'ranking_screen.dart';
 import 'game_history_screen.dart';
-
 
 class GameScreen extends StatefulWidget {
   final String gameType;
@@ -53,6 +53,7 @@ class _GameScreenState extends State<GameScreen> {
   bool _isInitialized = false;
   StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
   StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
+
   bool get isChess => gameType == S.of(context).chess;
 
   bool get isDomino => gameType == S.of(context).domino;
@@ -69,7 +70,7 @@ class _GameScreenState extends State<GameScreen> {
     try {
       if (_isDisposed) return;
       _audioPlayer = AudioPlayer();
-       _loadCurrentUser();
+      _loadCurrentUser();
       if (_isDisposed) return;
       _initializeNotifications();
       if (_isDisposed) return;
@@ -93,7 +94,6 @@ class _GameScreenState extends State<GameScreen> {
       }
     }
   }
-
 
   Future<void> _updateVolume(double newVolume) async {
     if (_isDisposed) return;
@@ -167,37 +167,34 @@ class _GameScreenState extends State<GameScreen> {
       _invitationsSubscription = GameInvitationService()
           .getPendingInvitations(_currentUser!.uid)
           .handleError((error) {
-        print('Error en stream de invitaciones: $error');
-      })
+            print('Error en stream de invitaciones: $error');
+          })
           .listen(
             (invitations) {
-          if (mounted && !_isDisposed) {
-            setState(() {
-            });
-          }
-        },
-        onError: (error) {
-          print('Error en subscription de invitaciones: $error');
-        },
-      );
+              if (mounted && !_isDisposed) {
+                setState(() {});
+              }
+            },
+            onError: (error) {
+              print('Error en subscription de invitaciones: $error');
+            },
+          );
 
       _activeGamesSubscription = MultiplayerGameService()
           .getActiveGames(_currentUser!.uid)
           .handleError((error) {
-        print('Error en stream de juegos: $error');
-      })
+            print('Error en stream de juegos: $error');
+          })
           .listen(
             (games) {
-          if (mounted && !_isDisposed) {
-            setState(() {
-            });
-          }
-        },
-        onError: (error) {
-          print('Error en subscription de juegos: $error');
-        },
-      );
-
+              if (mounted && !_isDisposed) {
+                setState(() {});
+              }
+            },
+            onError: (error) {
+              print('Error en subscription de juegos: $error');
+            },
+          );
     } catch (e) {
       print('Error configurando streams: $e');
     }
@@ -212,12 +209,26 @@ class _GameScreenState extends State<GameScreen> {
 
         // Aquí puedes integrar con tu sistema de pagos
         // Por ejemplo, conectar con Google Play Billing o Apple Store
-        _processPurchase(coinAmount, price);
+        _processCoinPurchase(coinAmount, price);
       },
     );
   }
 
-  Future<void> _processPurchase(int coins, int price) async {
+  void _showDiamondPurchaseDialog() {
+    showDiamondPurchaseDialog(
+      context,
+      onPurchase: (coinAmount, price) {
+        // Aquí manejas la lógica de compra
+        print('Comprando $coinAmount diamantes por \$${price} CLP');
+
+        // Aquí puedes integrar con tu sistema de pagos
+        // Por ejemplo, conectar con Google Play Billing o Apple Store
+        _processCoinPurchase(coinAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processCoinPurchase(int coins, int price) async {
     try {
       showDialog(
         context: context,
@@ -249,6 +260,37 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
+  Future<void> _processDiamondPurchase(int diamond, int price) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(child: CircularProgressIndicator()),
+      );
+      // Simular procesamiento de pago
+      await Future.delayed(Duration(seconds: 2));
+      // Actualizar diamantes del usuario
+      setState(() {
+        _currentCurrency = (_currentCurrency ?? 0) + diamond;
+      });
+      Navigator.of(context).pop(); // Cerrar loading
+      // Mostrar confirmación
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('¡Compra exitosa! +$diamond diamantes'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      Navigator.of(context).pop(); // Cerrar loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error en la compra'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -266,7 +308,6 @@ class _GameScreenState extends State<GameScreen> {
 
     super.dispose();
   }
-
 
   Widget _buildUserAvatar() {
     String? photoUrl = _currentPhotoUrl ?? _currentUser?.photoURL;
@@ -293,7 +334,6 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-
   Widget _buildMatchTypeIndicator() {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -305,7 +345,9 @@ class _GameScreenState extends State<GameScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            matchType == S.of(context).bet ? Icons.monetization_on : Icons.sports_esports,
+            matchType == S.of(context).bet
+                ? Icons.monetization_on
+                : Icons.sports_esports,
             color: Colors.white,
             size: 16,
           ),
@@ -427,12 +469,19 @@ class _GameScreenState extends State<GameScreen> {
       },
     );
   }
+
   Widget _buildUserNameSection() {
-    final displayName = _currentUser?.displayName ?? _anonymousPlayerName ?? S.of(context).anonymous;
+    final displayName =
+        _currentUser?.displayName ??
+        _anonymousPlayerName ??
+        S.of(context).anonymous;
     final isInteractive = _currentUser != null;
 
     return GestureDetector(
-      onTap: isInteractive ? () => _showUserOptionsDialog(context) : () => _showAnonymousUserDialog(context),
+      onTap:
+          isInteractive
+              ? () => _showUserOptionsDialog(context)
+              : () => _showAnonymousUserDialog(context),
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
@@ -444,11 +493,7 @@ class _GameScreenState extends State<GameScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_isAnonymousMode) ...[
-              Icon(
-                Icons.person_outline,
-                color: Colors.white70,
-                size: 16,
-              ),
+              Icon(Icons.person_outline, color: Colors.white70, size: 16),
               SizedBox(width: 4),
             ],
             Text(
@@ -464,18 +509,10 @@ class _GameScreenState extends State<GameScreen> {
             ),
             if (isInteractive) ...[
               SizedBox(width: 8),
-              Icon(
-                Icons.keyboard_arrow_down,
-                color: Colors.white,
-                size: 20,
-              ),
+              Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 20),
             ] else if (_isAnonymousMode) ...[
               SizedBox(width: 8),
-              Icon(
-                Icons.info_outline,
-                color: Colors.white70,
-                size: 16,
-              ),
+              Icon(Icons.info_outline, color: Colors.white70, size: 16),
             ],
           ],
         ),
@@ -483,83 +520,83 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-
   void _showAnonymousUserDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.person_outline,
-                size: 48,
-                color: Color(0xFFEC7A34),
-              ),
-              SizedBox(height: 16),
-              Text(
-                S.of(context).playingAsGuest,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                '${S.of(context).yourTemporaryName}: $_anonymousPlayerName',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-              SizedBox(height: 16),
-              Text(
-                S.of(context).loginToAccessFeatures,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14),
-              ),
-              SizedBox(height: 20),
-              Row(
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(S.of(context).continueAsGuest),
+                  Icon(
+                    Icons.person_outline,
+                    size: 48,
+                    color: Color(0xFFEC7A34),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    S.of(context).playingAsGuest,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
                   ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SettingsScreen(
-                              onVolumeChangedLive: (newVolume) {
-                                _updateVolume(newVolume);
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFFEC7A34),
-                        foregroundColor: Colors.white,
+                  SizedBox(height: 8),
+                  Text(
+                    '${S.of(context).yourTemporaryName}: $_anonymousPlayerName',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    S.of(context).loginToAccessFeatures,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: Text(S.of(context).continueAsGuest),
+                        ),
                       ),
-                      child: Text(S.of(context).login),
-                    ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => SettingsScreen(
+                                      onVolumeChangedLive: (newVolume) {
+                                        _updateVolume(newVolume);
+                                      },
+                                    ),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(0xFFEC7A34),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Text(S.of(context).login),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -620,15 +657,21 @@ class _GameScreenState extends State<GameScreen> {
                         ),
                       ),
                       SizedBox(width: 5),
-                      if(matchType == S.of(context).fun)
+                      if (matchType == S.of(context).fun)
                         Image.asset('assets/images/coin.png', height: 30.0)
-                      else if(matchType == S.of(context).bet)
+                      else if (matchType == S.of(context).bet)
                         Image.asset('assets/images/diamond.png', height: 30.0)
                       else
                         SizedBox(width: 30.0),
                       IconButton(
                         icon: Icon(Icons.add_circle, color: Colors.white),
-                        onPressed: () => _showCoinPurchaseDialog(),
+                        onPressed:
+                            () => {
+                              if (matchType == S.of(context).fun)
+                                _showCoinPurchaseDialog()
+                              else if (matchType == S.of(context).bet)
+                                _showDiamondPurchaseDialog(),
+                            },
                       ),
                     ],
                   ),
@@ -636,7 +679,6 @@ class _GameScreenState extends State<GameScreen> {
                 ],
               ),
             ),
-
             Expanded(
               child: Center(
                 child: Column(
@@ -697,7 +739,7 @@ class _GameScreenState extends State<GameScreen> {
                 ],
               ),
             ),
-            const BannerAdWidget()
+            const BannerAdWidget(),
           ],
         ),
       ),
@@ -736,11 +778,18 @@ class _GameScreenState extends State<GameScreen> {
                 top: 8,
                 child: Container(
                   padding: EdgeInsets.all(2),
-                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   constraints: BoxConstraints(minWidth: 16, minHeight: 16),
                   child: Text(
                     '${invitations.length}',
-                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -751,116 +800,180 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  void _showNotificationsDialog(BuildContext context, List<Map<String, dynamic>> invitations) {
+  void _showNotificationsDialog(
+    BuildContext context,
+    List<Map<String, dynamic>> invitations,
+  ) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          width: double.infinity,
-          height: 400,
-          padding: EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 400,
+              padding: EdgeInsets.all(20),
+              child: Column(
                 children: [
-                  Text(S.of(context).invitations, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(icon: Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
-                ],
-              ),
-              SizedBox(height: 16),
-              Expanded(
-                child: invitations.isEmpty
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.notifications_none, size: 48, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(S.of(context).noInvitation, style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                )
-                    : ListView.builder(
-                  itemCount: invitations.length,
-                  itemBuilder: (context, index) {
-                    final invitation = invitations[index];
-                    return Card(
-                      child: ListTile(
-                        leading: Icon(Icons.sports_esports, color: Color(0xFFEC7A34)),
-                        title: Text('${invitation['fromUserName']} ${S.of(context).invitesYou}'),
-                        subtitle: Text('${invitation['gameType']}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextButton(
-                              onPressed: () async {
-                                final result = await GameInvitationService().respondToInvitation(invitation['id'], false);
-                                if (result != null && result['success'] == true) {
-                                  Navigator.of(context).pop();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(S.of(context).invitationRejected), backgroundColor: Colors.orange),
-                                  );
-                                }
-                              },
-                              child: Text(S.of(context).reject, style: TextStyle(color: Colors.red)),
-                            ),
-                            ElevatedButton(
-                              onPressed: () async {
-                                showDialog(
-                                  context: context,
-                                  barrierDismissible: false,
-                                  builder: (context) => Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-
-                                final result = await GameInvitationService().respondToInvitation(invitation['id'], true);
-
-                                Navigator.of(context).pop();
-
-                                if (result != null && result['success'] == true && result['gameId'] != null) {
-                                  Navigator.of(context).pop();
-
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => MultiplayerChessScreen(
-                                        gameId: result['gameId'],
-                                        isHost: false,
-                                      ),
-                                    ),
-                                  );
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                        content: Text(S.of(context).errorAcceptedInvitation),
-                                        backgroundColor: Colors.red
-                                    ),
-                                  );
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFFEC7A34),
-                                foregroundColor: Colors.white,
-                              ),
-                              child: Text(S.of(context).accept),
-                            ),
-                          ],
+                      Text(
+                        S.of(context).invitations,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    );
-                  },
-                ),
+                      IconButton(
+                        icon: Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Expanded(
+                    child:
+                        invitations.isEmpty
+                            ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.notifications_none,
+                                    size: 48,
+                                    color: Colors.grey,
+                                  ),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    S.of(context).noInvitation,
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            )
+                            : ListView.builder(
+                              itemCount: invitations.length,
+                              itemBuilder: (context, index) {
+                                final invitation = invitations[index];
+                                return Card(
+                                  child: ListTile(
+                                    leading: Icon(
+                                      Icons.sports_esports,
+                                      color: Color(0xFFEC7A34),
+                                    ),
+                                    title: Text(
+                                      '${invitation['fromUserName']} ${S.of(context).invitesYou}',
+                                    ),
+                                    subtitle: Text('${invitation['gameType']}'),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        TextButton(
+                                          onPressed: () async {
+                                            final result =
+                                                await GameInvitationService()
+                                                    .respondToInvitation(
+                                                      invitation['id'],
+                                                      false,
+                                                    );
+                                            if (result != null &&
+                                                result['success'] == true) {
+                                              Navigator.of(context).pop();
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    S
+                                                        .of(context)
+                                                        .invitationRejected,
+                                                  ),
+                                                  backgroundColor:
+                                                      Colors.orange,
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          child: Text(
+                                            S.of(context).reject,
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () async {
+                                            showDialog(
+                                              context: context,
+                                              barrierDismissible: false,
+                                              builder:
+                                                  (context) => Center(
+                                                    child:
+                                                        CircularProgressIndicator(),
+                                                  ),
+                                            );
+
+                                            final result =
+                                                await GameInvitationService()
+                                                    .respondToInvitation(
+                                                      invitation['id'],
+                                                      true,
+                                                    );
+
+                                            Navigator.of(context).pop();
+
+                                            if (result != null &&
+                                                result['success'] == true &&
+                                                result['gameId'] != null) {
+                                              Navigator.of(context).pop();
+
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (context) =>
+                                                          MultiplayerChessScreen(
+                                                            gameId:
+                                                                result['gameId'],
+                                                            isHost: false,
+                                                          ),
+                                                ),
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    S
+                                                        .of(context)
+                                                        .errorAcceptedInvitation,
+                                                  ),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Color(0xFFEC7A34),
+                                            foregroundColor: Colors.white,
+                                          ),
+                                          child: Text(S.of(context).accept),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
-
 
   void _showFriendGameDialog(BuildContext context) {
     final TextEditingController emailController = TextEditingController();
@@ -873,7 +986,9 @@ class _GameScreenState extends State<GameScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               backgroundColor: Colors.white,
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -885,11 +1000,17 @@ class _GameScreenState extends State<GameScreen> {
                       children: [
                         Text(
                           S.of(context).playWithFriend,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
                         ),
                         IconButton(
                           icon: Icon(Icons.close),
-                          onPressed: isLoading ? null : () => Navigator.of(context).pop(),
+                          onPressed:
+                              isLoading
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
                         ),
                       ],
                     ),
@@ -906,7 +1027,9 @@ class _GameScreenState extends State<GameScreen> {
                         labelText: S.of(context).opponentEmail,
                         hintText: 'ejemplo@email.com',
                         prefixIcon: Icon(Icons.email),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                     SizedBox(height: 20),
@@ -914,40 +1037,68 @@ class _GameScreenState extends State<GameScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: (isLoading || emailController.text.trim().isEmpty) ? null : () async {
-                          setState(() => isLoading = true);
+                        onPressed:
+                            (isLoading || emailController.text.trim().isEmpty)
+                                ? null
+                                : () async {
+                                  setState(() => isLoading = true);
 
-                          final error = await GameInvitationService().createInvitation(
-                            fromUserId: _currentUser!.uid,
-                            fromUserName: _currentUser!.displayName ?? 'Usuario',
-                            toUserEmail: emailController.text.trim(),
-                            gameType: gameType,
-                          );
+                                  final error = await GameInvitationService()
+                                      .createInvitation(
+                                        fromUserId: _currentUser!.uid,
+                                        fromUserName:
+                                            _currentUser!.displayName ??
+                                            'Usuario',
+                                        toUserEmail:
+                                            emailController.text.trim(),
+                                        gameType: gameType,
+                                      );
 
-                          setState(() => isLoading = false);
+                                  setState(() => isLoading = false);
 
-                          if (error == null) {
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(S.of(context).successfulSentInvitation),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(error), backgroundColor: Colors.red),
-                            );
-                          }
-                        },
-                        icon: isLoading
-                            ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : Icon(Icons.send),
-                        label: Text(isLoading ? S.of(context).sending : S.of(context).sentInvitation),
+                                  if (error == null) {
+                                    Navigator.of(context).pop();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          S
+                                              .of(context)
+                                              .successfulSentInvitation,
+                                        ),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(error),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                },
+                        icon:
+                            isLoading
+                                ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                                : Icon(Icons.send),
+                        label: Text(
+                          isLoading
+                              ? S.of(context).sending
+                              : S.of(context).sentInvitation,
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEC7A34),
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           padding: EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
@@ -961,7 +1112,6 @@ class _GameScreenState extends State<GameScreen> {
       },
     );
   }
-
 
   void _showTutorial(BuildContext context) {
     if (isChess) {
@@ -1025,23 +1175,23 @@ class _GameScreenState extends State<GameScreen> {
 
                     Column(
                       children:
-                      [
-                        S.of(context).veryEasy,
-                        S.of(context).easy,
-                        S.of(context).normal,
-                        S.of(context).difficult,
-                      ].map((level) {
-                        return RadioListTile<String>(
-                          title: Text(level),
-                          value: level,
-                          groupValue: selectedDifficulty,
-                          onChanged: (value) {
-                            setState(() {
-                              selectedDifficulty = value!;
-                            });
-                          },
-                        );
-                      }).toList(),
+                          [
+                            S.of(context).veryEasy,
+                            S.of(context).easy,
+                            S.of(context).normal,
+                            S.of(context).difficult,
+                          ].map((level) {
+                            return RadioListTile<String>(
+                              title: Text(level),
+                              value: level,
+                              groupValue: selectedDifficulty,
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedDifficulty = value!;
+                                });
+                              },
+                            );
+                          }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -1056,7 +1206,7 @@ class _GameScreenState extends State<GameScreen> {
                             MaterialPageRoute(
                               builder:
                                   (context) =>
-                                  ChessVsComputerScreen(selectedDifficulty),
+                                      ChessVsComputerScreen(selectedDifficulty),
                             ),
                           );
                         },
@@ -1124,23 +1274,23 @@ class _GameScreenState extends State<GameScreen> {
 
                     Column(
                       children:
-                      [
-                        S.of(context).veryEasy,
-                        S.of(context).easy,
-                        S.of(context).normal,
-                        S.of(context).difficult,
-                      ].map((level) {
-                        return RadioListTile<String>(
-                          title: Text(level),
-                          value: level,
-                          groupValue: selectedDifficulty,
-                          onChanged: (value) {
-                            setState(() {
-                              selectedDifficulty = value!;
-                            });
-                          },
-                        );
-                      }).toList(),
+                          [
+                            S.of(context).veryEasy,
+                            S.of(context).easy,
+                            S.of(context).normal,
+                            S.of(context).difficult,
+                          ].map((level) {
+                            return RadioListTile<String>(
+                              title: Text(level),
+                              value: level,
+                              groupValue: selectedDifficulty,
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedDifficulty = value!;
+                                });
+                              },
+                            );
+                          }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -1155,8 +1305,8 @@ class _GameScreenState extends State<GameScreen> {
                             MaterialPageRoute(
                               builder:
                                   (context) => DominoVsComputerScreen(
-                                selectedDifficulty,
-                              ),
+                                    selectedDifficulty,
+                                  ),
                             ),
                           );
                         },
@@ -1191,9 +1341,7 @@ class _GameScreenState extends State<GameScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => OnlineChessScreen(
-            matchType: matchType,
-          ),
+          builder: (context) => OnlineChessScreen(matchType: matchType),
         ),
       );
     } else if (isDomino) {
@@ -1202,11 +1350,10 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-
   void _showOnlineDialogDomino(
-      BuildContext context,
-      TextEditingController roomCodeController,
-      ) {
+    BuildContext context,
+    TextEditingController roomCodeController,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
