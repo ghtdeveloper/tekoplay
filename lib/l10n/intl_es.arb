@@ -263,7 +263,23 @@
   "youLostByTimeout": "Perdiste por tiempo",
   "opponentLostByTimeout": "Oponente perdió por tiempo",
   "timeRunOutMessage": "Se te acabó el tiempo para hacer tu jugada",
-  "opponentTimeRunOutMessage": "Tu oponente se quedó sin tiempo"
+  "opponentTimeRunOutMessage": "Tu oponente se quedó sin tiempo",
+  "getMoreCoins": "¡Obtén más monedas!",
+  "choosePerfectPackage": "Elige el paquete perfecto para ti",
+  "mostPopular": "¡MÁS POPULAR!",
+  "bestValue": "¡MEJOR VALOR!",
+  "coinStore": "Tienda de Monedas",
+  "coins": "monedas",
+  "buy": "Comprar",
+  "megaPack": "¡MEGA PACK!",
+  "popular": "¡POPULAR!"
+
+
+
+
+
+
+
 
 
 

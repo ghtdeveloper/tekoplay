@@ -13,6 +13,7 @@ import '../../core/service/notification_service.dart';
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../adds/BannerAdWidget.dart';
+import '../coins/coin_purchase_dialog.dart';
 import '../home/home_screen.dart';
 import '../settings/settings_screen.dart';
 import 'chess_vs_cpu_screen.dart';
@@ -201,6 +202,53 @@ class _GameScreenState extends State<GameScreen> {
       print('Error configurando streams: $e');
     }
   }
+
+  void _showCoinPurchaseDialog() {
+    showCoinPurchaseDialog(
+      context,
+      onPurchase: (coinAmount, price) {
+        // Aquí manejas la lógica de compra
+        print('Comprando $coinAmount monedas por \$${price} CLP');
+
+        // Aquí puedes integrar con tu sistema de pagos
+        // Por ejemplo, conectar con Google Play Billing o Apple Store
+        _processPurchase(coinAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processPurchase(int coins, int price) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(child: CircularProgressIndicator()),
+      );
+      // Simular procesamiento de pago
+      await Future.delayed(Duration(seconds: 2));
+      // Actualizar monedas del usuario
+      setState(() {
+        _currentCurrency = (_currentCurrency ?? 0) + coins;
+      });
+      Navigator.of(context).pop(); // Cerrar loading
+      // Mostrar confirmación
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('¡Compra exitosa! +$coins monedas'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      Navigator.of(context).pop(); // Cerrar loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error en la compra'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
 
   @override
   void dispose() {
@@ -574,6 +622,10 @@ class _GameScreenState extends State<GameScreen> {
                       ),
                       SizedBox(width: 5),
                       Image.asset('assets/images/coin.png', height: 30.0),
+                      IconButton(
+                        icon: Icon(Icons.add_circle, color: Colors.white),
+                        onPressed: () => _showCoinPurchaseDialog(),
+                      ),
                     ],
                   ),
                   _buildNotificationsIcon(),

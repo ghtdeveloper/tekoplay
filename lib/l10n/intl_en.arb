@@ -263,7 +263,25 @@
   "youLostByTimeout": "You lost by timeout",
   "opponentLostByTimeout": "Opponent lost by timeout",
   "timeRunOutMessage": "You ran out of time to make your move",
-  "opponentTimeRunOutMessage": "Your opponent ran out of time"
+  "opponentTimeRunOutMessage": "Your opponent ran out of time",
+  "getMoreCoins": "Get more coins!",
+  "choosePerfectPackage": "Choose the perfect package for you",
+  "mostPopular": "MOST POPULAR!",
+  "bestValue": "BEST VALUE!",
+  "coinStore": "Coin Store",
+  "coins": "coins",
+  "buy": "Buy",
+  "megaPack": "MEGA PACK!",
+  "popular": "POPULAR!"
+
+
+
+
+
+
+
+
+
 
 
 
