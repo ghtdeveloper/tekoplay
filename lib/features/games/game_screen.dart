@@ -47,6 +47,7 @@ class _GameScreenState extends State<GameScreen> {
   User? _currentUser;
   String? _currentPhotoUrl;
   int? _userDiamonds;
+  int? _userCoins;
   String? _anonymousPlayerName;
   bool _isAnonymousMode = false;
   late AudioPlayer _audioPlayer;
@@ -72,12 +73,10 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (widget.matchType == S.of(context).bet) {
-      _setupDiamondsListener();
-    }
+    _setupWalletInfoUser();
   }
 
-  void _setupDiamondsListener() {
+  void _setupWalletInfoUser() {
     if (_currentUser == null) return;
 
     _diamondsSubscription = FirebaseFirestore.instance
@@ -88,8 +87,10 @@ class _GameScreenState extends State<GameScreen> {
           (DocumentSnapshot document) {
         if (document.exists && mounted && !_isDisposed) {
           final userData = document.data() as Map<String, dynamic>;
+
           setState(() {
             _userDiamonds = userData['diamonds'] ?? 0;
+            _userCoins = userData['currency'] ?? 0;
           });
         }
       },
@@ -98,6 +99,7 @@ class _GameScreenState extends State<GameScreen> {
         if (mounted && !_isDisposed) {
           setState(() {
             _userDiamonds = 0;
+            _userCoins = 0;
           });
         }
       },
@@ -294,6 +296,7 @@ class _GameScreenState extends State<GameScreen> {
         // Actualizar monedas localmente
         setState(() {
           _userDiamonds = (_userDiamonds ?? 0) + coins;
+          _userCoins = (_userCoins ?? 0) + coins;
         });
 
         // Actualizar en Firestore
@@ -796,10 +799,12 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                   Row(
                     children: [
-
-
                       Text(
-                        '${(_userDiamonds ?? 0.0).toInt()}',
+                        matchType == S.of(context).bet
+                            ? '${(_userDiamonds ?? 0.0).toInt()}'
+                            : matchType == S.of(context).fun
+                            ? '${(_userCoins ?? 0.0).toInt()}'
+                            : '0',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
