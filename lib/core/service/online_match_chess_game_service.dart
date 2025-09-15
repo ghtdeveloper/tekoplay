@@ -126,7 +126,7 @@ class OnlineMatchmakingChessService {
     required String gameType,
     required int? timeMinutes,
     required int hostRanking,
-    int? betAmount, // Agregar este parámetro
+    int? betAmount,
   }) async {
     try {
       final gameRef = _firestore.collection('multiplayer_games').doc();
@@ -143,12 +143,12 @@ class OnlineMatchmakingChessService {
         moves: [],
         createdAt: DateTime.now(),
         isRanked: true,
-        betAmount: betAmount, // Agregar esto
+        betAmount: betAmount,
         gameSettings: {
           'timeMinutes': timeMinutes,
           'hostRanking': hostRanking,
           'isOnlineMatchmaking': true,
-          'betAmount': betAmount, // Agregar esto también
+          'betAmount': betAmount,
         },
       );
 
