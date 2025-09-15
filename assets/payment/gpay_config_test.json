@@ -1,0 +1,34 @@
+{
+  "provider": "google_pay",
+  "data": {
+    "environment": "TEST",
+    "apiVersion": 2,
+    "apiVersionMinor": 0,
+    "allowedPaymentMethods": [
+      {
+        "type": "CARD",
+        "tokenizationSpecification": {
+          "type": "PAYMENT_GATEWAY",
+          "parameters": {
+            "gateway": "example",
+            "gatewayMerchantId": "exampleGatewayMerchantId"
+          }
+        },
+        "parameters": {
+          "allowedAuthMethods": ["PAN_ONLY", "CRYPTOGRAM_3DS"],
+          "allowedCardNetworks": ["AMEX", "DISCOVER", "JCB", "MASTERCARD", "VISA"]
+        }
+      }
+    ],
+    "merchantInfo": {
+      "merchantId": "BCR2DN4TTWOYZPCS",
+      "merchantName": "Example Merchant"
+    },
+    "transactionInfo": {
+      "totalPriceStatus": "FINAL",
+      "totalPrice": "0.00",
+      "currencyCode": "USD",
+      "countryCode": "US"
+    }
+  }
+}

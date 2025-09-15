@@ -1297,8 +1297,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           .collection('users')
           .doc(currentUser!.uid)
           .update({'diamonds': FieldValue.increment(change)});
-
-      // Actualizar el valor local
       setState(() {
         _userDiamonds = (_userDiamonds ?? 0) + change;
       });

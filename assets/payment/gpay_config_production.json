@@ -1,0 +1,40 @@
+{
+  "provider": "google_pay",
+  "data": {
+    "environment": "PRODUCTION",
+    "apiVersion": 2,
+    "apiVersionMinor": 0,
+    "allowedPaymentMethods": [
+      {
+        "type": "CARD",
+        "tokenizationSpecification": {
+          "type": "PAYMENT_GATEWAY",
+          "parameters": {
+            "gateway": "stripe",
+            "stripe:version": "2020-08-27",
+            "stripe:publishableKey": "tu_stripe_publishable_key"
+          }
+        },
+        "parameters": {
+          "allowedAuthMethods": ["PAN_ONLY", "CRYPTOGRAM_3DS"],
+          "allowedCardNetworks": ["AMEX", "DISCOVER", "INTERAC", "JCB", "MASTERCARD", "VISA"],
+          "billingAddressRequired": false,
+          "billingAddressParameters": {
+            "format": "FULL",
+            "phoneNumberRequired": false
+          }
+        }
+      }
+    ],
+    "merchantInfo": {
+      "merchantId": "TU_MERCHANT_ID_REAL",
+      "merchantName": "Tu App Name"
+    },
+    "transactionInfo": {
+      "countryCode": "US",
+      "currencyCode": "USD",
+      "totalPriceStatus": "FINAL",
+      "totalPrice": "0.00"
+    }
+  }
+}

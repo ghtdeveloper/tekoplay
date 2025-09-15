@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
@@ -35,7 +36,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   late int _cpuMoveTime;
   DateTime? _gameStartTime;
-
+  int? _userCurrency;
   PlayerColor? _playerColor;
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
@@ -106,6 +107,22 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
     _stockfish.stdin = "setoption name Threads value 1";
     _stockfish.stdin = "setoption name Hash value 32";
+  }
+
+  Future<void> _updateUserDiamonds(int change) async {
+    if (currentUser == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser!.uid)
+          .update({'currency': FieldValue.increment(change)});
+      setState(() {
+        _userCurrency = (_userCurrency ?? 0) + change;
+      });
+    } catch (e) {
+      print('Error actualizando diamantes: $e');
+    }
   }
 
   void _makeCpuMove() {
@@ -221,16 +238,15 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
 
-      // Calcular puntos basado en el resultado
       switch (result) {
         case GameResultModel.win:
-          pointsEarned = 10; // +10 puntos por victoria
+          pointsEarned = 10;
           break;
         case GameResultModel.loss:
-          pointsEarned = -10; // -10 puntos por derrota
+          pointsEarned = -10;
           break;
         case GameResultModel.draw:
-          pointsEarned = 5; // 0 puntos por empate
+          pointsEarned = 5;
           break;
       }
 

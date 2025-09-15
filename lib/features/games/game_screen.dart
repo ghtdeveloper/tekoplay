@@ -11,6 +11,7 @@ import '../../core/models/multiplayer_game_match_chess.dart';
 import '../../core/service/auth_service.dart';
 import '../../core/service/firestore_service.dart';
 import '../../core/service/notification_service.dart';
+import '../../core/service/payment_service.dart';
 import '../../generated/l10n.dart';
 import '../../widgets/game_mode_widget.dart';
 import '../adds/BannerAdWidget.dart';
@@ -257,8 +258,6 @@ class _GameScreenState extends State<GameScreen> {
         // Aquí manejas la lógica de compra
         print('Comprando $coinAmount diamantes por \$${price} CLP');
 
-        // Aquí puedes integrar con tu sistema de pagos
-        // Por ejemplo, conectar con Google Play Billing o Apple Store
         _processCoinPurchase(coinAmount, price);
       },
     );
@@ -266,30 +265,60 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _processCoinPurchase(int coins, int price) async {
     try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(child: CircularProgressIndicator()),
+      // Inicializar servicio
+      final paymentService = PaymentService();
+
+      // Verificar disponibilidad primero
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google Pay no está disponible en este dispositivo'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Procesar pago
+      final result = await paymentService.makePayment(
+        label: '$coins Monedas',
+        amount: price.toDouble(),
+        productId: 'coins_$coins',
       );
-      // Simular procesamiento de pago
-      await Future.delayed(Duration(seconds: 2));
-      // Actualizar monedas del usuario
-      setState(() {
-        _userDiamonds = (_userDiamonds ?? 0) + coins;
-      });
-      Navigator.of(context).pop(); // Cerrar loading
-      // Mostrar confirmación
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('¡Compra exitosa! +$coins monedas'),
-          backgroundColor: Colors.green,
-        ),
-      );
+
+      if (result != null && result['success'] == true) {
+        // Verificar con servidor (opcional pero recomendado)
+        // await verifyWithServer(result);
+
+        // Actualizar monedas localmente
+        setState(() {
+          _userDiamonds = (_userDiamonds ?? 0) + coins;
+        });
+
+        // Actualizar en Firestore
+        if (_currentUser != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser!.uid)
+              .update({
+            'coins': FieldValue.increment(coins),
+          });
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('¡Compra exitosa! +$coins monedas'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
     } catch (e) {
-      Navigator.of(context).pop(); // Cerrar loading
+      print('Error en compra: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error en la compra'),
+          content: Text('Error procesando el pago'),
           backgroundColor: Colors.red,
         ),
       );
