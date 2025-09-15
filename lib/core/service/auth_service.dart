@@ -222,16 +222,16 @@ class AuthService {
     return Stream.value(null);
   }
 
-  Future<bool> updateUserCurrency(int newCurrency) async {
+  Future<bool> updateUserCoins(int newCoins) async {
     final user = getCurrentUser();
     if (user != null && await canAccessApp()) {
-      return await _firestoreService.updateUserCurrency(user.uid, newCurrency);
+      return await _firestoreService.updateUserCoins(user.uid, newCoins);
     }
     return false;
   }
 
   Future<bool> updateUserData({
-    int? currency,
+    int? coins,
     int? diamonds,
     Map<GameTypeModel, GameStats>? gameStats
   }) async {
@@ -239,7 +239,7 @@ class AuthService {
     if (user != null && await canAccessApp()) {
       return await _firestoreService.updateUserData(
         user.uid,
-        currency: currency,
+        coins: coins,
         diamonds: diamonds,
         gameStats: gameStats,
       );
@@ -381,7 +381,7 @@ class AuthService {
       'uid': user.uid,
       'name': userData.name,
       'totalPoints': userData.totalPoints,
-      'currency': userData.currency,
+      'coins': userData.coins,
       'gameStats': userData.gameStats.map((gameType, stats) => MapEntry(
         gameType.displayName,
         {

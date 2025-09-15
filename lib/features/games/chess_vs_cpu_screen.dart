@@ -36,7 +36,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   late int _cpuMoveTime;
   DateTime? _gameStartTime;
-  int? _userCurrency;
+  int? _userCoins;
   PlayerColor? _playerColor;
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
@@ -116,9 +116,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser!.uid)
-          .update({'currency': FieldValue.increment(change)});
+          .update({'coins': FieldValue.increment(change)});
       setState(() {
-        _userCurrency = (_userCurrency ?? 0) + change;
+        _userCoins = (_userCoins ?? 0) + change;
       });
     } catch (e) {
       print('Error actualizando diamantes: $e');

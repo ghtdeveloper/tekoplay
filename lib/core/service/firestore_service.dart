@@ -49,7 +49,7 @@ class FirestoreService {
           urlPhoto: firebaseUser.photoURL ?? '',
           email: firebaseUser.email?? '',
           createdAt: DateTime.now(),
-          currency: 500,
+          coins: 500,
         );
 
         await _firestore
@@ -236,14 +236,14 @@ class FirestoreService {
     });
   }
 
-  Future<bool> updateUserCurrency(String userId, int newCurrency) async {
+  Future<bool> updateUserCoins(String userId, int newCoins) async {
     try {
       await _firestore.collection(_usersCollection).doc(userId).update({
-        'currency': newCurrency,
+        'coins': newCoins,
       });
       return true;
     } catch (e) {
-      print('Error updating currency: $e');
+      print('Error updating coins: $e');
       return false;
     }
   }
@@ -282,16 +282,16 @@ class FirestoreService {
 
   Future<bool> updateUserData(
     String userId, {
-    int? currency, int? diamonds,
+    int? coins, int? diamonds,
     Map<GameTypeModel, GameStats>? gameStats,
   }) async {
     try {
       Map<String, dynamic> updates = {};
 
-      if (currency != null) {
-        updates['currency'] = currency;
+      if (coins != null) {
+        updates['coins'] = coins;
       }
-      if (currency != null) {
+      if (coins != null) {
         updates['diamonds'] = diamonds;
       }
 
@@ -428,7 +428,7 @@ class FirestoreService {
 
       Map<String, dynamic> summary = {
         'totalPoints': user.totalPoints,
-        'currency': user.currency,
+        'coins': user.coins,
         'gameStats': {},
       };
 

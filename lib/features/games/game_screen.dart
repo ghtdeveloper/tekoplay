@@ -90,7 +90,7 @@ class _GameScreenState extends State<GameScreen> {
 
           setState(() {
             _userDiamonds = userData['diamonds'] ?? 0;
-            _userCoins = userData['currency'] ?? 0;
+            _userCoins = userData['coins'] ?? 0;
           });
         }
       },
@@ -243,11 +243,7 @@ class _GameScreenState extends State<GameScreen> {
     showCoinPurchaseDialog(
       context,
       onPurchase: (coinAmount, price) {
-        // Aquí manejas la lógica de compra
         print('Comprando $coinAmount monedas por \$${price} CLP');
-
-        // Aquí puedes integrar con tu sistema de pagos
-        // Por ejemplo, conectar con Google Play Billing o Apple Store
         _processCoinPurchase(coinAmount, price);
       },
     );
@@ -267,10 +263,7 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _processCoinPurchase(int coins, int price) async {
     try {
-      // Inicializar servicio
       final paymentService = PaymentService();
-
-      // Verificar disponibilidad primero
       final canPay = await paymentService.canMakePayments();
       if (!canPay) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -282,7 +275,6 @@ class _GameScreenState extends State<GameScreen> {
         return;
       }
 
-      // Procesar pago
       final result = await paymentService.makePayment(
         label: '$coins Monedas',
         amount: price.toDouble(),
@@ -290,16 +282,10 @@ class _GameScreenState extends State<GameScreen> {
       );
 
       if (result != null && result['success'] == true) {
-        // Verificar con servidor (opcional pero recomendado)
-        // await verifyWithServer(result);
-
-        // Actualizar monedas localmente
         setState(() {
-          _userDiamonds = (_userDiamonds ?? 0) + coins;
           _userCoins = (_userCoins ?? 0) + coins;
         });
 
-        // Actualizar en Firestore
         if (_currentUser != null) {
           await FirebaseFirestore.instance
               .collection('users')
@@ -308,7 +294,6 @@ class _GameScreenState extends State<GameScreen> {
             'coins': FieldValue.increment(coins),
           });
         }
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('¡Compra exitosa! +$coins monedas'),
