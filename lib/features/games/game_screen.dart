@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,7 +45,7 @@ class _GameScreenState extends State<GameScreen> {
   late String matchType;
   User? _currentUser;
   String? _currentPhotoUrl;
-  int? _currentCurrency;
+  int? _userDiamonds;
   String? _anonymousPlayerName;
   bool _isAnonymousMode = false;
   late AudioPlayer _audioPlayer;
@@ -53,6 +54,7 @@ class _GameScreenState extends State<GameScreen> {
   bool _isInitialized = false;
   StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
   StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
+  StreamSubscription<DocumentSnapshot>? _diamondsSubscription;
 
   bool get isChess => gameType == S.of(context).chess;
 
@@ -64,6 +66,41 @@ class _GameScreenState extends State<GameScreen> {
     gameType = widget.gameType;
     matchType = widget.matchType;
     _initializeAsync();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.matchType == S.of(context).bet) {
+      _setupDiamondsListener();
+    }
+  }
+
+  void _setupDiamondsListener() {
+    if (_currentUser == null) return;
+
+    _diamondsSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser!.uid)
+        .snapshots()
+        .listen(
+          (DocumentSnapshot document) {
+        if (document.exists && mounted && !_isDisposed) {
+          final userData = document.data() as Map<String, dynamic>;
+          setState(() {
+            _userDiamonds = userData['diamonds'] ?? 0;
+          });
+        }
+      },
+      onError: (error) {
+        print('Error listening to diamonds: $error');
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _userDiamonds = 0;
+          });
+        }
+      },
+    );
   }
 
   Future<void> _initializeAsync() async {
@@ -140,7 +177,6 @@ class _GameScreenState extends State<GameScreen> {
         if (userData != null && mounted && !_isDisposed) {
           setState(() {
             _currentPhotoUrl = userData.urlPhoto;
-            _currentCurrency = userData.currency;
           });
         }
       }
@@ -239,7 +275,7 @@ class _GameScreenState extends State<GameScreen> {
       await Future.delayed(Duration(seconds: 2));
       // Actualizar monedas del usuario
       setState(() {
-        _currentCurrency = (_currentCurrency ?? 0) + coins;
+        _userDiamonds = (_userDiamonds ?? 0) + coins;
       });
       Navigator.of(context).pop(); // Cerrar loading
       // Mostrar confirmación
@@ -271,7 +307,7 @@ class _GameScreenState extends State<GameScreen> {
       await Future.delayed(Duration(seconds: 2));
       // Actualizar diamantes del usuario
       setState(() {
-        _currentCurrency = (_currentCurrency ?? 0) + diamond;
+        _userDiamonds = (_userDiamonds ?? 0) + diamond;
       });
       Navigator.of(context).pop(); // Cerrar loading
       // Mostrar confirmación
@@ -297,6 +333,7 @@ class _GameScreenState extends State<GameScreen> {
     _isDisposed = true;
     _invitationsSubscription?.cancel();
     _activeGamesSubscription?.cancel();
+    _diamondsSubscription?.cancel();
     _audioPlayer.dispose();
     if (_isAnonymousMode) {
       try {
@@ -730,8 +767,10 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                   Row(
                     children: [
+
+
                       Text(
-                        '${(_currentCurrency ?? 0.0).toInt()}',
+                        '${(_userDiamonds ?? 0.0).toInt()}',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

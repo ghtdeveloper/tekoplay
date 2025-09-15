@@ -278,7 +278,10 @@
   "loginRequired": "Connexion requise",
   "toUse": "Pour utiliser",
   "youNeedToLogin": "vous devez vous connecter",
-  "cancel": "Annuler"
+  "cancelNegotiation": "Annuler la négociation",
+  "negotiatingBet": "Négociation de la mise..."
+
+
 
 
 

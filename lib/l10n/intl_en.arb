@@ -279,7 +279,10 @@
   "loginRequired": "Login required",
   "toUse": "To use",
   "youNeedToLogin": "you need to log in",
-  "cancel": "Cancel"
+  "cancelNegotiation": "Cancel Negotiation",
+  "negotiatingBet": "Negotiating bet..."
+
+
 
 
 

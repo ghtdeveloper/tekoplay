@@ -279,7 +279,10 @@
   "loginRequired": "Inicio de sesión requerido",
   "toUse": "Para usar",
   "youNeedToLogin": "necesitas iniciar sesión",
-  "cancel": "Cancelar"
+  "cancelNegotiation": "Cancelar Negociación",
+  "negotiatingBet": "Negociando apuesta..."
+
+
 
 
 

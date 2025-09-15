@@ -11,11 +11,10 @@ class OnlineMatchmakingChessService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Busca partidas en espera con un rango de diferencia de hasta 300 puntos
   Future<List<MultiplayerGameMatch>> findWaitingGames({
     required String gameType,
     required int userRanking,
-    required int? timeMinutes,
+    required int? timeMinutes, int? betAmount,
   }) async {
     try {
       const int maxRankingDifference = 300;
@@ -29,6 +28,9 @@ class OnlineMatchmakingChessService {
         'gameSettings.hostRanking',
         isGreaterThanOrEqualTo: userRanking - maxRankingDifference,
       )
+
+
+
           .where(
         'gameSettings.hostRanking',
         isLessThanOrEqualTo: userRanking + maxRankingDifference,
@@ -124,6 +126,7 @@ class OnlineMatchmakingChessService {
     required String gameType,
     required int? timeMinutes,
     required int hostRanking,
+    int? betAmount, // Agregar este parámetro
   }) async {
     try {
       final gameRef = _firestore.collection('multiplayer_games').doc();
@@ -140,10 +143,12 @@ class OnlineMatchmakingChessService {
         moves: [],
         createdAt: DateTime.now(),
         isRanked: true,
+        betAmount: betAmount, // Agregar esto
         gameSettings: {
           'timeMinutes': timeMinutes,
           'hostRanking': hostRanking,
           'isOnlineMatchmaking': true,
+          'betAmount': betAmount, // Agregar esto también
         },
       );
 
