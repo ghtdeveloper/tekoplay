@@ -279,7 +279,11 @@
   "toUse": "Pour utiliser",
   "youNeedToLogin": "vous devez vous connecter",
   "cancelNegotiation": "Annuler la négociation",
-  "negotiatingBet": "Négociation de la mise..."
+  "negotiatingBet": "Négociation de la mise...",
+  "errorAcceptingCounteroffer": "Erreur lors de l'acceptation de la contre-offre",
+  "errorRejectingCounteroffer": "Erreur lors du refus de la contre-offre"
+
+
 
 
 

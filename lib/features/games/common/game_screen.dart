@@ -27,7 +27,6 @@ import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
 import 'game_history_screen.dart';
 
-
 class GameScreen extends StatefulWidget {
   final String gameType;
   final String matchType;
@@ -86,25 +85,25 @@ class _GameScreenState extends State<GameScreen> {
         .snapshots()
         .listen(
           (DocumentSnapshot document) {
-        if (document.exists && mounted && !_isDisposed) {
-          final userData = document.data() as Map<String, dynamic>;
+            if (document.exists && mounted && !_isDisposed) {
+              final userData = document.data() as Map<String, dynamic>;
 
-          setState(() {
-            _userDiamonds = userData['diamonds'] ?? 0;
-            _userCoins = userData['coins'] ?? 0;
-          });
-        }
-      },
-      onError: (error) {
-        print('Error listening to diamonds: $error');
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _userDiamonds = 0;
-            _userCoins = 0;
-          });
-        }
-      },
-    );
+              setState(() {
+                _userDiamonds = userData['diamonds'] ?? 0;
+                _userCoins = userData['coins'] ?? 0;
+              });
+            }
+          },
+          onError: (error) {
+            print('Error listening to diamonds: $error');
+            if (mounted && !_isDisposed) {
+              setState(() {
+                _userDiamonds = 0;
+                _userCoins = 0;
+              });
+            }
+          },
+        );
   }
 
   Future<void> _initializeAsync() async {
@@ -288,9 +287,7 @@ class _GameScreenState extends State<GameScreen> {
           await FirebaseFirestore.instance
               .collection('users')
               .doc(_currentUser!.uid)
-              .update({
-            'coins': FieldValue.increment(coins),
-          });
+              .update({'coins': FieldValue.increment(coins)});
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -299,7 +296,6 @@ class _GameScreenState extends State<GameScreen> {
           ),
         );
       }
-
     } catch (e) {
       print('Error en compra: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -417,85 +413,79 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-
   void _showLoginRequiredDialog(BuildContext context, String feature) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.lock_outline,
-                size: 48,
-                color: Color(0xFFEC7A34),
-              ),
-              SizedBox(height: 16),
-              Text(
-                S.of(context).loginRequired,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                '${S.of(context).toUse} $feature ${S.of(context).youNeedToLogin}',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-              SizedBox(height: 20),
-              Row(
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(S.of(context).cancel),
+                  Icon(Icons.lock_outline, size: 48, color: Color(0xFFEC7A34)),
+                  SizedBox(height: 16),
+                  Text(
+                    S.of(context).loginRequired,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
                   ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        Navigator.of(context).pop();
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SettingsScreen(
-                              onVolumeChangedLive: (newVolume) {
-                                _updateVolume(newVolume);
-                              },
-                            ),
-                          ),
-                        );
-                        _loadCurrentUser();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFFEC7A34),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  SizedBox(height: 12),
+                  Text(
+                    '${S.of(context).toUse} $feature ${S.of(context).youNeedToLogin}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                  SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: Text(S.of(context).cancel),
                         ),
                       ),
-                      child: Text(S.of(context).login),
-                    ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            Navigator.of(context).pop();
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => SettingsScreen(
+                                      onVolumeChangedLive: (newVolume) {
+                                        _updateVolume(newVolume);
+                                      },
+                                    ),
+                              ),
+                            );
+                            _loadCurrentUser();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(0xFFEC7A34),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(S.of(context).login),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -1075,6 +1065,9 @@ class _GameScreenState extends State<GameScreen> {
                                                             gameId:
                                                                 result['gameId'],
                                                             isHost: false,
+                                                            matchType:
+                                                                widget
+                                                                    .matchType,
                                                           ),
                                                 ),
                                               );
@@ -1114,7 +1107,6 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showFriendGameDialog(BuildContext context) {
-
     if (_currentUser == null) {
       _showLoginRequiredDialog(context, S.of(context).vsFriend);
       return;
@@ -1349,8 +1341,10 @@ class _GameScreenState extends State<GameScreen> {
                             context,
                             MaterialPageRoute(
                               builder:
-                                  (context) =>
-                                      ChessVsComputerScreen(selectedDifficulty),
+                                  (context) => ChessVsComputerScreen(
+                                    selectedDifficulty,
+                                    matchType: widget.matchType,
+                                  ),
                             ),
                           );
                         },

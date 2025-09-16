@@ -277,6 +277,7 @@ class NotificationService {
             builder: (context) => MultiplayerChessScreen(
               gameId: result['gameId'],
               isHost: false,
+              matchType: "",
             ),
           ),
         );

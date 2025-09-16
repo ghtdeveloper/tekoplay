@@ -14,11 +14,13 @@ import '../../adds/BannerAdWidget.dart';
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
   final bool isHost;
+  final String matchType; // Agregar este parámetro
 
   const MultiplayerChessScreen({
     super.key,
     required this.gameId,
     this.isHost = false,
+    required this.matchType, // Requerido
   });
 
   @override
@@ -39,6 +41,11 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   bool _isProcessingMove = false;
   DateTime? _gameStartTime;
 
+  // Variables para el sistema de monedas
+  int? _userCoins;
+  int? _userDiamonds;
+  int? _selectedBetAmount;
+
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   MultiplayerGameService get _gameService => MultiplayerGameService();
@@ -53,7 +60,50 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _gameStartTime = DateTime.now();
+    _loadUserCurrency();
     _initializeGame();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadUserCurrency();
+  }
+
+  Future<void> _loadUserCurrency() async {
+    if (currentUser == null) return;
+    try {
+      final userDoc = await _firestoreService.getUser(currentUser!.uid);
+      if (userDoc != null) {
+        setState(() {
+          _userDiamonds = userDoc.diamonds ?? 0;
+          _userCoins = userDoc.coins;
+        });
+      }
+    } catch (e) {
+      print('Error loading user currency: $e');
+      setState(() {
+        _userDiamonds = 0;
+        _userCoins = 0;
+      });
+    }
+  }
+
+  // Funciones helper para determinar tipo de moneda
+  String _getCurrencyType() {
+    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
+  }
+
+  String _getCurrencyName() {
+    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
+  }
+
+  IconData _getCurrencyIcon() {
+    return widget.matchType == S.of(context).bet ? Icons.diamond : Icons.monetization_on;
+  }
+
+  int? _getCurrentBalance() {
+    return widget.matchType == S.of(context).bet ? _userDiamonds : _userCoins;
   }
 
   @override
@@ -94,19 +144,19 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         .getGameStream(widget.gameId)
         .listen(
           (game) {
-            if (game == null) {
-              _showErrorAndExit(S.of(context).gameNotFound);
-              return;
-            }
+        if (game == null) {
+          _showErrorAndExit(S.of(context).gameNotFound);
+          return;
+        }
 
-            _handleGameUpdate(game);
-          },
-          onError: (error) {
-            print('Error in game stream: $error');
-            setState(() => _isConnected = false);
-            _startReconnectTimer();
-          },
-        );
+        _handleGameUpdate(game);
+      },
+      onError: (error) {
+        print('Error in game stream: $error');
+        setState(() => _isConnected = false);
+        _startReconnectTimer();
+      },
+    );
   }
 
   void _startReconnectTimer() {
@@ -160,6 +210,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     _opponentName = game.getOpponentName(currentUser!.uid);
     _opponentPhotoUrl = isHost ? game.guestPhotoUrl : game.hostPhotoUrl;
+
+    // Obtener monto de apuesta si existe
+    _selectedBetAmount = game.betAmount;
   }
 
   void _syncGameState() {
@@ -272,34 +325,58 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   Future<void> _recordGameResult(GameResultModel result) async {
-    if (currentUser == null) {
-      print('Usuario no autenticado, no se registrará la partida');
-      return;
-    }
-
-    if (_gameStartTime == null) {
-      print('Tiempo de juego no válido, no se registrará la partida');
-      return;
-    }
+    if (currentUser == null || _gameStartTime == null) return;
 
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
+      int currencyChange = 0;
+      bool isApuesta = widget.matchType == S.of(context).bet;
 
       switch (result) {
         case GameResultModel.win:
           pointsEarned = 15;
+          if (isApuesta && _selectedBetAmount != null) {
+            final winnings = (_selectedBetAmount! * 0.7).round();
+            currencyChange = winnings + _selectedBetAmount!;
+          }
           break;
         case GameResultModel.loss:
           pointsEarned = -5;
+          if (isApuesta && _selectedBetAmount != null) {
+            currencyChange = -_selectedBetAmount!;
+          }
           break;
         case GameResultModel.draw:
           pointsEarned = 5;
+          // En empate, cada uno recupera su apuesta (no hay cambio)
+          currencyChange = 0;
           break;
       }
 
+      // Bonus para juegos clasificatorios
       if (_currentGame?.isRanked == true) {
         pointsEarned = (pointsEarned * 1.5).round();
+      }
+
+      // Actualizar monedas o diamantes si hay cambio
+      if (currencyChange != 0) {
+        final userData = await _firestoreService.getUser(currentUser!.uid);
+        if (userData != null) {
+          if (isApuesta) {
+            // Apuestas usan diamantes
+            final currentDiamonds = userData.diamonds ?? 0;
+            final newDiamonds = currentDiamonds + currencyChange;
+            await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+            setState(() => _userDiamonds = newDiamonds);
+          } else {
+            // Diversión usa monedas
+            final currentCoins = userData.coins;
+            final newCoins = currentCoins + currencyChange;
+            await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
+            setState(() => _userCoins = newCoins);
+          }
+        }
       }
 
       final success = await _firestoreService.recordGameMatch(
@@ -312,7 +389,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         additionalData: {
           'gameMode': 'multiplayer',
           'isRanked': _currentGame?.isRanked ?? false,
-          'betAmount': _currentGame?.betAmount,
+          'betAmount': _selectedBetAmount,
+          'currencyChange': currencyChange,
+          'currencyType': _getCurrencyType(),
+          'matchType': widget.matchType,
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
           'opponentId': _currentGame?.hostId == currentUser!.uid
               ? _currentGame?.guestId
@@ -325,6 +405,13 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
       if (success) {
         print('Partida multijugador registrada exitosamente');
+        if (currencyChange > 0) {
+          String currency = _getCurrencyName();
+          print('Ganaste $currencyChange $currency');
+        } else if (currencyChange < 0) {
+          String currency = _getCurrencyName();
+          print('Perdiste ${currencyChange.abs()} $currency');
+        }
       } else {
         print('Error al registrar la partida en Firestore');
       }
@@ -352,10 +439,40 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
             S.of(context).gameOver,
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
-          content: Text(
-            message,
-            style: TextStyle(fontSize: 16),
-            textAlign: TextAlign.center,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                message,
+                style: TextStyle(fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              if (_selectedBetAmount != null) ...[
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue[200]!),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_getCurrencyIcon(), color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text(
+                        'Apuesta: $_selectedBetAmount ${_getCurrencyName()}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[800],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(15),
@@ -419,18 +536,18 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       barrierDismissible: false,
       builder:
           (context) => AlertDialog(
-            title: Text('Error'),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                child: Text('OK'),
-              ),
-            ],
+        title: Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            child: Text('OK'),
           ),
+        ],
+      ),
     );
   }
 
@@ -438,9 +555,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     if (_currentGame == null) return SizedBox();
 
     final name =
-        isMe
-            ? (currentUser?.displayName ?? S.of(context).you)
-            : (_opponentName ?? S.of(context).rivals);
+    isMe
+        ? (currentUser?.displayName ?? S.of(context).you)
+        : (_opponentName ?? S.of(context).rivals);
 
     final photoUrl = isMe ? currentUser?.photoURL : _opponentPhotoUrl;
 
@@ -450,7 +567,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color:
-            isPlayerTurn ? Colors.black.withValues(alpha: 0.1) : Colors.transparent,
+        isPlayerTurn ? Colors.black.withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         border: isPlayerTurn ? Border.all(color: Colors.green, width: 2) : null,
       ),
@@ -539,17 +656,57 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 ),
               ],
             ),
-          if (_currentGame!.betAmount != null)
+          if (_selectedBetAmount != null)
             Row(
               children: [
-                Icon(Icons.monetization_on, color: Colors.green, size: 16),
+                Icon(
+                  _getCurrencyIcon(),
+                  color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+                  size: 16,
+                ),
                 SizedBox(width: 4),
                 Text(
-                  '${_currentGame!.betAmount}',
-                  style: TextStyle(color: Colors.green, fontSize: 12),
+                  '$_selectedBetAmount ${_getCurrencyName()}',
+                  style: TextStyle(
+                    color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrencyDisplay() {
+    final currentBalance = _getCurrentBalance() ?? 0;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _getCurrencyIcon(),
+            color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+            size: 16,
+          ),
+          SizedBox(width: 6),
+          Text(
+            '$currentBalance',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );
@@ -598,6 +755,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
             style: TextStyle(color: Colors.white),
           ),
           iconTheme: const IconThemeData(color: Colors.white),
+          actions: [
+            Center(child: _buildCurrencyDisplay()),
+            SizedBox(width: 16),
+          ],
         ),
         body: Center(
           child: Column(
@@ -615,6 +776,33 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 '${S.of(context).gameCode}: ${widget.gameId.substring(0, 8)}',
                 style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
+              if (_selectedBetAmount != null) ...[
+                SizedBox(height: 20),
+                Container(
+                  padding: EdgeInsets.all(16),
+                  margin: EdgeInsets.symmetric(horizontal: 40),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(_getCurrencyIcon(), color: Colors.amber, size: 24),
+                      SizedBox(width: 8),
+                      Text(
+                        'Apuesta: $_selectedBetAmount ${_getCurrencyName()}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () async {
@@ -649,6 +837,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          Center(child: _buildCurrencyDisplay()),
+          SizedBox(width: 16),
+        ],
       ),
       body: Column(
         children: [

@@ -15,8 +15,9 @@ import '../../adds/InterstitialAdHelper.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
+  final String matchType;
 
-  const ChessVsComputerScreen(this.selectedDifficulty, {super.key});
+  const ChessVsComputerScreen(this.selectedDifficulty, {super.key, required this.matchType});
 
   @override
   State<ChessVsComputerScreen> createState() => _ChessVsComputerScreenState();
@@ -33,10 +34,12 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   bool _isStockfishReady = false;
   bool _engineThinking = false;
   bool _gameEnded = false;
+  bool _hasStartedGame = false;
 
   late int _cpuMoveTime;
   DateTime? _gameStartTime;
   int? _userCoins;
+  int? _userDiamonds;
   PlayerColor? _playerColor;
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
@@ -94,10 +97,142 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         if (_playerColor == PlayerColor.black) _makeCpuMove();
       }
     });
+
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
+    _loadUserCurrency();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadUserCurrency();
+  }
 
+  Future<void> _loadUserCurrency() async {
+    if (currentUser == null) return;
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser!.uid)
+          .get();
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        setState(() {
+          _userDiamonds = userData['diamonds'] ?? 0;
+          _userCoins = userData['coins'] ?? 0;
+        });
+      }
+    } catch (e) {
+      print('Error loading user currency: $e');
+      setState(() {
+        _userDiamonds = 0;
+        _userCoins = 0;
+      });
+    }
+  }
+
+  String _getCurrencyType() {
+    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
+  }
+
+  String _getCurrencyName() {
+    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
+  }
+
+  IconData _getCurrencyIcon() {
+    return widget.matchType == S.of(context).bet ? Icons.diamond : Icons.monetization_on;
+  }
+
+  int? _getCurrentBalance() {
+    return widget.matchType == S.of(context).bet ? _userDiamonds : _userCoins;
+  }
+
+  int _getGameCost() {
+    return widget.matchType == S.of(context).bet ? 5 : 100;
+  }
+
+  Future<bool> _checkAndDeductGameCost() async {
+    if (currentUser == null) return false;
+
+    final currentBalance = _getCurrentBalance();
+    final gameCost = _getGameCost();
+
+    if (currentBalance == null || currentBalance < gameCost) {
+      _showInsufficientFundsDialog();
+      return false;
+    }
+
+    try {
+      final userData = await _firestoreService.getUser(currentUser!.uid);
+      if (userData != null) {
+        if (widget.matchType == S.of(context).bet) {
+          final newDiamonds = userData.diamonds! - gameCost;
+          await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+          setState(() => _userDiamonds = newDiamonds);
+        } else {
+          final newCoins = userData.coins - gameCost;
+          await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
+          setState(() => _userCoins = newCoins);
+        }
+      }
+      return true;
+    } catch (e) {
+      print('Error deducting game cost: $e');
+      _showError('Error al procesar el pago del juego');
+      return false;
+    }
+  }
+
+  void _showInsufficientFundsDialog() {
+    final gameCost = _getGameCost();
+    final currencyName = _getCurrencyName();
+    final currentBalance = _getCurrentBalance() ?? 0;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(_getCurrencyIcon(), color: Colors.red),
+            SizedBox(width: 8),
+            Text('Fondos Insuficientes'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Necesitas $gameCost $currencyName para jugar.',
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Tu balance actual: $currentBalance $currencyName',
+              style: TextStyle(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            child: Text('Volver'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
 
   Future<void> _initializeStockfish() async {
     _stockfish.stdin = "uci";
@@ -107,22 +242,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
     _stockfish.stdin = "setoption name Threads value 1";
     _stockfish.stdin = "setoption name Hash value 32";
-  }
-
-  Future<void> _updateUserDiamonds(int change) async {
-    if (currentUser == null) return;
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.uid)
-          .update({'coins': FieldValue.increment(change)});
-      setState(() {
-        _userCoins = (_userCoins ?? 0) + change;
-      });
-    } catch (e) {
-      print('Error actualizando diamantes: $e');
-    }
   }
 
   void _makeCpuMove() {
@@ -136,10 +255,17 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     _stockfish.stdin = "go movetime $_cpuMoveTime";
   }
 
-  void playerMoved() {
+  void playerMoved() async {
     if (!_isStockfishReady || _gameEnded) return;
 
-    _gameStartTime ??= DateTime.now();
+    if (!_hasStartedGame) {
+      final canPlay = await _checkAndDeductGameCost();
+      if (!canPlay) {
+        return;
+      }
+      _hasStartedGame = true;
+      _gameStartTime = DateTime.now();
+    }
 
     _checkGameEnd();
 
@@ -195,7 +321,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       _recordGameResult(GameResultModel.draw);
       setState(() {});
     } else if (isCheck) {
-      // Mostrar mensaje temporal de jaque
       _showCheckMessage();
     }
   }
@@ -237,17 +362,38 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
+      int currencyChange = 0;
+      final gameCost = _getGameCost();
 
       switch (result) {
         case GameResultModel.win:
           pointsEarned = 10;
+          currencyChange = gameCost + (gameCost ~/ 2);
           break;
         case GameResultModel.loss:
           pointsEarned = -10;
+          currencyChange = 0;
           break;
         case GameResultModel.draw:
           pointsEarned = 5;
+          currencyChange = gameCost ~/ 2;
           break;
+      }
+
+      // Aplicar recompensas si las hay
+      if (currencyChange > 0) {
+        final userData = await _firestoreService.getUser(currentUser!.uid);
+        if (userData != null) {
+          if (widget.matchType == S.of(context).bet) {
+            final newDiamonds = userData.diamonds! + currencyChange;
+            await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+            setState(() => _userDiamonds = newDiamonds);
+          } else {
+            final newCoins = userData.coins + currencyChange;
+            await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
+            setState(() => _userCoins = newCoins);
+          }
+        }
       }
 
       final success = await _firestoreService.recordGameMatch(
@@ -261,11 +407,18 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           'difficulty': widget.selectedDifficulty,
           'playerColor': _playerColor == PlayerColor.white ? 'white' : 'black',
           'finalFEN': controller.getFen(),
+          'gameCost': gameCost,
+          'currencyChange': currencyChange,
+          'currencyType': _getCurrencyType(),
+          'matchType': widget.matchType,
         },
       );
 
       if (success) {
         print('Partida registrada exitosamente');
+        if (currencyChange > 0) {
+          print('Recompensa: $currencyChange ${_getCurrencyName()}');
+        }
       } else {
         print('Error al registrar la partida en Firestore');
       }
@@ -365,10 +518,18 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     }
   }
 
-  void _selectPlayerColor(PlayerColor color) {
+  void _selectPlayerColor(PlayerColor color) async {
+    // Verificar fondos antes de permitir seleccionar color
+    final currentBalance = _getCurrentBalance();
+    final gameCost = _getGameCost();
+
+    if (currentBalance == null || currentBalance < gameCost) {
+      _showInsufficientFundsDialog();
+      return;
+    }
+
     setState(() {
       _playerColor = color;
-      _gameStartTime = DateTime.now();
       if (_playerColor == PlayerColor.black && _isStockfishReady) {
         _makeCpuMove();
       }
@@ -379,7 +540,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     _interstitialHelper.showAdIfReady(onComplete: () {
       _gameEnded = false;
       _engineThinking = false;
-      _gameStartTime = DateTime.now();
+      _hasStartedGame = false;
+      _gameStartTime = null;
       controller.resetBoard();
 
       if (_isStockfishReady) {
@@ -428,6 +590,56 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     );
   }
 
+  Widget _buildCurrencyDisplay() {
+    final currentBalance = _getCurrentBalance() ?? 0;
+    final gameCost = _getGameCost();
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _getCurrencyIcon(),
+            color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+            size: 18,
+          ),
+          SizedBox(width: 6),
+          Text(
+            '$currentBalance ${_getCurrencyName()}',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          SizedBox(width: 12),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Costo: $gameCost',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     if (_isStockfishReady) _stockfish.stdin = "quit";
@@ -445,6 +657,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              _buildCurrencyDisplay(),
+              SizedBox(height: 30),
               Text(
                 S.of(context).changeColor,
                 style: TextStyle(
@@ -502,6 +716,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          Center(child: _buildCurrencyDisplay()),
+        ],
       ),
       body: SafeArea(
         child: Column(

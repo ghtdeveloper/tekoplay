@@ -280,7 +280,11 @@
   "toUse": "To use",
   "youNeedToLogin": "you need to log in",
   "cancelNegotiation": "Cancel Negotiation",
-  "negotiatingBet": "Negotiating bet..."
+  "negotiatingBet": "Negotiating bet...",
+  "errorAcceptingCounteroffer": "Error accepting counteroffer",
+  "errorRejectingCounteroffer": "Error rejecting counteroffer"
+
+
 
 
 

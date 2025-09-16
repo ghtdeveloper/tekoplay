@@ -1244,7 +1244,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       // El juego debería comenzar automáticamente después de esto
     } catch (e) {
       print('Error aceptando contraoferta: $e');
-      _showError('Error aceptando contraoferta');
+      _showError(S.of(context).errorAcceptingCounteroffer);
     }
   }
 
@@ -1262,7 +1262,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       setState(() => _gameState = OnlineGameState.timeSelection);
     } catch (e) {
       print('Error rechazando contraoferta: $e');
-      _showError('Error rechazando contraoferta');
+      _showError(S.of(context).errorRejectingCounteroffer);
     }
   }
 

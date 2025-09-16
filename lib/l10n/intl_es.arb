@@ -280,7 +280,11 @@
   "toUse": "Para usar",
   "youNeedToLogin": "necesitas iniciar sesión",
   "cancelNegotiation": "Cancelar Negociación",
-  "negotiatingBet": "Negociando apuesta..."
+  "negotiatingBet": "Negociando apuesta...",
+  "errorAcceptingCounteroffer": "Error aceptando contraoferta",
+  "errorRejectingCounteroffer": "Error rechazando contraoferta"
+
+
 
 
 
