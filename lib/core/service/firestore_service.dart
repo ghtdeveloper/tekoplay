@@ -243,7 +243,17 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Error updating coins: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateUserDiamonds(String userId, int newDiamonds) async {
+    try {
+      await _firestore.collection(_usersCollection).doc(userId).update({
+        'diamonds': newDiamonds,
+      });
+      return true;
+    } catch (e) {
       return false;
     }
   }

@@ -45,8 +45,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   int? _userDiamonds;
   BetNegotiationState _betState = BetNegotiationState.selecting;
   String? _pendingGameId;
-
   final List<int> _betOptions = [10, 25, 50, 100, 250, 500, 1000];
+  int? _userCoins;
+  final List<int> _coinBetOptions = [50, 100, 250, 500, 1000, 2500, 5000];
 
   int? _selectedTimeMinutes;
   final List<TimeOption> _timeOptions = [
@@ -110,12 +111,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    // Cargar diamantes del usuario si es modo apuesta
-    // Aquí S.of(context) ya está disponible
-    if (widget.matchType == S.of(context).bet) {
-      _loadUserDiamonds();
-    }
+      _loadUserCurrency();
   }
 
   void _initializeStockfish() {
@@ -154,24 +150,25 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     });
   }
 
-  Future<void> _loadUserDiamonds() async {
+  Future<void> _loadUserCurrency() async {
     if (currentUser == null) return;
     try {
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUser!.uid)
-              .get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser!.uid)
+          .get();
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
         setState(() {
           _userDiamonds = userData['diamonds'] ?? 0;
+          _userCoins = userData['coins'] ?? 0;
         });
       }
     } catch (e) {
-      print('Error loading user diamonds: $e');
+      print('Error loading user currency: $e');
       setState(() {
         _userDiamonds = 0;
+        _userCoins = 0;
       });
     }
   }
@@ -258,14 +255,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Paso 1: Selección de tiempo
             _buildTimeSelection(),
-
-            // Paso 2: Selección de apuesta (solo si es modo apuesta)
-            if (widget.matchType == S.of(context).bet &&
-                _selectedTimeMinutes != null)
+            if (_selectedTimeMinutes != null)
               _buildBetSelection(),
-
             SizedBox(height: 20),
             _buildStartGameButton(),
           ],
@@ -361,6 +353,13 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   Widget _buildBetSelection() {
+    final bool useDiamonds = widget.matchType == S.of(context).bet;
+    final currentBalance = useDiamonds ? _userDiamonds : _userCoins;
+    final currencyName = useDiamonds ? 'diamantes' : 'monedas';
+    final currencyIcon = useDiamonds ? Icons.diamond : Icons.monetization_on;
+    final currencyColor = useDiamonds ? Colors.amber : Colors.blue;
+    final betOptions = useDiamonds ? _betOptions : _coinBetOptions;
+
     return Column(
       children: [
         SizedBox(height: 30),
@@ -375,7 +374,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             children: [
               Row(
                 children: [
-                  Icon(Icons.diamond, color: Colors.amber, size: 24),
+                  Icon(currencyIcon, color: currencyColor, size: 24),
                   SizedBox(width: 8),
                   Text(
                     'Selecciona tu apuesta',
@@ -388,82 +387,60 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                 ],
               ),
               SizedBox(height: 12),
-              if (_userDiamonds != null)
+              if (currentBalance != null)
                 Text(
-                  'Diamantes disponibles: $_userDiamonds',
+                  '$currencyName disponibles: $currentBalance',
                   style: TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               SizedBox(height: 16),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children:
-                    _betOptions.map((amount) {
-                      final isSelected = _selectedBetAmount == amount;
-                      final canAfford =
-                          _userDiamonds == null || _userDiamonds! >= amount;
+                children: betOptions.map((amount) {
+                  final isSelected = _selectedBetAmount == amount;
+                  final canAfford = _getCurrentBalance() != null && _getCurrentBalance()! >= amount;
 
-                      return GestureDetector(
-                        onTap:
-                            canAfford
-                                ? () =>
-                                    setState(() => _selectedBetAmount = amount)
-                                : null,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                  return GestureDetector(
+                    onTap: canAfford ? () => setState(() => _selectedBetAmount = amount) : null,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? currencyColor
+                            : (canAfford ? Colors.white : Colors.grey[400]),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected
+                              ? currencyColor.withOpacity(0.8)
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            currencyIcon,
+                            color: isSelected
+                                ? Colors.white
+                                : (canAfford ? currencyColor : Colors.grey[600]),
+                            size: 16,
                           ),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected
-                                    ? Colors.amber
-                                    : (canAfford
-                                        ? Colors.white
-                                        : Colors.grey[400]),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color:
-                                  isSelected
-                                      ? Colors.amber[700]!
-                                      : Colors.transparent,
-                              width: 2,
+                          SizedBox(width: 4),
+                          Text(
+                            amount.toString(),
+                            style: TextStyle(
+                              color: isSelected
+                                  ? Colors.white
+                                  : (canAfford ? Colors.black : Colors.grey[600]),
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.diamond,
-                                color:
-                                    isSelected
-                                        ? Colors.white
-                                        : (canAfford
-                                            ? Colors.amber
-                                            : Colors.grey[600]),
-                                size: 16,
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                amount.toString(),
-                                style: TextStyle(
-                                  color:
-                                      isSelected
-                                          ? Colors.white
-                                          : (canAfford
-                                              ? Colors.black
-                                              : Colors.grey[600]),
-                                  fontWeight:
-                                      isSelected
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ],
           ),
@@ -751,7 +728,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                       Icon(Icons.diamond, color: Colors.amber),
                       SizedBox(width: 8),
                       Text(
-                        '${game.betAmount} diamantes',
+                        '${game.betAmount} ${_getCurrencyName()}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -776,7 +753,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                       Icon(Icons.diamond, color: Colors.blue),
                       SizedBox(width: 8),
                       Text(
-                        '${_selectedBetAmount} diamantes',
+                        '${game.betAmount} ${_getCurrencyName()}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -831,8 +808,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   runSpacing: 8,
                   children:
                       _betOptions.map((amount) {
-                        final canAfford =
-                            _userDiamonds == null || _userDiamonds! >= amount;
+                        final canAfford = _getCurrentBalance() != null && _getCurrentBalance()! >= amount;
 
                         return GestureDetector(
                           onTap:
@@ -911,7 +887,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     try {
       // Verificar que el usuario tenga suficientes diamantes
       if (_userDiamonds != null && _userDiamonds! < newAmount) {
-        _showError('No tienes suficientes diamantes para esta apuesta');
+        _showError('No tienes suficientes ${_getCurrencyName()} para esta apuesta');
         setState(() => _gameState = OnlineGameState.timeSelection);
         return;
       }
@@ -1162,7 +1138,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   spacing: 8,
                   runSpacing: 8,
                   children: _betOptions.map((amount) {
-                    final canAfford = _userDiamonds == null || _userDiamonds! >= amount;
+                    final canAfford = _getCurrentBalance() != null && _getCurrentBalance()! >= amount;
 
                     return GestureDetector(
                       onTap: canAfford ? () {
@@ -1216,7 +1192,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Future<void> _sendSimpleCounterOffer(int newAmount) async {
     try {
       if (_userDiamonds != null && _userDiamonds! < newAmount) {
-        _showError('No tienes suficientes diamantes para esta apuesta');
+        _showError('No tienes suficientes ${_getCurrencyName()} para esta apuesta');
         setState(() => _gameState = OnlineGameState.timeSelection);
         return;
       }
@@ -1780,23 +1756,44 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
+      int currencyChange = 0;
+      bool isApuesta = widget.matchType == S.of(context).bet;
 
       switch (result) {
         case GameResultModel.win:
           pointsEarned = 20;
-          if (widget.matchType == S.of(context).bet && _selectedBetAmount != null) {
-            await _updateUserDiamonds(_selectedBetAmount!);
+          if (isApuesta && _selectedBetAmount != null) {
+            final winnings = (_selectedBetAmount! * 0.7).round();
+            currencyChange = winnings + _selectedBetAmount!;
           }
           break;
+
         case GameResultModel.loss:
           pointsEarned = -5;
-          if (widget.matchType == S.of(context).bet && _selectedBetAmount != null) {
-            await _updateUserDiamonds(-_selectedBetAmount!);
+          if (isApuesta && _selectedBetAmount != null) {
+            currencyChange = -_selectedBetAmount!;
           }
           break;
+
         case GameResultModel.draw:
           pointsEarned = 8;
+          currencyChange = 0;
           break;
+      }
+
+      if (currencyChange != 0) {
+        final userData = await _firestoreService.getUser(currentUser!.uid);
+        if (userData != null) {
+          if (widget.matchType == S.of(context).bet) {
+            final currentDiamonds = userData.diamonds ?? 0;
+            final newDiamonds = currentDiamonds + currencyChange;
+            await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+          } else {
+            final currentCoins = userData.coins;
+            final newCoins = currentCoins + currencyChange;
+            await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
+          }
+        }
       }
 
       final success = await _firestoreService.recordGameMatch(
@@ -1805,24 +1802,31 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         result: result,
         pointsEarned: pointsEarned,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName:
-            _opponentName ??
+        opponentName: _opponentName ??
             (_isPlayingAgainstBot ? 'Player' : 'Jugador en línea'),
         additionalData: {
-          'gameMode':
-              _isPlayingAgainstBot ? 'online_bot' : 'online_matchmaking',
+          'gameMode': _isPlayingAgainstBot ? 'online_bot' : 'online_matchmaking',
           'matchType': widget.matchType,
-          'timeControl':
-              _selectedTimeMinutes != null
-                  ? '${_selectedTimeMinutes!} minutos'
-                  : 'Sin límite',
+          'timeControl': _selectedTimeMinutes != null
+              ? '${_selectedTimeMinutes!} minutos'
+              : 'Sin límite',
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
           'finalFEN': controller.getFen(),
+          'betAmount': _selectedBetAmount,
+          'currencyChange': currencyChange,
+          'currencyType': _getCurrencyType(),
         },
       );
 
       if (success) {
         print('Partida registrada exitosamente');
+        if (currencyChange > 0) {
+          String currency = _getCurrencyName();
+          print('Ganaste $currencyChange $currency');
+        } else if (currencyChange < 0) {
+          String currency = _getCurrencyName();
+          print('Perdiste ${currencyChange.abs()} $currency');
+        }
       }
     } catch (e) {
       print('Error al registrar la partida: $e');
@@ -2533,6 +2537,22 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         throw UnimplementedError();
     }
   }
+
+  String _getCurrencyType() {
+    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
+  }
+
+  String _getCurrencyName() {
+    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
+  }
+
+  IconData _getCurrencyIcon() {
+    return widget.matchType == S.of(context).bet ? Icons.diamond : Icons.monetization_on;
+  }
+
+  int? _getCurrentBalance() {
+    return widget.matchType == S.of(context).bet ? _userDiamonds : _userCoins;
+  }
 }
 
 enum OnlineGameState { timeSelection, searching, playing, betNegotiation }
@@ -2543,3 +2563,4 @@ class TimeOption {
 
   TimeOption({required this.minutes, required this.display});
 }
+
