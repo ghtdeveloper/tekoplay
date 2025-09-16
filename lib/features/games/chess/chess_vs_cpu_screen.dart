@@ -6,12 +6,12 @@ import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../core/service/firestore_service.dart';
-import '../../generated/l10n.dart';
-import '../../core/utils/game_type.dart';
-import '../../core/utils/game_result.dart';
-import '../adds/BannerAdWidget.dart';
-import '../adds/InterstitialAdHelper.dart';
+import '../../../core/service/firestore_service.dart';
+import '../../../generated/l10n.dart';
+import '../../../core/utils/game_type.dart';
+import '../../../core/utils/game_result.dart';
+import '../../adds/BannerAdWidget.dart';
+import '../../adds/InterstitialAdHelper.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;

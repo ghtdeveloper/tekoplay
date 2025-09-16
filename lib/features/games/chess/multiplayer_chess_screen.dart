@@ -4,12 +4,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../core/models/multiplayer_game_match_chess.dart';
-import '../../core/service/firestore_service.dart';
-import '../../core/utils/game_type.dart';
-import '../../generated/l10n.dart';
-import '../../core/utils/game_result.dart';
-import '../adds/BannerAdWidget.dart';
+import '../../../core/models/multiplayer_game_match_chess.dart';
+import '../../../core/service/firestore_service.dart';
+import '../../../core/utils/game_type.dart';
+import '../../../generated/l10n.dart';
+import '../../../core/utils/game_result.dart';
+import '../../adds/BannerAdWidget.dart';
 
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;

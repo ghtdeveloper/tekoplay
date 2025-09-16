@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
-import '../../core/models/game_stats.dart';
-import '../../core/service/auth_service.dart';
-import '../../core/models/game_match.dart';
-import '../../generated/l10n.dart';
-import '../adds/BannerAdWidget.dart';
+import '../../../core/models/game_stats.dart';
+import '../../../core/service/auth_service.dart';
+import '../../../core/models/game_match.dart';
+import '../../../generated/l10n.dart';
+import '../../adds/BannerAdWidget.dart';
 
 class GameHistoryScreen extends StatefulWidget {
   const GameHistoryScreen({super.key});

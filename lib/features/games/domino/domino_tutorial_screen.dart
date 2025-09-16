@@ -1,8 +1,10 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import '../../core/models/domino_tile.dart';
-import '../../generated/l10n.dart';
-import '../adds/BannerAdWidget.dart';
+
+import '../../../core/models/domino_tile.dart';
+import '../../../generated/l10n.dart';
+import '../../adds/BannerAdWidget.dart';
+
 
 class DominoController {
   List<DominoTile> playerTiles = [];

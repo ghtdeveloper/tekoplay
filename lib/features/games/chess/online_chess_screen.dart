@@ -7,17 +7,18 @@ import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../core/models/multiplayer_game_match_chess.dart';
-import '../../core/service/auth_service.dart';
-import '../../core/service/firestore_service.dart';
-import '../../core/service/online_match_chess_game_service.dart';
-import '../../core/utils/bet_negotation_state.dart';
-import '../../generated/l10n.dart';
-import '../../core/utils/game_result.dart';
-import '../../core/utils/game_type.dart';
-import '../adds/BannerAdWidget.dart';
-import '../adds/InterstitialAdHelper.dart';
-import '../coins/diamond_purchase_dialog.dart';
+
+import '../../../core/models/multiplayer_game_match_chess.dart';
+import '../../../core/service/auth_service.dart';
+import '../../../core/service/firestore_service.dart';
+import '../../../core/service/online_match_chess_game_service.dart';
+import '../../../core/utils/bet_negotation_state.dart';
+import '../../../core/utils/game_result.dart';
+import '../../../core/utils/game_type.dart';
+import '../../../generated/l10n.dart';
+import '../../adds/BannerAdWidget.dart';
+import '../../adds/InterstitialAdHelper.dart';
+
 
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;

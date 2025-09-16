@@ -5,27 +5,28 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:tekoplay/features/games/chess_tutorial_screen.dart';
+import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
+import 'package:tekoplay/features/games/common/ranking_screen.dart';
 
-import '../../core/models/multiplayer_game_match_chess.dart';
-import '../../core/service/auth_service.dart';
-import '../../core/service/firestore_service.dart';
-import '../../core/service/notification_service.dart';
-import '../../core/service/payment_service.dart';
-import '../../generated/l10n.dart';
-import '../../widgets/game_mode_widget.dart';
-import '../adds/BannerAdWidget.dart';
-import '../coins/coin_purchase_dialog.dart';
-import '../coins/diamond_purchase_dialog.dart';
-import '../home/home_screen.dart';
-import '../settings/settings_screen.dart';
-import 'chess_vs_cpu_screen.dart';
-import 'domino_tutorial_screen.dart';
-import 'domino_vs_cpu_screen.dart';
-import 'multiplayer_chess_screen.dart';
-import 'online_chess_screen.dart';
-import 'ranking_screen.dart';
+import '../../../core/models/multiplayer_game_match_chess.dart';
+import '../../../core/service/auth_service.dart';
+import '../../../core/service/firestore_service.dart';
+import '../../../core/service/notification_service.dart';
+import '../../../core/service/payment_service.dart';
+import '../../../generated/l10n.dart';
+import '../../../widgets/game_mode_widget.dart';
+import '../../adds/BannerAdWidget.dart';
+import '../../coins/coin_purchase_dialog.dart';
+import '../../coins/diamond_purchase_dialog.dart';
+import '../../home/home_screen.dart';
+import '../../settings/settings_screen.dart';
+import '../chess/chess_vs_cpu_screen.dart';
+import '../chess/multiplayer_chess_screen.dart';
+import '../chess/online_chess_screen.dart';
+import '../domino/domino_tutorial_screen.dart';
+import '../domino/domino_vs_cpu_screen.dart';
 import 'game_history_screen.dart';
+
 
 class GameScreen extends StatefulWidget {
   final String gameType;
@@ -253,9 +254,6 @@ class _GameScreenState extends State<GameScreen> {
     showDiamondPurchaseDialog(
       context,
       onPurchase: (coinAmount, price) {
-        // Aquí manejas la lógica de compra
-        print('Comprando $coinAmount diamantes por \$${price} CLP');
-
         _processCoinPurchase(coinAmount, price);
       },
     );

@@ -1,8 +1,8 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
-import '../../generated/l10n.dart';
-import '../adds/BannerAdWidget.dart';
+import '../../../generated/l10n.dart';
+import '../../adds/BannerAdWidget.dart';
 
 class ChessImmersiveTutorialScreen extends StatefulWidget {
   const ChessImmersiveTutorialScreen({super.key});

@@ -1,9 +1,10 @@
-// Reemplaza tu ProfileImageEditor actual con esta versión mejorada:
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tekoplay/core/service/firestore_service.dart';
-import '../../core/service/profile_image_service.dart';
+
+import '../../../core/service/profile_image_service.dart';
+
 
 class ProfileImageEditor extends StatefulWidget {
   final String userId;

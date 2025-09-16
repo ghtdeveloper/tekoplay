@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../features/games/chess/multiplayer_chess_screen.dart';
 import '../../generated/l10n.dart';
-import '../../features/games/multiplayer_chess_screen.dart';
+
 import '../models/multiplayer_game_match_chess.dart';
 
 class NotificationService {

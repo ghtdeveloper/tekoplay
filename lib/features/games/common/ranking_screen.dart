@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:tekoplay/core/service/firestore_service.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
-import '../../core/service/auth_service.dart';
-import '../../generated/l10n.dart';
-import '../adds/BannerAdWidget.dart';
+import '../../../core/service/auth_service.dart';
+import '../../../generated/l10n.dart';
+import '../../adds/BannerAdWidget.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});

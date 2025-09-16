@@ -7,7 +7,7 @@ import 'dart:async';
 import '../../generated/l10n.dart';
 import '../adds/BannerAdWidget.dart';
 import '../adds/InterstitialAdHelper.dart';
-import '../games/game_screen.dart';
+import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
 
