@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tekoplay/core/service/firestore_service.dart';
-
 import '../../../core/service/profile_image_service.dart';
 
 
@@ -13,12 +12,12 @@ class ProfileImageEditor extends StatefulWidget {
   final Function(String?) onImageUpdated;
 
   const ProfileImageEditor({
-    Key? key,
+    super.key,
     required this.userId,
     this.currentImageUrl,
     required this.isEmailLogin,
     required this.onImageUpdated,
-  }) : super(key: key);
+  });
 
   @override
   State<ProfileImageEditor> createState() => _ProfileImageEditorState();

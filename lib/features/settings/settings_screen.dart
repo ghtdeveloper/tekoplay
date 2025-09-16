@@ -10,7 +10,8 @@ import '../../app.dart';
 import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
 import '../adds/BannerAdWidget.dart';
-import '../games/widget_profile_image_editor.dart';
+import '../games/common/widget_profile_image_editor.dart';
+
 
 class SettingsScreen extends StatefulWidget {
   final Function(double)? onVolumeChangedLive;
