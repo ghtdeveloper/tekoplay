@@ -252,8 +252,8 @@ class _GameScreenState extends State<GameScreen> {
   void _showDiamondPurchaseDialog() {
     showDiamondPurchaseDialog(
       context,
-      onPurchase: (coinAmount, price) {
-        _processCoinPurchase(coinAmount, price);
+      onPurchase: (diamondAmount, price) {
+        _processDiamondPurchase(diamondAmount, price);
       },
     );
   }
@@ -265,7 +265,7 @@ class _GameScreenState extends State<GameScreen> {
       if (!canPay) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Google Pay no está disponible en este dispositivo'),
+            content: Text(S.of(context).googlePayNotAvailable),
             backgroundColor: Colors.orange,
           ),
         );
@@ -273,7 +273,7 @@ class _GameScreenState extends State<GameScreen> {
       }
 
       final result = await paymentService.makePayment(
-        label: '$coins Monedas',
+        label: '$coins ${S.of(context).coins}',
         amount: price.toDouble(),
         productId: 'coins_$coins',
       );
@@ -291,7 +291,7 @@ class _GameScreenState extends State<GameScreen> {
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('¡Compra exitosa! +$coins monedas'),
+            content: Text('${S.of(context).purchaseSuccessful} +$coins ${S.of(context).coins}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -300,7 +300,7 @@ class _GameScreenState extends State<GameScreen> {
       print('Error en compra: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error procesando el pago'),
+          content: Text(S.of(context).paymentProcessingError),
           backgroundColor: Colors.red,
         ),
       );
@@ -309,30 +309,47 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _processDiamondPurchase(int diamond, int price) async {
     try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(child: CircularProgressIndicator()),
+      final paymentService = PaymentService();
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.of(context).googlePayNotAvailable),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final result = await paymentService.makePayment(
+        label: '$diamond ${S.of(context).diamonds}',
+        amount: price.toDouble(),
+        productId: 'diamonds_$diamond',
       );
-      // Simular procesamiento de pago
-      await Future.delayed(Duration(seconds: 2));
-      // Actualizar diamantes del usuario
-      setState(() {
-        _userDiamonds = (_userDiamonds ?? 0) + diamond;
-      });
-      Navigator.of(context).pop(); // Cerrar loading
-      // Mostrar confirmación
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('¡Compra exitosa! +$diamond diamantes'),
-          backgroundColor: Colors.green,
-        ),
-      );
+
+      if (result != null && result['success'] == true) {
+        setState(() {
+          _userDiamonds = (_userDiamonds ?? 0) + diamond;
+        });
+
+        if (_currentUser != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser!.uid)
+              .update({'diamonds': FieldValue.increment(diamond)});
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${S.of(context).purchaseSuccessful} +$diamond ${S.of(context).diamonds}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      Navigator.of(context).pop(); // Cerrar loading
+      print('Error en compra: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error en la compra'),
+          content: Text(S.of(context).paymentProcessingError),
           backgroundColor: Colors.red,
         ),
       );

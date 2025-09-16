@@ -282,7 +282,13 @@
   "cancelNegotiation": "Cancel Negotiation",
   "negotiatingBet": "Negotiating bet...",
   "errorAcceptingCounteroffer": "Error accepting counteroffer",
-  "errorRejectingCounteroffer": "Error rejecting counteroffer"
+  "errorRejectingCounteroffer": "Error rejecting counteroffer",
+  "googlePayNotAvailable": "Google Pay is not available on this device",
+  "purchaseSuccessful": "Purchase successful!",
+  "paymentProcessingError": "Error processing payment"
+
+
+
 
 
 
