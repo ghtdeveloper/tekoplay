@@ -9,6 +9,7 @@ import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
 import 'package:tekoplay/features/games/common/ranking_screen.dart';
 
 import '../../../core/models/multiplayer_game_match_chess.dart';
+import '../../../core/service/anonymous_wallet_service.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/notification_service.dart';
@@ -57,6 +58,7 @@ class _GameScreenState extends State<GameScreen> {
   StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
   StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
   StreamSubscription<DocumentSnapshot>? _diamondsSubscription;
+  final AnonymousWalletService _walletService = AnonymousWalletService();
 
   bool get isChess => gameType == S.of(context).chess;
 
@@ -77,7 +79,20 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _setupWalletInfoUser() {
-    if (_currentUser == null) return;
+    if (_currentUser == null) {
+      _setupAnonymousWalletListener();
+    } else {
+      _setupFirestoreWalletListener();
+    }
+  }
+
+  void _setupAnonymousWalletListener() {
+    _updateAnonymousWalletUI();
+  }
+
+
+  void _setupFirestoreWalletListener() {
+    _diamondsSubscription?.cancel();
 
     _diamondsSubscription = FirebaseFirestore.instance
         .collection('users')
@@ -85,25 +100,43 @@ class _GameScreenState extends State<GameScreen> {
         .snapshots()
         .listen(
           (DocumentSnapshot document) {
-            if (document.exists && mounted && !_isDisposed) {
-              final userData = document.data() as Map<String, dynamic>;
+        if (document.exists && mounted && !_isDisposed) {
+          final userData = document.data() as Map<String, dynamic>;
 
-              setState(() {
-                _userDiamonds = userData['diamonds'] ?? 0;
-                _userCoins = userData['coins'] ?? 0;
-              });
-            }
-          },
-          onError: (error) {
-            print('Error listening to diamonds: $error');
-            if (mounted && !_isDisposed) {
-              setState(() {
-                _userDiamonds = 0;
-                _userCoins = 0;
-              });
-            }
-          },
-        );
+          setState(() {
+            _userDiamonds = userData['diamonds'] ?? 0;
+            _userCoins = userData['coins'] ?? 0;
+          });
+        }
+      },
+      onError: (error) {
+        print('Error listening to diamonds: $error');
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _userDiamonds = 0;
+            _userCoins = 0;
+          });
+        }
+      },
+    );
+  }
+
+  Future<void> _updateAnonymousWalletUI() async {
+    if (_currentUser != null) return;
+
+    try {
+      final coins = await _walletService.getAnonymousCoins();
+      final diamonds = await _walletService.getAnonymousDiamonds();
+
+      if (mounted && !_isDisposed) {
+        setState(() {
+          _userCoins = coins;
+          _userDiamonds = diamonds;
+        });
+      }
+    } catch (e) {
+      print('Error actualizando UI de wallet anónima: $e');
+    }
   }
 
   Future<void> _initializeAsync() async {
@@ -146,7 +179,7 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-  void _enableAnonymousMode() async {
+  Future<void> _enableAnonymousMode() async {
     if (_isDisposed) return;
 
     try {
@@ -156,6 +189,7 @@ class _GameScreenState extends State<GameScreen> {
           _anonymousPlayerName = playerName;
           _isAnonymousMode = true;
         });
+        await _updateAnonymousWalletUI();
       }
     } catch (e) {
       print('Error en modo anónimo: $e');
@@ -182,6 +216,8 @@ class _GameScreenState extends State<GameScreen> {
             _currentPhotoUrl = userData.urlPhoto;
           });
         }
+      } else {
+        await _updateAnonymousWalletUI();
       }
     } catch (e) {
       print('Error cargando usuario: $e');
@@ -279,22 +315,26 @@ class _GameScreenState extends State<GameScreen> {
       );
 
       if (result != null && result['success'] == true) {
-        setState(() {
-          _userCoins = (_userCoins ?? 0) + coins;
-        });
+        // Usar AuthService para manejar la actualización según el tipo de usuario
+        final success = await AuthService().addCoins(coins);
 
-        if (_currentUser != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(_currentUser!.uid)
-              .update({'coins': FieldValue.increment(coins)});
+        if (success) {
+          // Actualizar UI según el tipo de usuario
+          if (_currentUser == null) {
+            await _updateAnonymousWalletUI();
+          } else {
+            // Para usuarios autenticados, el listener de Firestore se encargará
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${S.of(context).purchaseSuccessful} +$coins ${S.of(context).coins}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          throw Exception('Failed to update coins');
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${S.of(context).purchaseSuccessful} +$coins ${S.of(context).coins}'),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
     } catch (e) {
       print('Error en compra: $e');
@@ -307,7 +347,7 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-  Future<void> _processDiamondPurchase(int diamond, int price) async {
+  Future<void> _processDiamondPurchase(int diamonds, int price) async {
     try {
       final paymentService = PaymentService();
       final canPay = await paymentService.canMakePayments();
@@ -322,28 +362,32 @@ class _GameScreenState extends State<GameScreen> {
       }
 
       final result = await paymentService.makePayment(
-        label: '$diamond ${S.of(context).diamonds}',
+        label: '$diamonds ${S.of(context).diamonds}',
         amount: price.toDouble(),
-        productId: 'diamonds_$diamond',
+        productId: 'diamonds_$diamonds',
       );
 
       if (result != null && result['success'] == true) {
-        setState(() {
-          _userDiamonds = (_userDiamonds ?? 0) + diamond;
-        });
+        // Usar AuthService para manejar la actualización según el tipo de usuario
+        final success = await AuthService().addDiamonds(diamonds);
 
-        if (_currentUser != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(_currentUser!.uid)
-              .update({'diamonds': FieldValue.increment(diamond)});
+        if (success) {
+          // Actualizar UI según el tipo de usuario
+          if (_currentUser == null) {
+            await _updateAnonymousWalletUI();
+          } else {
+            // Para usuarios autenticados, el listener de Firestore se encargará
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${S.of(context).purchaseSuccessful} +$diamonds ${S.of(context).diamonds}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          throw Exception('Failed to update diamonds');
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${S.of(context).purchaseSuccessful} +$diamond ${S.of(context).diamonds}'),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
     } catch (e) {
       print('Error en compra: $e');
