@@ -628,7 +628,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                               ).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    S.of(context).errorCreatingAccount,
+                                    S.of(context).emailAlreadyRegistered,
                                   ),
                                   backgroundColor: Colors.red,
                                 ),

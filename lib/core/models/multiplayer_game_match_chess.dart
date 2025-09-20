@@ -29,6 +29,8 @@ class MultiplayerGameMatch {
   final bool isRanked;
   final int? betAmount;
   final String? reason;
+  final String? lastMoveFrom;
+  final String? lastMoveTo;
 
   MultiplayerGameMatch({
     required this.id,
@@ -52,7 +54,9 @@ class MultiplayerGameMatch {
     this.lastMoveNotation,
     this.isRanked = false,
     this.betAmount,
-    this.reason
+    this.reason,
+    this.lastMoveFrom,
+    this.lastMoveTo
   });
 
   factory MultiplayerGameMatch.fromFirestore(DocumentSnapshot doc) {
@@ -82,6 +86,8 @@ class MultiplayerGameMatch {
       isRanked: data['isRanked'] ?? false,
       betAmount: data['betAmount'],
       reason: data['reason'],
+      lastMoveFrom: data['lastMoveFrom'],
+      lastMoveTo: data['lastMoveTo']
     );
   }
 
@@ -108,6 +114,8 @@ class MultiplayerGameMatch {
       'isRanked': isRanked,
       'betAmount': betAmount,
       'reason': reason,
+      'lastMoveFrom': lastMoveFrom,
+      'lastMoveTo': lastMoveTo
     };
   }
 
@@ -126,6 +134,8 @@ class MultiplayerGameMatch {
     String? lastMoveNotation,
     Map<String, dynamic>? gameSettings,
     String? reason,
+    String? lastMoveFrom,
+    String? lastMoveTo
   }) {
     return MultiplayerGameMatch(
       id: id,
@@ -149,7 +159,9 @@ class MultiplayerGameMatch {
       lastMoveNotation: lastMoveNotation ?? this.lastMoveNotation,
       isRanked: isRanked,
       betAmount: betAmount,
-      reason: reason ?? this.reason
+      reason: reason ?? this.reason,
+      lastMoveFrom: lastMoveFrom ?? this.lastMoveFrom,
+      lastMoveTo: lastMoveTo ?? this.lastMoveTo
     );
   }
 

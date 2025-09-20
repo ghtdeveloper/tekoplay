@@ -19,7 +19,8 @@ class DiamondPurchaseDialog extends StatelessWidget {
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxHeight: MediaQuery.of(context).size.height * 0.9, // Aumentado a 90%
+          maxWidth: MediaQuery.of(context).size.width * 0.95,
         ),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -42,9 +43,11 @@ class DiamondPurchaseDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Header fijo
             _buildHeader(context),
 
-            Flexible(
+            // Contenido scrolleable
+            Expanded(
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -53,101 +56,115 @@ class DiamondPurchaseDialog extends StatelessWidget {
                     bottomRight: Radius.circular(20),
                   ),
                 ),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        S.of(context).getMoreDiamonds,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF6A5ACD),
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        S.of(context).choosePerfectPackage,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      SizedBox(height: 20),
-
-                      Column(
+                child: Column(
+                  children: [
+                    // Título fijo
+                    Padding(
+                      padding: EdgeInsets.only(top: 20, left: 20, right: 20),
+                      child: Column(
                         children: [
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 49,
-                            price: 2,
-                            isPopular: false,
+                          Text(
+                            S.of(context).getMoreDiamonds,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF6A5ACD),
+                            ),
                           ),
-                          SizedBox(height: 12),
-
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 102,
-                            price: 4,
-                            isPopular: true,
-                            popularText: S.of(context).mostPopular,
-                          ),
-                          SizedBox(height: 12),
-
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 220,
-                            price: 8,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 460,
-                            price: 16,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 950,
-                            price: 32,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 2000,
-                            price: 64,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 10000,
-                            price: 315,
-                            isPopular: false,
-                            isBestValue: true,
-                            bestValueText: S.of(context).bestValue,
-                          ),
-                          SizedBox(height: 12),
-
-                          _buildDiamondPackage(
-                            context,
-                            diamonds: 100000,
-                            price: 3125,
-                            isPopular: false,
-                            isMegaPack: true,
-                            megaPackText: S.of(context).megaPack,
+                          SizedBox(height: 8),
+                          Text(
+                            S.of(context).choosePerfectPackage,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+
+                    // Lista scrolleable de paquetes
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.all(20),
+                        physics: BouncingScrollPhysics(),
+                        child: Column(
+                          children: [
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 49,
+                              price: 2,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 102,
+                              price: 4,
+                              isPopular: true,
+                              popularText: S.of(context).mostPopular,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 220,
+                              price: 8,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 460,
+                              price: 16,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 950,
+                              price: 32,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 2000,
+                              price: 64,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 10000,
+                              price: 315,
+                              isPopular: false,
+                              isBestValue: true,
+                              bestValueText: S.of(context).bestValue,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 100000,
+                              price: 3125,
+                              isPopular: false,
+                              isMegaPack: true,
+                              megaPackText: S.of(context).megaPack,
+                            ),
+
+                            // Padding extra al final para mejor UX
+                            SizedBox(height: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -250,121 +267,96 @@ class DiamondPurchaseDialog extends StatelessWidget {
             padding: EdgeInsets.all(16),
             child: Row(
               children: [
-                // Diamond icon and amount
+                // Diamond icon
+                Container(
+                  width: isMegaPack ? 45 : 40,
+                  height: isMegaPack ? 45 : 40,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isMegaPack
+                          ? [Color(0xFF8A2BE2), Color(0xFF6A1B9A)]
+                          : [Color(0xFF00BFFF), Color(0xFF1E90FF)],
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isMegaPack ? Color(0xFF8A2BE2) : Color(0xFF00BFFF))
+                            .withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    isMegaPack ? Icons.auto_awesome : Icons.diamond,
+                    color: Colors.white,
+                    size: isMegaPack ? 26 : 24,
+                  ),
+                ),
+
+                SizedBox(width: 16),
+
+                // Diamond amount and price in vertical layout
                 Expanded(
-                  flex: 2,
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: isMegaPack ? 45 : 40,
-                        height: isMegaPack ? 45 : 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: isMegaPack
-                                ? [Color(0xFF8A2BE2), Color(0xFF6A1B9A)]
-                                : [Color(0xFF00BFFF), Color(0xFF1E90FF)],
-                          ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isMegaPack ? Color(0xFF8A2BE2) : Color(0xFF00BFFF))
-                                  .withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          isMegaPack ? Icons.auto_awesome : Icons.diamond,
-                          color: Colors.white,
-                          size: isMegaPack ? 26 : 24,
+                      // Diamond amount
+                      Text(
+                        _formatDiamonds(diamonds),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: isMegaPack
+                              ? Color(0xFF8A2BE2)
+                              : Color(0xFF6A5ACD),
                         ),
                       ),
-                      SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _formatDiamonds(diamonds),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: isMegaPack
-                                  ? Color(0xFF8A2BE2)
-                                  : Color(0xFF6A5ACD),
-                            ),
-                          ),
-                          Text(
-                            S.of(context).diamonds,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
+                      SizedBox(height: 2),
+                      // Price in USD
+                      Text(
+                        '\$${_formatPrice(price)} USD',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700],
+                        ),
                       ),
                     ],
                   ),
                 ),
 
-                Expanded(
-                  flex: 3,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '\$${_formatPrice(price)}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            'USD',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (onPurchase != null) {
-                            onPurchase!(diamonds, price);
-                          }
-                          Navigator.of(context).pop();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isPopular
-                              ? Color(0xFF00BFFF)
-                              : isBestValue
-                              ? Color(0xFF32CD32)
-                              : isMegaPack
-                              ? Color(0xFF8A2BE2)
-                              : Color(0xFF6A5ACD),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          elevation: isMegaPack ? 5 : 3,
-                        ),
-                        child: Text(
-                          S.of(context).buy,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+                // Buy button
+                ElevatedButton(
+                  onPressed: () {
+                    if (onPurchase != null) {
+                      onPurchase!(diamonds, price);
+                    }
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isPopular
+                        ? Color(0xFF00BFFF)
+                        : isBestValue
+                        ? Color(0xFF32CD32)
+                        : isMegaPack
+                        ? Color(0xFF8A2BE2)
+                        : Color(0xFF6A5ACD),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    elevation: isMegaPack ? 5 : 3,
+                  ),
+                  child: Text(
+                    S.of(context).buy,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],

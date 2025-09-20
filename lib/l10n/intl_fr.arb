@@ -284,7 +284,59 @@
   "errorRejectingCounteroffer": "Erreur lors du refus de la contre-offre",
   "googlePayNotAvailable": "Google Pay n'est pas disponible sur cet appareil",
   "purchaseSuccessful": "Achat réussi !",
-  "paymentProcessingError": "Erreur lors du traitement du paiement"
+  "paymentProcessingError": "Erreur lors du traitement du paiement",
+  "emailAlreadyRegistered": "L'adresse e-mail saisie est déjà enregistrée, veuillez en utiliser une autre",
+  "selectYourBet": "Sélectionnez votre mise",
+  "available": "disponibles",
+  "notEnough": "Vous n'en avez pas assez",
+  "forThisBet": "pour ce pari",
+  "waitingOpponentResponse": "En attente de la réponse de l'adversaire...",
+  "makeCounteroffer": "Faire une contre-offre",
+  "selectYourCounteroffer": "Sélectionnez votre contre-offre :",
+  "counteroffer": "Contre-offre",
+  "newCounteroffer": "Nouvelle contre-offre",
+  "madeNewCounteroffer": "a fait une nouvelle contre-offre :",
+  "backTo": "Retour",
+  "opponentRejectedCounteroffer": "L'adversaire a rejeté votre contre-offre.",
+  "play": "Jouer !",
+  "acceptedYourCounterofferOf": "a accepté votre contre-offre de",
+  "counterofferAccepted": "Contre-offre Acceptée !",
+  "acceptTheirBet": "Accepter leur mise",
+  "yourCurrentBet": "Votre mise actuelle :",
+  "hasBet": "a misé :",
+  "betNegotiation": "Négociation de Mise",
+  "acceptsYourBet": "accepte votre mise",
+  "opponentFound": "Adversaire Trouvé !",
+  "seconds": "secondes",
+  "minute": "minute",
+  "drawBetReturned": "Égalité : Votre mise de a été remboursée",
+  "youWonShort": "Vous avez gagné"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

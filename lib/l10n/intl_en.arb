@@ -285,7 +285,61 @@
   "errorRejectingCounteroffer": "Error rejecting counteroffer",
   "googlePayNotAvailable": "Google Pay is not available on this device",
   "purchaseSuccessful": "Purchase successful!",
-  "paymentProcessingError": "Error processing payment"
+  "paymentProcessingError": "Error processing payment",
+  "emailAlreadyRegistered": "The email entered is already registered, please use another one",
+  "selectYourBet": "Select your bet",
+  "available": "available",
+  "notEnough": "You don't have enough",
+  "forThisBet": "for this bet",
+  "waitingOpponentResponse": "Waiting for opponent's response...",
+  "makeCounteroffer": "Make Counteroffer",
+  "selectYourCounteroffer": "Select your counteroffer:",
+  "counteroffer": "Counteroffer",
+  "newCounteroffer": "New Counteroffer",
+  "madeNewCounteroffer": "has made a new counteroffer:",
+  "backTo": "Back",
+  "opponentRejectedCounteroffer": "The opponent has rejected your counteroffer.",
+  "counterofferRejected": "Counteroffer Rejected",
+  "play": "Play!",
+  "acceptedYourCounterofferOf": "has accepted your counteroffer of",
+  "counterofferAccepted": "Counteroffer Accepted!",
+  "acceptTheirBet": "Accept their bet",
+  "yourCurrentBet": "Your current bet:",
+  "hasBet": "has bet:",
+  "betNegotiation": "Bet Negotiation",
+  "acceptsYourBet": "accepts your bet",
+  "opponentFound": "Opponent Found!",
+  "seconds": "seconds",
+  "minute": "minute",
+  "drawBetReturned": "Draw: Your bet of has been returned",
+  "youWonShort": "You Won"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

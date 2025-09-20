@@ -104,8 +104,7 @@ class AuthService {
       await userCredential.user?.sendEmailVerification();
 
       if (userCredential.user != null) {
-        // Create user in Firestore after email verification
-        // Transfer will happen when they verify and sign in
+        await _firestoreService.createOrGetUser(userCredential.user!);
       }
       return userCredential.user;
     } on FirebaseAuthException catch (e) {

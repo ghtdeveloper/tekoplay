@@ -629,7 +629,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(S.of(context).errorCreateAccount),
+                                  content: Text(S.of(context).emailAlreadyRegistered),
                                   backgroundColor: Colors.red,
                                 ),
                               );

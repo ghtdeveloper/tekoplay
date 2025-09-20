@@ -19,7 +19,8 @@ class CoinPurchaseDialog extends StatelessWidget {
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxHeight: MediaQuery.of(context).size.height * 0.85, // Reducido de 0.9 a 0.85
+          maxWidth: MediaQuery.of(context).size.width * 0.95,
         ),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -44,7 +45,8 @@ class CoinPurchaseDialog extends StatelessWidget {
           children: [
             _buildHeader(context),
 
-            Flexible(
+            // Envolver el contenido en Expanded para evitar overflow
+            Expanded(
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -53,106 +55,112 @@ class CoinPurchaseDialog extends StatelessWidget {
                     bottomRight: Radius.circular(20),
                   ),
                 ),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        S.of(context).getMoreCoins,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFEC7A34),
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                       S.of(context).choosePerfectPackage,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      SizedBox(height: 20),
-
-                      Column(
+                child: Column(
+                  children: [
+                    // Header del contenido (no scrolleable)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
+                      child: Column(
                         children: [
-                          _buildCoinPackage(
-                            context,
-                            coins: 490,
-                            price: 2,
-                            isPopular: false,
+                          Text(
+                            S.of(context).getMoreCoins,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFEC7A34),
+                            ),
                           ),
-                          SizedBox(height: 12),
-
-                          _buildCoinPackage(
-                            context,
-                            coins: 1020,
-                            price: 4,
-                            isPopular: true,
-                            popularText:S.of(context).mostPopular,
-                          ),
-                          SizedBox(height: 12),
-
-
-                          _buildCoinPackage(
-                            context,
-                            coins: 2200,
-                            price: 8,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-
-                          _buildCoinPackage(
-                            context,
-                            coins: 4600,
-                            price: 16,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-
-                          _buildCoinPackage(
-                            context,
-                            coins: 9500,
-                            price: 33,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-
-                          _buildCoinPackage(
-                            context,
-                            coins: 20000,
-                            price: 66,
-                            isPopular: false,
-                          ),
-                          SizedBox(height: 12),
-
-
-                          _buildCoinPackage(
-                            context,
-                            coins: 100000,
-                            price: 315,
-                            isPopular: false,
-                            isBestValue: true,
-                            bestValueText: S.of(context).bestValue,
-                          ),
-                          SizedBox(height: 12),
-
-                          _buildCoinPackage(
-                            context,
-                            coins: 1000000,
-                            price: 3125,
-                            isPopular: false,
-                            isMegaPack: true,
-                            megaPackText: S.of(context).megaPack,
+                          SizedBox(height: 8),
+                          Text(
+                            S.of(context).choosePerfectPackage,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+
+                    // Lista scrolleable de paquetes
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        child: Column(
+                          children: [
+                            _buildCoinPackage(
+                              context,
+                              coins: 490,
+                              price: 2,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildCoinPackage(
+                              context,
+                              coins: 1020,
+                              price: 4,
+                              isPopular: true,
+                              popularText: S.of(context).mostPopular,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildCoinPackage(
+                              context,
+                              coins: 2200,
+                              price: 8,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildCoinPackage(
+                              context,
+                              coins: 4600,
+                              price: 16,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildCoinPackage(
+                              context,
+                              coins: 9500,
+                              price: 33,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildCoinPackage(
+                              context,
+                              coins: 20000,
+                              price: 66,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildCoinPackage(
+                              context,
+                              coins: 100000,
+                              price: 315,
+                              isPopular: false,
+                              isBestValue: true,
+                              bestValueText: S.of(context).bestValue,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildCoinPackage(
+                              context,
+                              coins: 1000000,
+                              price: 3125,
+                              isPopular: false,
+                              isMegaPack: true,
+                              megaPackText: S.of(context).megaPack,
+                            ),
+                            SizedBox(height: 10), // Espacio extra al final
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -184,7 +192,7 @@ class CoinPurchaseDialog extends StatelessWidget {
               ),
               SizedBox(width: 12),
               Text(
-               S.of(context).coinStore,
+                S.of(context).coinStore,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -255,121 +263,95 @@ class CoinPurchaseDialog extends StatelessWidget {
             padding: EdgeInsets.all(16),
             child: Row(
               children: [
-                // Coin icon and amount
+                // Coin icon
+                Container(
+                  width: isMegaPack ? 45 : 40,
+                  height: isMegaPack ? 45 : 40,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isMegaPack
+                          ? [Color(0xFF9C27B0), Color(0xFF7B1FA2)]
+                          : [Color(0xFFFFD700), Color(0xFFFFB300)],
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isMegaPack ? Color(0xFF9C27B0) : Color(0xFFFFD700))
+                            .withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    isMegaPack ? Icons.stars : Icons.monetization_on,
+                    color: Colors.white,
+                    size: isMegaPack ? 26 : 24,
+                  ),
+                ),
+
+                SizedBox(width: 16),
+
                 Expanded(
-                  flex: 2,
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: isMegaPack ? 45 : 40,
-                        height: isMegaPack ? 45 : 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: isMegaPack
-                                ? [Color(0xFF9C27B0), Color(0xFF7B1FA2)]
-                                : [Color(0xFFFFD700), Color(0xFFFFB300)],
-                          ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isMegaPack ? Color(0xFF9C27B0) : Color(0xFFFFD700))
-                                  .withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          isMegaPack ? Icons.stars : Icons.monetization_on,
-                          color: Colors.white,
-                          size: isMegaPack ? 26 : 24,
+                      // Coin amount
+                      Text(
+                        _formatCoins(coins),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: isMegaPack
+                              ? Color(0xFF9C27B0)
+                              : Color(0xFFEC7A34),
                         ),
                       ),
-                      SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _formatCoins(coins),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: isMegaPack
-                                  ? Color(0xFF9C27B0)
-                                  : Color(0xFFEC7A34),
-                            ),
-                          ),
-                          Text(
-                            S.of(context).coins,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
+                      SizedBox(height: 2),
+                      // Price in USD
+                      Text(
+                        '\$${_formatPrice(price)} USD',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700],
+                        ),
                       ),
                     ],
                   ),
                 ),
 
-                Expanded(
-                  flex: 3,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '\$${_formatPrice(price)}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            'USD',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (onPurchase != null) {
-                            onPurchase!(coins, price);
-                          }
-                          Navigator.of(context).pop();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isPopular
-                              ? Color(0xFFFFD700)
-                              : isBestValue
-                              ? Color(0xFF4CAF50)
-                              : isMegaPack
-                              ? Color(0xFF9C27B0)
-                              : Color(0xFFEC7A34),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          elevation: isMegaPack ? 5 : 3,
-                        ),
-                        child: Text(
-                         S.of(context).buy,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+                // Buy button
+                ElevatedButton(
+                  onPressed: () {
+                    if (onPurchase != null) {
+                      onPurchase!(coins, price);
+                    }
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isPopular
+                        ? Color(0xFFFFD700)
+                        : isBestValue
+                        ? Color(0xFF4CAF50)
+                        : isMegaPack
+                        ? Color(0xFF9C27B0)
+                        : Color(0xFFEC7A34),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    elevation: isMegaPack ? 5 : 3,
+                  ),
+                  child: Text(
+                    S.of(context).buy,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],

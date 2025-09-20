@@ -133,6 +133,7 @@
   "name": "Nombre",
   "fillAllFields": "Completa todos los campos",
   "accountCreatedCheckEmail": "Cuenta creada. Verifica tu email antes de iniciar sesión.",
+  "emailAlreadyRegistered": "El correo ingresado ya se encuentra registrado, favor utilizar otro",
   "errorCreatingAccount": "Error al crear la cuenta",
   "emailNotVerified": "Verifica tu email antes de iniciar sesión",
   "errorSignInEmail": "Error al iniciar sesión. Verifica tus credenciales.",
@@ -285,7 +286,60 @@
   "errorRejectingCounteroffer": "Error rechazando contraoferta",
   "googlePayNotAvailable": "Google Pay no está disponible en este dispositivo",
   "purchaseSuccessful": "¡Compra exitosa!",
-  "paymentProcessingError": "Error procesando el pago"
+  "paymentProcessingError": "Error procesando el pago",
+  "selectYourBet": "Selecciona tu apuesta",
+  "available": "disponibles",
+  "notEnough": "No tienes suficientes",
+  "forThisBet": "para esta apuesta",
+  "waitingOpponentResponse": "Esperando respuesta del rival...",
+  "makeCounteroffer": "Hacer Contraoferta",
+  "selectYourCounteroffer": "Selecciona tu contraoferta:",
+  "counteroffer": "Contraoferta",
+  "newCounteroffer": "Nueva Contraoferta",
+  "madeNewCounteroffer": "ha hecho una nueva contraoferta:",
+  "backTo": "Volver",
+  "opponentRejectedCounteroffer": "El oponente ha rechazado tu contraoferta.",
+  "counterofferRejected": "Contraoferta Rechazada",
+  "play": "¡Jugar!",
+  "acceptedYourCounterofferOf": "ha aceptado tu contraoferta de",
+  "counterofferAccepted": "¡Contraoferta Aceptada!",
+  "acceptTheirBet": "Aceptar su apuesta",
+  "yourCurrentBet": "Tu apuesta actual:",
+  "hasBet": "ha apostado:",
+  "betNegotiation": "Negociación de Apuesta",
+  "acceptsYourBet": "acepta tu apuesta",
+  "opponentFound": "¡Rival Encontrado!",
+  "seconds": "segundos",
+  "minute": "minuto",
+  "drawBetReturned": "Empate: Se devolvió tu apuesta de",
+  "youWonShort": "¡Ganaste"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
