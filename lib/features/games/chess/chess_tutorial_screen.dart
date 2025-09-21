@@ -14,234 +14,683 @@ class ChessImmersiveTutorialScreen extends StatefulWidget {
 
 class _ChessImmersiveTutorialScreenState
     extends State<ChessImmersiveTutorialScreen> {
-  final ChessBoardController _controller = ChessBoardController();
+  late ChessBoardController _controller;
 
+  bool _showPieceSelector = true;
+  String? _selectedPiece;
   int _currentStep = 0;
+  String _previousFen = '';
+  int _moveCount = 0;
+  bool _waitingForMove = false;
 
-
-  final List<Map<String, String>> _steps =  [
-    {
-      'title': 'Mover Peones',
-      'description':
-          'Toca el peón de e2 y muévelo a e4. Los peones avanzan 1 o 2 casillas desde su posición inicial.',
-      'san': 'e4',
-      'from': 'e2',
-      'to': 'e4',
+  // Definición de piezas y sus tutoriales con posiciones FEN específicas
+  final Map<String, Map<String, dynamic>> _piecesTutorials = {
+    'pawn': {
+      'name': 'Peón',
+      'icon': '♟',
+      'color': Colors.brown,
+      'steps': [
+        {
+          'title': 'Movimiento Básico del Peón',
+          'description': 'Los peones avanzan una casilla hacia adelante. Mueve el peón blanco de e2 a e3.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          'from': 'e2',
+          'to': 'e3',
+          'highlights': ['e2', 'e3'],
+        },
+        {
+          'title': 'Avance de Dos Casillas',
+          'description': 'En su primer movimiento, un peón puede avanzar dos casillas. Mueve el peón de d2 a d4.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1',
+          'from': 'd2',
+          'to': 'd4',
+          'highlights': ['d2', 'd3', 'd4'],
+        },
+      ],
     },
-    {
-      'title': 'Mover Caballos',
-      'description':
-          'Los caballos se mueven en L. Toca el caballo de g1 y muévelo a f3.',
-      'san': 'Nf3',
-      'from': 'g1',
-      'to': 'f3',
+    'knight': {
+      'name': 'Caballo',
+      'icon': '♞',
+      'color': Colors.indigo,
+      'steps': [
+        {
+          'title': 'Movimiento en L',
+          'description': 'El caballo se mueve en forma de L. Mueve el caballo de g1 a f3.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1',
+          'from': 'g1',
+          'to': 'f3',
+          'highlights': ['g1', 'f3'],
+        },
+        {
+          'title': 'El Caballo Salta',
+          'description': 'El caballo puede saltar sobre otras piezas. Mueve el caballo de b1 a c3.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1',
+          'from': 'b1',
+          'to': 'c3',
+          'highlights': ['b1', 'c3'],
+        },
+      ],
     },
-    {
-      'title': 'Mover Torres',
-      'description':
-          'Las torres se mueven en línea recta. Mueve la torre de a1 a a4.',
-      'san': 'a4',
-      'from': 'a2',
-      'to': 'a4',
+    'bishop': {
+      'name': 'Alfil',
+      'icon': '♝',
+      'color': Colors.purple,
+      'steps': [
+        {
+          'title': 'Primer Movimiento',
+          'description': 'Mueve el peón de d2 a d3 para empezar a abrir líneas.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+          'from': 'd2',
+          'to': 'd3',
+          'highlights': ['d2', 'd3'],
+        },
+        {
+          'title': 'Movimiento Diagonal del Alfil',
+          'description': 'Ahora el alfil puede moverse en diagonal. Mueve el alfil de c1 a f4.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/5B2/3P4/PPP1PPPP/RN1QKBNR b KQkq - 1 1',
+          'from': 'c1',
+          'to': 'f4',
+          'highlights': ['c1', 'f4'],
+        },
+      ],
     },
-  ];
+    'rook': {
+      'name': 'Torre',
+      'icon': '♜',
+      'color': Colors.red,
+      'steps': [
+        {
+          'title': 'Movimiento Vertical',
+          'description': 'La torre se mueve en línea recta. Mueve la torre de a1 a a3.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/P7/R7/1PPPPPPP/1NBQKBNR b KQkq - 1 1',
+          'from': 'a1',
+          'to': 'a3',
+          'highlights': ['a1', 'a3'],
+        },
+      ],
+    },
+    'queen': {
+      'name': 'Dama',
+      'icon': '♛',
+      'color': Colors.pink,
+      'steps': [
+        {
+          'title': 'Poder de la Dama',
+          'description': 'La dama combina torre y alfil. Mueve la dama de d1 a h5.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 1',
+          'from': 'd1',
+          'to': 'h5',
+          'highlights': ['d1', 'h5'],
+        },
+      ],
+    },
+    'king': {
+      'name': 'Rey',
+      'icon': '♚',
+      'color': Colors.amber,
+      'steps': [
+        {
+          'title': 'Movimiento del Rey',
+          'description': 'El rey se mueve una casilla en cualquier dirección. Mueve el rey de e1 a e2.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPPKPPP/RNBQ1BNR b KQkq - 1 1',
+          'from': 'e1',
+          'to': 'e2',
+          'highlights': ['e1', 'e2'],
+        },
+      ],
+    },
+  };
 
   @override
   void initState() {
     super.initState();
-    _resetBoardForStep();
+    _controller = ChessBoardController();
   }
 
-
-  void _resetBoardForStep() {
-    _controller.resetBoard();
-    setState(() {});
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
+  void _selectPiece(String piece) {
+    setState(() {
+      _selectedPiece = piece;
+      _showPieceSelector = false;
+      _currentStep = 0;
+      _moveCount = 0;
+      _waitingForMove = false;
+    });
+    _setupBoardForStep();
+  }
 
-  void _nextStep() async {
-    if (_currentStep < _steps.length - 1) {
-      setState(() => _currentStep++);
-      _resetBoardForStep();
+  void _setupBoardForStep() {
+    if (_selectedPiece == null) return;
+
+    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+    if (_currentStep >= steps.length) return;
+
+    final step = steps[_currentStep];
+    final initialFen = step['initialFen'] as String;
+
+    // Cargar la posición inicial para este paso
+    _controller.loadFen(initialFen);
+
+    setState(() {
+      _previousFen = initialFen;
+      _moveCount = 0;
+      _waitingForMove = true;
+    });
+  }
+
+  void _checkMove() {
+    if (!_waitingForMove || _selectedPiece == null) return;
+
+    final currentFen = _controller.getFen();
+
+    // Si el FEN no ha cambiado, no se ha hecho ningún movimiento
+    if (currentFen == _previousFen) return;
+
+    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+    final step = steps[_currentStep];
+    final targetFen = step['targetFen'] as String;
+
+    // Comparar solo la parte de la posición del FEN (ignorar contadores)
+    final currentPosition = currentFen.split(' ')[0];
+    final targetPosition = targetFen.split(' ')[0];
+
+    if (currentPosition == targetPosition) {
+      // Movimiento correcto
+      _showSnack('¡Excelente! Movimiento correcto.', isSuccess: true);
+      setState(() {
+        _waitingForMove = false;
+      });
+      Future.delayed(const Duration(seconds: 2), _nextStep);
     } else {
-      // Fin del tutorial
-      if (!mounted) return;
-      await showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title:  Text(S.of(context).congratulations),
-          content: Text(S.of(context).completeTutorial),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child:  Text(S.of(context).close),
-            ),
-          ],
-        ),
+      // Movimiento incorrecto
+      _showSnack(
+          'Movimiento incorrecto. Recuerda: mueve de ${step['from']} a ${step['to']}',
+          isSuccess: false
       );
-      if (!mounted) return;
-      Navigator.pop(context);
+      // Restaurar la posición inicial
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _setupBoardForStep();
+      });
     }
   }
 
-  void _onUserMove() {
-    final lastSan = _controller.getSan(); 
-    final expectedSan = _steps[_currentStep]['san'];
+  void _nextStep() {
+    if (_selectedPiece == null) return;
 
-    if (lastSan == expectedSan) {
-      _showSnack('${S.of(context).firstMoveCompleted} ($lastSan)', isSuccess: true);
-      Future.delayed(const Duration(milliseconds: 600), _nextStep);
+    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+
+    if (_currentStep < steps.length - 1) {
+      setState(() {
+        _currentStep++;
+        _waitingForMove = false;
+      });
+      _setupBoardForStep();
     } else {
-      _showSnack('${S.of(context).incorrectMove}: ${S.of(context).youDid} $lastSan, ${S.of(context).attempt} ${_steps[_currentStep]['san']}');
-      _controller.undoMove();
+      _showCompletionDialog();
     }
   }
 
-  
+  void _showCompletionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('¡Felicitaciones!'),
+        content: Text(
+          '¡Has completado el tutorial de ${_piecesTutorials[_selectedPiece]!['name']}!',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _showPieceSelector = true;
+                _selectedPiece = null;
+                _currentStep = 0;
+              });
+            },
+            child: const Text('Elegir otra pieza'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text('Salir'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _demoMove() async {
-    final from = _steps[_currentStep]['from']!;
-    final to = _steps[_currentStep]['to']!;
-    _resetBoardForStep();
-    await Future.delayed(const Duration(milliseconds: 200));
-    _controller.makeMove(from: from, to: to);
+    if (_selectedPiece == null) return;
+
+    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+    final step = steps[_currentStep];
+
+    // Resetear a la posición inicial
+    _setupBoardForStep();
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Hacer el movimiento de demostración
+    setState(() {
+      _waitingForMove = false;
+    });
+
+    _controller.makeMove(
+      from: step['from'] as String,
+      to: step['to'] as String,
+    );
+
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Volver a la posición inicial para que el usuario intente
+    _setupBoardForStep();
+
+    _showSnack('Ahora inténtalo tú', isSuccess: true);
   }
 
   void _showSnack(String msg, {bool isSuccess = false}) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
         backgroundColor: isSuccess ? Colors.green : Colors.redAccent,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 900),
+        duration: Duration(seconds: isSuccess ? 2 : 3),
       ),
+    );
+  }
+
+  Widget _buildPieceSelector() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Selecciona una pieza para aprender:',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 1.2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: _piecesTutorials.length,
+              itemBuilder: (context, index) {
+                final pieceKey = _piecesTutorials.keys.elementAt(index);
+                final piece = _piecesTutorials[pieceKey]!;
+
+                return Card(
+                  elevation: 4,
+                  child: InkWell(
+                    onTap: () => _selectPiece(pieceKey),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: LinearGradient(
+                          colors: [
+                            piece['color'].withOpacity(0.1),
+                            piece['color'].withOpacity(0.2),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            piece['icon'],
+                            style: const TextStyle(fontSize: 48),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            piece['name'],
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: piece['color'],
+                            ),
+                          ),
+                          Text(
+                            '${(piece['steps'] as List).length} ejercicio${(piece['steps'] as List).length > 1 ? 's' : ''}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTutorial() {
+    if (_selectedPiece == null) return const SizedBox();
+
+    final pieceData = _piecesTutorials[_selectedPiece]!;
+    final steps = pieceData['steps'] as List;
+    final step = steps[_currentStep];
+    final total = steps.length;
+
+    return Column(
+      children: [
+        const BannerAdWidget(),
+
+        // Información del tutorial
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    pieceData['icon'],
+                    style: const TextStyle(fontSize: 32),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          step['title'],
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'Ejercicio ${_currentStep + 1} de $total',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.white.withOpacity(0.8),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        step['description'],
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: Colors.white,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Tablero de ajedrez
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                children: [
+                  ChessBoard(
+                    controller: _controller,
+                    boardColor: BoardColor.brown,
+                    boardOrientation: PlayerColor.white,
+                    enableUserMoves: true,
+                    onMove: () {
+                      // Verificar el movimiento después de un pequeño delay
+                      // para asegurarse de que el FEN se actualice
+                      Future.delayed(const Duration(milliseconds: 100), () {
+                        _checkMove();
+                      });
+                    },
+                  ),
+                  // Overlay para highlights
+                  if (step['highlights'] != null)
+                    IgnorePointer(
+                      child: CustomPaint(
+                        painter: SquareHighlightPainter(
+                          step['highlights'] as List<String>,
+                        ),
+                        size: Size.infinite,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // Botones de control
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _showPieceSelector = true;
+                    _selectedPiece = null;
+                    _currentStep = 0;
+                  });
+                },
+                icon: const Icon(Icons.arrow_back, size: 20),
+                label: const Text('Volver'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.15),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _demoMove,
+                icon: const Icon(Icons.play_arrow, size: 20),
+                label: const Text('Demo'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.withOpacity(0.3),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _setupBoardForStep,
+                icon: const Icon(Icons.refresh, size: 20),
+                label: const Text('Reiniciar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.withOpacity(0.3),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const BannerAdWidget(),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final step = _steps[_currentStep];
-    final total = _steps.length;
-
     return Scaffold(
       backgroundColor: const ui.Color(0xFFEC7A34),
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
         elevation: 0,
-        title:  Text(
-            (S.of(context).tutorialChessTitle),
+        title: Text(
+          _showPieceSelector
+              ? 'Tutorial de Ajedrez'
+              : 'Tutorial: ${_piecesTutorials[_selectedPiece]?['name'] ?? ''}',
           style: const TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                '${S.of(context).passed} ${_currentStep + 1} / $total',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            const BannerAdWidget(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    step['title']!,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    step['description']!,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _demoMove,
-                        icon: const Icon(Icons.play_arrow),
-                        label:  Text(S.of(context).watchMovement),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: _resetBoardForStep,
-                        icon: const Icon(Icons.replay),
-                        label:  Text(S.of(context).resetPassed),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white70),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-        
-            Expanded(
+          if (!_showPieceSelector && _selectedPiece != null)
+            Center(
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ChessBoard(
-                  controller: _controller,
-                  boardColor: BoardColor.brown,
-                  boardOrientation: PlayerColor.white,
-                  enableUserMoves: true,
-                  onMove: _onUserMove,
+                padding: const EdgeInsets.only(right: 16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_currentStep + 1}/${(_piecesTutorials[_selectedPiece]!['steps'] as List).length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ),
-
-        
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Row(
-                children: [
-                  if (_currentStep > 0)
-                    TextButton.icon(
-                      onPressed: () {
-                        setState(() => _currentStep--);
-                        _resetBoardForStep();
-                      },
-                      icon: const Icon(Icons.chevron_left),
-                      label:  Text(S.of(context).back),
-                      style: TextButton.styleFrom(foregroundColor: Colors.white),
-                    ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _nextStep,
-                    icon: const Icon(Icons.chevron_right),
-                    label: Text(_currentStep == total - 1 ? S.of(context).finish : S.of(context).next),
-                    style: TextButton.styleFrom(foregroundColor: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-            const BannerAdWidget(),
-          ],
-        ),
+        ],
+      ),
+      body: SafeArea(
+        child: _showPieceSelector ? _buildPieceSelector() : _buildTutorial(),
       ),
     );
   }
+}
+
+// Custom painter para destacar casillas
+class SquareHighlightPainter extends CustomPainter {
+  final List<String> highlights;
+
+  SquareHighlightPainter(this.highlights);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (highlights.isEmpty || size.width == 0 || size.height == 0) return;
+
+    final squareSize = size.width / 8;
+
+    for (String square in highlights) {
+      if (square.length != 2) continue;
+
+      try {
+        final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0); // 0-7
+        final rank = int.parse(square[1]) - 1; // 0-7
+
+        if (file < 0 || file > 7 || rank < 0 || rank > 7) continue;
+
+        // Convertir coordenadas a posición en pantalla
+        final x = file * squareSize;
+        final y = (7 - rank) * squareSize;
+
+        // Círculo de highlight en el centro de la casilla
+        final center = Offset(
+          x + squareSize / 2,
+          y + squareSize / 2,
+        );
+
+        // Dibujar un círculo semitransparente
+        final paint = Paint()
+          ..color = Colors.yellow.withOpacity(0.5)
+          ..style = PaintingStyle.fill;
+
+        canvas.drawCircle(center, squareSize * 0.35, paint);
+
+        // Borde del círculo
+        final borderPaint = Paint()
+          ..color = Colors.yellow.withOpacity(0.8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
+
+        canvas.drawCircle(center, squareSize * 0.35, borderPaint);
+      } catch (e) {
+        // Ignorar errores de parsing
+        continue;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
