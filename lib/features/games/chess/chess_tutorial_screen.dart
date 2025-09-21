@@ -20,10 +20,9 @@ class _ChessImmersiveTutorialScreenState
   String? _selectedPiece;
   int _currentStep = 0;
   String _previousFen = '';
-  int _moveCount = 0;
   bool _waitingForMove = false;
 
-  // Definición de piezas y sus tutoriales con posiciones FEN específicas
+
   final Map<String, Map<String, dynamic>> _piecesTutorials = {
     'pawn': {
       'name': 'Peón',
@@ -194,7 +193,6 @@ class _ChessImmersiveTutorialScreenState
       _selectedPiece = piece;
       _showPieceSelector = false;
       _currentStep = 0;
-      _moveCount = 0;
       _waitingForMove = false;
     });
     _setupBoardForStep();
@@ -209,12 +207,10 @@ class _ChessImmersiveTutorialScreenState
     final step = steps[_currentStep];
     final initialFen = step['initialFen'] as String;
 
-    // Cargar la posición inicial para este paso
     _controller.loadFen(initialFen);
 
     setState(() {
       _previousFen = initialFen;
-      _moveCount = 0;
       _waitingForMove = true;
     });
   }
@@ -224,31 +220,26 @@ class _ChessImmersiveTutorialScreenState
 
     final currentFen = _controller.getFen();
 
-    // Si el FEN no ha cambiado, no se ha hecho ningún movimiento
     if (currentFen == _previousFen) return;
 
     final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
     final step = steps[_currentStep];
     final targetFen = step['targetFen'] as String;
 
-    // Comparar solo la parte de la posición del FEN (ignorar contadores)
     final currentPosition = currentFen.split(' ')[0];
     final targetPosition = targetFen.split(' ')[0];
 
     if (currentPosition == targetPosition) {
-      // Movimiento correcto
-      _showSnack('¡Excelente! Movimiento correcto.', isSuccess: true);
+      _showSnack( S.of(context).correctMove, isSuccess: true);
       setState(() {
         _waitingForMove = false;
       });
       Future.delayed(const Duration(seconds: 2), _nextStep);
     } else {
-      // Movimiento incorrecto
       _showSnack(
-          'Movimiento incorrecto. Recuerda: mueve de ${step['from']} a ${step['to']}',
+        S.of(context).incorrectMove,
           isSuccess: false
       );
-      // Restaurar la posición inicial
       Future.delayed(const Duration(milliseconds: 500), () {
         _setupBoardForStep();
       });
@@ -276,9 +267,9 @@ class _ChessImmersiveTutorialScreenState
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('¡Felicitaciones!'),
+        title:  Text(S.of(context).congratulationsShort),
         content: Text(
-          '¡Has completado el tutorial de ${_piecesTutorials[_selectedPiece]!['name']}!',
+          '${S.of(context).tutorialCompleted} ${_piecesTutorials[_selectedPiece]!['name']}!',
         ),
         actions: [
           TextButton(
@@ -290,14 +281,14 @@ class _ChessImmersiveTutorialScreenState
                 _currentStep = 0;
               });
             },
-            child: const Text('Elegir otra pieza'),
+            child:  Text(S.of(context).chooseAnotherPiece),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: const Text('Salir'),
+            child:  Text(S.of(context).exit),
           ),
         ],
       ),
@@ -310,12 +301,10 @@ class _ChessImmersiveTutorialScreenState
     final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
     final step = steps[_currentStep];
 
-    // Resetear a la posición inicial
     _setupBoardForStep();
 
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // Hacer el movimiento de demostración
     setState(() {
       _waitingForMove = false;
     });
@@ -327,10 +316,9 @@ class _ChessImmersiveTutorialScreenState
 
     await Future.delayed(const Duration(seconds: 2));
 
-    // Volver a la posición inicial para que el usuario intente
     _setupBoardForStep();
 
-    _showSnack('Ahora inténtalo tú', isSuccess: true);
+    _showSnack(S.of(context).nowYouTry, isSuccess: true);
   }
 
   void _showSnack(String msg, {bool isSuccess = false}) {
@@ -353,8 +341,8 @@ class _ChessImmersiveTutorialScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Selecciona una pieza para aprender:',
+           Text(
+            S.of(context).selectPieceToLearn,
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -409,7 +397,7 @@ class _ChessImmersiveTutorialScreenState
                             ),
                           ),
                           Text(
-                            '${(piece['steps'] as List).length} ejercicio${(piece['steps'] as List).length > 1 ? 's' : ''}',
+                            '${(piece['steps'] as List).length} ${S.of(context).exercise}${(piece['steps'] as List).length > 1 ? 's' : ''}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
@@ -440,7 +428,6 @@ class _ChessImmersiveTutorialScreenState
       children: [
         const BannerAdWidget(),
 
-        // Información del tutorial
         Container(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -466,7 +453,7 @@ class _ChessImmersiveTutorialScreenState
                           ),
                         ),
                         Text(
-                          'Ejercicio ${_currentStep + 1} de $total',
+                          '${S.of(context).exercise} ${_currentStep + 1} de $total',
                           style: const TextStyle(
                             fontSize: 14,
                             color: Colors.white70,
@@ -481,17 +468,17 @@ class _ChessImmersiveTutorialScreenState
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.1),
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.info_outline,
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.1),
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -508,7 +495,6 @@ class _ChessImmersiveTutorialScreenState
                   ],
                 ),
               ),
-              // Añadir leyenda de colores
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -523,7 +509,6 @@ class _ChessImmersiveTutorialScreenState
           ),
         ),
 
-        // Tablero de ajedrez
         Expanded(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -531,7 +516,7 @@ class _ChessImmersiveTutorialScreenState
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 5),
                 ),
@@ -552,7 +537,6 @@ class _ChessImmersiveTutorialScreenState
                       });
                     },
                   ),
-                  // Overlay mejorado con indicadores de origen y destino
                   IgnorePointer(
                     child: CustomPaint(
                       painter: SquareHighlightPainter(
@@ -584,9 +568,9 @@ class _ChessImmersiveTutorialScreenState
                   });
                 },
                 icon: const Icon(Icons.arrow_back, size: 20),
-                label: const Text('Volver'),
+                label:  Text(S.of(context).back),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white.withOpacity(0.15),
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -599,7 +583,7 @@ class _ChessImmersiveTutorialScreenState
                 icon: const Icon(Icons.play_arrow, size: 20),
                 label: const Text('Demo'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.withOpacity(0.3),
+                  backgroundColor: Colors.green.withValues(alpha: 0.1),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -610,9 +594,9 @@ class _ChessImmersiveTutorialScreenState
               ElevatedButton.icon(
                 onPressed: _setupBoardForStep,
                 icon: const Icon(Icons.refresh, size: 20),
-                label: const Text('Reiniciar'),
+                label:  Text(S.of(context).reset),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.withOpacity(0.3),
+                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -637,7 +621,7 @@ class _ChessImmersiveTutorialScreenState
           width: 12,
           height: 12,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.7),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 1.5),
           ),
@@ -663,8 +647,8 @@ class _ChessImmersiveTutorialScreenState
         elevation: 0,
         title: Text(
           _showPieceSelector
-              ? 'Tutorial de Ajedrez'
-              : 'Tutorial: ${_piecesTutorials[_selectedPiece]?['name'] ?? ''}',
+              ? S.of(context).tutorialChessTitle
+              : '${S.of(context).tutorialShort}: ${_piecesTutorials[_selectedPiece]?['name'] ?? ''}',
           style: const TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -679,7 +663,7 @@ class _ChessImmersiveTutorialScreenState
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -701,7 +685,6 @@ class _ChessImmersiveTutorialScreenState
   }
 }
 
-// Custom painter para destacar casillas
 class SquareHighlightPainter extends CustomPainter {
   final List<String> highlights;
   final String? targetSquare;
@@ -715,12 +698,11 @@ class SquareHighlightPainter extends CustomPainter {
 
     final squareSize = size.width / 8;
 
-    // Dibujar highlights normales (camino de la pieza)
     for (String square in highlights) {
       if (square.length != 2) continue;
 
       try {
-        final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0); // 0-7
+        final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0);
         final rank = int.parse(square[1]) - 1; // 0-7
 
         if (file < 0 || file > 7 || rank < 0 || rank > 7) continue;
@@ -729,9 +711,8 @@ class SquareHighlightPainter extends CustomPainter {
         final y = (7 - rank) * squareSize;
         final center = Offset(x + squareSize / 2, y + squareSize / 2);
 
-        // Círculo amarillo para el camino
         final paint = Paint()
-          ..color = Colors.yellow.withOpacity(0.4)
+          ..color = Colors.yellow.withValues(alpha: 0.1)
           ..style = PaintingStyle.fill;
 
         canvas.drawCircle(center, squareSize * 0.2, paint);
@@ -740,7 +721,6 @@ class SquareHighlightPainter extends CustomPainter {
       }
     }
 
-    // Dibujar casilla de origen (verde)
     if (fromSquare != null && fromSquare!.length == 2) {
       try {
         final file = fromSquare!.codeUnitAt(0) - 'a'.codeUnitAt(0);
@@ -751,14 +731,12 @@ class SquareHighlightPainter extends CustomPainter {
           final y = (7 - rank) * squareSize;
           final center = Offset(x + squareSize / 2, y + squareSize / 2);
 
-          // Círculo verde para origen
           final paint = Paint()
-            ..color = Colors.green.withOpacity(0.6)
+            ..color = Colors.green.withValues(alpha: 0.1)
             ..style = PaintingStyle.fill;
 
           canvas.drawCircle(center, squareSize * 0.3, paint);
 
-          // Borde verde más oscuro
           final borderPaint = Paint()
             ..color = Colors.green
             ..style = PaintingStyle.stroke
@@ -771,7 +749,6 @@ class SquareHighlightPainter extends CustomPainter {
       }
     }
 
-    // Dibujar casilla de destino (rojo/naranja)
     if (targetSquare != null && targetSquare!.length == 2) {
       try {
         final file = targetSquare!.codeUnitAt(0) - 'a'.codeUnitAt(0);
@@ -782,14 +759,13 @@ class SquareHighlightPainter extends CustomPainter {
           final y = (7 - rank) * squareSize;
           final center = Offset(x + squareSize / 2, y + squareSize / 2);
 
-          // Círculo rojo/naranja para destino
           final paint = Paint()
-            ..color = Colors.deepOrange.withOpacity(0.7)
+            ..color = Colors.deepOrange.withValues(alpha: 0.1)
             ..style = PaintingStyle.fill;
 
           canvas.drawCircle(center, squareSize * 0.35, paint);
 
-          // Borde más oscuro
+
           final borderPaint = Paint()
             ..color = Colors.deepOrange.shade800
             ..style = PaintingStyle.stroke
@@ -797,7 +773,6 @@ class SquareHighlightPainter extends CustomPainter {
 
           canvas.drawCircle(center, squareSize * 0.35, borderPaint);
 
-          // Añadir un punto en el centro para mayor claridad
           final centerDot = Paint()
             ..color = Colors.white
             ..style = PaintingStyle.fill;

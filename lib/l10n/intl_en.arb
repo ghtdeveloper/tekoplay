@@ -312,7 +312,23 @@
   "seconds": "seconds",
   "minute": "minute",
   "drawBetReturned": "Draw: Your bet of has been returned",
-  "youWonShort": "You Won"
+  "youWonShort": "You Won",
+  "correctMove": "Excellent! Correct move.",
+  "congratulationsShort": "Congratulations",
+  "tutorialCompleted": "You have completed the tutorial of",
+  "chooseAnotherPiece": "Choose another piece",
+  "nowYouTry": "Now you try",
+  "selectPieceToLearn": "Select a piece to learn:",
+  "exercise": "exercise",
+  "reset": "Reset",
+  "tutorialShort": "Tutorial"
+
+
+
+
+
+
+
 
 
 

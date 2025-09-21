@@ -310,7 +310,24 @@
   "seconds": "secondes",
   "minute": "minute",
   "drawBetReturned": "Égalité : Votre mise de a été remboursée",
-  "youWonShort": "Vous avez gagné"
+  "youWonShort": "Vous avez gagné",
+  "correctMove": "Excellent ! Mouvement correct.",
+  "congratulationsShort": "Félicitations",
+  "tutorialCompleted": "Vous avez terminé le tutoriel de",
+  "chooseAnotherPiece": "Choisir une autre pièce",
+  "nowYouTry": "À toi d’essayer",
+  "selectPieceToLearn": "Sélectionnez une pièce pour apprendre :",
+  "exercise": "exercice",
+  "reset": "Réinitialiser",
+  "tutorialShort": "Tutoriel"
+
+
+
+
+
+
+
+
 
 
 

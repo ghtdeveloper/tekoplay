@@ -312,7 +312,25 @@
   "seconds": "segundos",
   "minute": "minuto",
   "drawBetReturned": "Empate: Se devolvió tu apuesta de",
-  "youWonShort": "¡Ganaste"
+  "youWonShort": "¡Ganaste",
+  "correctMove": "¡Excelente! Movimiento correcto.",
+  "congratulationsShort": "Felicitaciones",
+  "tutorialCompleted": "¡Has completado el tutorial de",
+  "chooseAnotherPiece": "Elegir otra pieza",
+  "nowYouTry": "Ahora inténtalo tú",
+  "selectPieceToLearn": "Selecciona una pieza para aprender:",
+  "exercise": "ejercicio",
+  "reset": "Reiniciar",
+  "tutorialShort": "Tutorial"
+
+
+
+
+
+
+
+
+
 
 
 
