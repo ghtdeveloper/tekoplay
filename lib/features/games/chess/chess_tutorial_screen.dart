@@ -32,7 +32,7 @@ class _ChessImmersiveTutorialScreenState
       'steps': [
         {
           'title': 'Movimiento Básico del Peón',
-          'description': 'Los peones avanzan una casilla hacia adelante. Mueve el peón blanco de e2 a e3.',
+          'description': 'Los peones avanzan una casilla hacia adelante.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
           'from': 'e2',
@@ -41,7 +41,7 @@ class _ChessImmersiveTutorialScreenState
         },
         {
           'title': 'Avance de Dos Casillas',
-          'description': 'En su primer movimiento, un peón puede avanzar dos casillas. Mueve el peón de d2 a d4.',
+          'description': 'En su primer movimiento, un peón puede avanzar dos casillas.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1',
           'from': 'd2',
@@ -57,7 +57,7 @@ class _ChessImmersiveTutorialScreenState
       'steps': [
         {
           'title': 'Movimiento en L',
-          'description': 'El caballo se mueve en forma de L. Mueve el caballo de g1 a f3.',
+          'description': 'El caballo se mueve en forma de L.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1',
           'from': 'g1',
@@ -66,7 +66,7 @@ class _ChessImmersiveTutorialScreenState
         },
         {
           'title': 'El Caballo Salta',
-          'description': 'El caballo puede saltar sobre otras piezas. Mueve el caballo de b1 a c3.',
+          'description': 'El caballo puede saltar sobre otras piezas.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1',
           'from': 'b1',
@@ -82,7 +82,7 @@ class _ChessImmersiveTutorialScreenState
       'steps': [
         {
           'title': 'Primer Movimiento',
-          'description': 'Mueve el peón de d2 a d3 para empezar a abrir líneas.',
+          'description': 'Mueve el peón para empezar a abrir líneas.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
           'from': 'd2',
@@ -91,7 +91,7 @@ class _ChessImmersiveTutorialScreenState
         },
         {
           'title': 'Movimiento Diagonal del Alfil',
-          'description': 'Ahora el alfil puede moverse en diagonal. Mueve el alfil de c1 a f4.',
+          'description': 'Ahora el alfil puede moverse en diagonal.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/5B2/3P4/PPP1PPPP/RN1QKBNR b KQkq - 1 1',
           'from': 'c1',
@@ -107,7 +107,7 @@ class _ChessImmersiveTutorialScreenState
       'steps': [
         {
           'title': 'Movimiento Vertical',
-          'description': 'La torre se mueve en línea recta. Mueve la torre de a1 a a3.',
+          'description': 'La torre se mueve en línea recta.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/P7/R7/1PPPPPPP/1NBQKBNR b KQkq - 1 1',
           'from': 'a1',
@@ -122,13 +122,40 @@ class _ChessImmersiveTutorialScreenState
       'color': Colors.pink,
       'steps': [
         {
-          'title': 'Poder de la Dama',
-          'description': 'La dama combina torre y alfil. Mueve la dama de d1 a h5.',
-          'initialFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
-          'targetFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 1',
+          'title': 'Liberar el Camino',
+          'description': 'Primero mueve el peón para abrir la diagonal de la dama.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          'from': 'e2',
+          'to': 'e3',
+          'highlights': ['e2', 'e3'],
+        },
+        {
+          'title': 'Poder de la Dama - Movimiento Diagonal',
+          'description': 'Ahora la dama puede moverse libremente en diagonal.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/7Q/8/4P3/PPPP1PPP/RNB1KBNR b KQkq - 1 1',
           'from': 'd1',
           'to': 'h5',
-          'highlights': ['d1', 'h5'],
+          'highlights': ['d1', 'e2', 'f3', 'g4', 'h5'],
+        },
+        {
+          'title': 'Movimiento Horizontal de la Dama',
+          'description': 'La dama se mueve como una torre en líneas rectas.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/7Q/8/4P3/PPPP1PPP/RNB1KBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppppppp/8/3Q4/8/4P3/PPPP1PPP/RNB1KBNR b KQkq - 1 1',
+          'from': 'h5',
+          'to': 'd5',
+          'highlights': ['h5', 'g5', 'f5', 'e5', 'd5'],
+        },
+        {
+          'title': 'Captura con la Dama',
+          'description': 'La dama puede capturar piezas enemigas.',
+          'initialFen': 'rnbqkbnr/pppppppp/8/3Q4/8/4P3/PPPP1PPP/RNB1KBNR w KQkq - 0 1',
+          'targetFen': 'rnbqkbnr/pppQpppp/8/8/8/4P3/PPPP1PPP/RNB1KBNR b KQkq - 0 1',
+          'from': 'd5',
+          'to': 'd7',
+          'highlights': ['d5', 'd6', 'd7'],
         },
       ],
     },
@@ -139,7 +166,7 @@ class _ChessImmersiveTutorialScreenState
       'steps': [
         {
           'title': 'Movimiento del Rey',
-          'description': 'El rey se mueve una casilla en cualquier dirección. Mueve el rey de e1 a e2.',
+          'description': 'El rey se mueve una casilla en cualquier dirección.',
           'initialFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPPKPPP/RNBQ1BNR b KQkq - 1 1',
           'from': 'e1',
