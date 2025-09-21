@@ -438,6 +438,8 @@ class MultiplayerGameService {
     String? promotion,
     required String newFen,
     required String moveNotation,
+    String? lastMoveFrom,  // AGREGAR
+    String? lastMoveTo,    // AGREGAR
   }) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
@@ -469,6 +471,8 @@ class MultiplayerGameService {
           'currentTurn': newTurn,
           'moves': newMoves,
           'lastMoveNotation': moveNotation,
+          'lastMoveFrom': lastMoveFrom ?? from,
+          'lastMoveTo': lastMoveTo ?? to,
         });
       });
 

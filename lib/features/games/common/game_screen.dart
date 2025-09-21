@@ -315,17 +315,12 @@ class _GameScreenState extends State<GameScreen> {
       );
 
       if (result != null && result['success'] == true) {
-        // Usar AuthService para manejar la actualización según el tipo de usuario
         final success = await AuthService().addCoins(coins);
 
         if (success) {
-          // Actualizar UI según el tipo de usuario
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
-          } else {
-            // Para usuarios autenticados, el listener de Firestore se encargará
           }
-
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${S.of(context).purchaseSuccessful} +$coins ${S.of(context).coins}'),

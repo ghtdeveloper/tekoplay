@@ -51,6 +51,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   String? _lastMoveFromSquare;
   String? _lastMoveToSquare;
   bool _showLastMove = false;
+  bool _lastMoveWasMine = false;
 
   int? _selectedTimeMinutes;
   final List<TimeOption> _timeOptions = [
@@ -1423,7 +1424,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       setState(() => _gameState = OnlineGameState.playing);
     }
 
-    final _ = _isMyTurn;
+    final wasMyTurn = _isMyTurn;
     _isMyTurn = game.isPlayerTurn(currentUser!.uid);
 
     bool shouldSync = false;
@@ -1431,10 +1432,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     if (previousGame == null) {
       shouldSync = true;
-    } else if (!_isProcessingMove &&
-        previousGame.currentFen != game.currentFen) {
+    } else if (!_isProcessingMove && previousGame.currentFen != game.currentFen) {
       shouldSync = true;
-      isOpponentMove = !_isMyTurn && previousGame.isPlayerTurn(currentUser!.uid);
+      isOpponentMove = _isMyTurn && !wasMyTurn;
     }
 
     if (shouldSync && !_isProcessingMove) {
@@ -1442,12 +1442,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       if (isOpponentMove && game.lastMoveFrom != null && game.lastMoveTo != null) {
         setState(() {
+          // Reemplazar con el movimiento del oponente
           _lastMoveFromSquare = game.lastMoveFrom;
           _lastMoveToSquare = game.lastMoveTo;
           _showLastMove = true;
+          _lastMoveWasMine = false;
         });
       }
     }
+
     if (!_gameEnded && game.isFinished) {
       _gameEnded = true;
       _handleGameEnd(game);
@@ -1469,6 +1472,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             fromSquare: _lastMoveFromSquare!,
             toSquare: _lastMoveToSquare!,
             boardOrientation: _myColor ?? PlayerColor.white,
+            isMyMove: _lastMoveWasMine,
           ),
         ),
       ),
@@ -1684,11 +1688,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _playerMoved({String? from, String? to, String? promotion}) async {
-    setState(() {
-      _lastMoveFromSquare = from;
-      _lastMoveToSquare = to;
-      _showLastMove = from != null && to != null;
-    });
+    if (from != null && to != null) {
+      setState(() {
+        _lastMoveFromSquare = from;
+        _lastMoveToSquare = to;
+        _showLastMove = true;
+        _lastMoveWasMine = true;
+      });
+    }
+
     if (_isPlayingAgainstBot) {
       _handleBotGameMove();
     } else {
@@ -1720,6 +1728,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
 
     _isProcessingMove = true;
+    final savedFromSquare = _lastMoveFromSquare;
+    final savedToSquare = _lastMoveToSquare;
+    final savedShowLastMove = _showLastMove;
 
     try {
       final newFen = controller.getFen();
@@ -1728,10 +1739,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       String moveTo = to ?? _lastMoveTo ?? "xx";
       String? movePromotion = promotion ?? _lastMovePromotion;
 
-      String moveNotation =
-          movePromotion != null
-              ? '$moveFrom$moveTo$movePromotion'
-              : '$moveFrom$moveTo';
+      String moveNotation = movePromotion != null
+          ? '$moveFrom$moveTo$movePromotion'
+          : '$moveFrom$moveTo';
 
       final success = await MultiplayerGameService().makeMove(
         gameId: _currentGame!.id,
@@ -1746,17 +1756,32 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       if (!success) {
         _syncGameState();
         _showError(S.of(context).errorSendMove);
+        setState(() {
+          _showLastMove = false;
+          _lastMoveFromSquare = null;
+          _lastMoveToSquare = null;
+        });
       } else {
         _lastMoveFrom = moveFrom;
         _lastMoveTo = moveTo;
         _lastMovePromotion = movePromotion;
 
+        setState(() {
+          _lastMoveFromSquare = savedFromSquare;
+          _lastMoveToSquare = savedToSquare;
+          _showLastMove = savedShowLastMove;
+          _lastMoveWasMine = true;
+        });
+
         _checkForGameEnd(newFen);
       }
     } catch (e) {
-      print('Error in _playerMoved: $e');
+      print('Error in _handleOnlineGameMove: $e');
       _syncGameState();
       _showError(S.of(context).errorMakeMove);
+      setState(() {
+        _showLastMove = false;
+      });
     } finally {
       _isProcessingMove = false;
     }
@@ -2871,38 +2896,58 @@ class LastMovePainter extends CustomPainter {
   final String fromSquare;
   final String toSquare;
   final PlayerColor boardOrientation;
+  final bool isMyMove;
 
   LastMovePainter({
     required this.fromSquare,
     required this.toSquare,
     required this.boardOrientation,
+    this.isMyMove = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.yellow.withOpacity(0.4)
+    // Usar colores diferentes según quién movió
+    final paintFrom = Paint()
+      ..color = (isMyMove ? Colors.blue : Colors.yellow).withOpacity(0.5)
+      ..style = PaintingStyle.fill;
+
+    final paintTo = Paint()
+      ..color = (isMyMove ? Colors.green : Colors.orange).withOpacity(0.5)
       ..style = PaintingStyle.fill;
 
     final strokePaint = Paint()
-      ..color = Colors.yellow.withOpacity(0.8)
+      ..color = (isMyMove ? Colors.blue : Colors.yellow).withOpacity(0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
     final squareSize = size.width / 8;
 
-    // Convertir solo la casilla de origen a coordenadas
     final fromCoords = _squareToCoordinates(fromSquare, boardOrientation);
+    final toCoords = _squareToCoordinates(toSquare, boardOrientation);
 
-    // Dibujar solo el rectángulo de origen (sombreado)
     final fromRect = Rect.fromLTWH(
       fromCoords.dx * squareSize,
       fromCoords.dy * squareSize,
       squareSize,
       squareSize,
     );
-    canvas.drawRect(fromRect, paint);
+    canvas.drawRect(fromRect, paintFrom);
     canvas.drawRect(fromRect, strokePaint);
+
+    final toRect = Rect.fromLTWH(
+      toCoords.dx * squareSize,
+      toCoords.dy * squareSize,
+      squareSize,
+      squareSize,
+    );
+    canvas.drawRect(toRect, paintTo);
+
+    final strokePaintTo = Paint()
+      ..color = (isMyMove ? Colors.green : Colors.orange).withOpacity(0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawRect(toRect, strokePaintTo);
   }
 
   Offset _squareToCoordinates(String square, PlayerColor orientation) {
