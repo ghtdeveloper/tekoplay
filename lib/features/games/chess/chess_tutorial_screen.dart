@@ -508,6 +508,17 @@ class _ChessImmersiveTutorialScreenState
                   ],
                 ),
               ),
+              // Añadir leyenda de colores
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildColorLegend(Colors.green, 'Origen'),
+                  const SizedBox(width: 16),
+                  _buildColorLegend(Colors.deepOrange, 'Destino'),
+                  const SizedBox(width: 16),
+                  _buildColorLegend(Colors.yellow, 'Camino'),
+                ],
+              ),
             ],
           ),
         ),
@@ -536,30 +547,29 @@ class _ChessImmersiveTutorialScreenState
                     boardOrientation: PlayerColor.white,
                     enableUserMoves: true,
                     onMove: () {
-                      // Verificar el movimiento después de un pequeño delay
-                      // para asegurarse de que el FEN se actualice
                       Future.delayed(const Duration(milliseconds: 100), () {
                         _checkMove();
                       });
                     },
                   ),
-                  // Overlay para highlights
-                  if (step['highlights'] != null)
-                    IgnorePointer(
-                      child: CustomPaint(
-                        painter: SquareHighlightPainter(
-                          step['highlights'] as List<String>,
-                        ),
-                        size: Size.infinite,
+                  // Overlay mejorado con indicadores de origen y destino
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: SquareHighlightPainter(
+                        step['highlights'] as List<String>? ?? [],
+                        targetSquare: step['to'] as String?,
+                        fromSquare: step['from'] as String?,
                       ),
+                      size: Size.infinite,
                     ),
+                  ),
                 ],
               ),
             ),
           ),
         ),
 
-        // Botones de control
+        // Botones de control (sin cambios)
         Container(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -619,6 +629,31 @@ class _ChessImmersiveTutorialScreenState
     );
   }
 
+  Widget _buildColorLegend(ui.Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.7),
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 1.5),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -669,15 +704,18 @@ class _ChessImmersiveTutorialScreenState
 // Custom painter para destacar casillas
 class SquareHighlightPainter extends CustomPainter {
   final List<String> highlights;
+  final String? targetSquare;
+  final String? fromSquare;
 
-  SquareHighlightPainter(this.highlights);
+  SquareHighlightPainter(this.highlights, {this.targetSquare, this.fromSquare});
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (highlights.isEmpty || size.width == 0 || size.height == 0) return;
+    if (size.width == 0 || size.height == 0) return;
 
     final squareSize = size.width / 8;
 
+    // Dibujar highlights normales (camino de la pieza)
     for (String square in highlights) {
       if (square.length != 2) continue;
 
@@ -687,33 +725,87 @@ class SquareHighlightPainter extends CustomPainter {
 
         if (file < 0 || file > 7 || rank < 0 || rank > 7) continue;
 
-        // Convertir coordenadas a posición en pantalla
         final x = file * squareSize;
         final y = (7 - rank) * squareSize;
+        final center = Offset(x + squareSize / 2, y + squareSize / 2);
 
-        // Círculo de highlight en el centro de la casilla
-        final center = Offset(
-          x + squareSize / 2,
-          y + squareSize / 2,
-        );
-
-        // Dibujar un círculo semitransparente
+        // Círculo amarillo para el camino
         final paint = Paint()
-          ..color = Colors.yellow.withOpacity(0.5)
+          ..color = Colors.yellow.withOpacity(0.4)
           ..style = PaintingStyle.fill;
 
-        canvas.drawCircle(center, squareSize * 0.35, paint);
-
-        // Borde del círculo
-        final borderPaint = Paint()
-          ..color = Colors.yellow.withOpacity(0.8)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2;
-
-        canvas.drawCircle(center, squareSize * 0.35, borderPaint);
+        canvas.drawCircle(center, squareSize * 0.2, paint);
       } catch (e) {
-        // Ignorar errores de parsing
         continue;
+      }
+    }
+
+    // Dibujar casilla de origen (verde)
+    if (fromSquare != null && fromSquare!.length == 2) {
+      try {
+        final file = fromSquare!.codeUnitAt(0) - 'a'.codeUnitAt(0);
+        final rank = int.parse(fromSquare![1]) - 1;
+
+        if (file >= 0 && file <= 7 && rank >= 0 && rank <= 7) {
+          final x = file * squareSize;
+          final y = (7 - rank) * squareSize;
+          final center = Offset(x + squareSize / 2, y + squareSize / 2);
+
+          // Círculo verde para origen
+          final paint = Paint()
+            ..color = Colors.green.withOpacity(0.6)
+            ..style = PaintingStyle.fill;
+
+          canvas.drawCircle(center, squareSize * 0.3, paint);
+
+          // Borde verde más oscuro
+          final borderPaint = Paint()
+            ..color = Colors.green
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3;
+
+          canvas.drawCircle(center, squareSize * 0.3, borderPaint);
+        }
+      } catch (e) {
+        // Ignorar errores
+      }
+    }
+
+    // Dibujar casilla de destino (rojo/naranja)
+    if (targetSquare != null && targetSquare!.length == 2) {
+      try {
+        final file = targetSquare!.codeUnitAt(0) - 'a'.codeUnitAt(0);
+        final rank = int.parse(targetSquare![1]) - 1;
+
+        if (file >= 0 && file <= 7 && rank >= 0 && rank <= 7) {
+          final x = file * squareSize;
+          final y = (7 - rank) * squareSize;
+          final center = Offset(x + squareSize / 2, y + squareSize / 2);
+
+          // Círculo rojo/naranja para destino
+          final paint = Paint()
+            ..color = Colors.deepOrange.withOpacity(0.7)
+            ..style = PaintingStyle.fill;
+
+          canvas.drawCircle(center, squareSize * 0.35, paint);
+
+          // Borde más oscuro
+          final borderPaint = Paint()
+            ..color = Colors.deepOrange.shade800
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 4;
+
+          canvas.drawCircle(center, squareSize * 0.35, borderPaint);
+
+          // Añadir un punto en el centro para mayor claridad
+          final centerDot = Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.fill;
+
+          canvas.drawCircle(center, squareSize * 0.1, centerDot);
+        }
+      } catch (e) {
+        // Ignorar errores
       }
     }
   }
