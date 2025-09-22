@@ -321,7 +321,12 @@
   "selectPieceToLearn": "Select a piece to learn:",
   "exercise": "exercise",
   "reset": "Reset",
-  "tutorialShort": "Tutorial"
+  "tutorialShort": "Tutorial",
+  "poker": "Poker",
+  "parchisShort": "Ludo",
+  "comingSoon": "COMING SOON"
+
+
 
 
 

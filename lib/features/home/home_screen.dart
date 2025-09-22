@@ -237,7 +237,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     });
   }
 
-
   void _showEmailVerificationDialog(BuildContext context) {
     _isEmailVerificationDialogOpen = true;
     showDialog(
@@ -261,7 +260,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
                 SizedBox(height: 16),
                 Text(
-                   S.of(context).verifyEmail,
+                  S.of(context).verifyEmail,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 20,
@@ -703,7 +702,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
                 SizedBox(height: 16),
                 Text(
-                S.of(context).accountCreatedUpdt,
+                  S.of(context).accountCreatedUpdt,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 20,
@@ -713,7 +712,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
                 SizedBox(height: 12),
                 Text(
-                 S.of(context).verificationEmailSent,
+                  S.of(context).verificationEmailSent,
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.black54,
@@ -1031,7 +1030,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardSize = screenWidth * 0.4;
+    final cardSize = (screenWidth * 0.35).clamp(120.0, 160.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFEC7A34),
@@ -1195,27 +1194,63 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: cardSize + 24,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    const SizedBox(height: 20),
+                    Container(
+                      constraints: BoxConstraints(
+                        maxWidth: screenWidth - 32,
+                        maxHeight: (cardSize * 2) + 40,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          GameCard(
-                            imagePath: 'assets/images/chess.png',
-                            title: S.of(context).chess,
-                            onTap: () {
-                              _showGameTypeDialog(context, S.of(context).chess);
-                            },
-                            size: cardSize,
+                          // Primera fila
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              // Ajedrez - Habilitado
+                              GameCard(
+                                imagePath: 'assets/images/chess.png',
+                                title: S.of(context).chess,
+                                onTap: () {
+                                  _showGameTypeDialog(context, S.of(context).chess);
+                                },
+                                size: cardSize,
+                                isEnabled: true,
+                              ),
+                              // Dominó - Deshabilitado
+                              GameCard(
+                                imagePath: 'assets/images/domino.png',
+                                title: S.of(context).domino,
+                                onTap: () {
+                                },
+                                size: cardSize,
+                                isEnabled: false,
+                              ),
+                            ],
                           ),
-                          GameCard(
-                            imagePath: 'assets/images/domino.png',
-                            title: S.of(context).domino,
-                            onTap: () {
-                              _showGameTypeDialog(context, S.of(context).domino);
-                            },
-                            size: cardSize,
+                          const SizedBox(height: 16),
+                          // Segunda fila
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              GameCard(
+                                imagePath: 'assets/images/parchis.png',
+                                title: S.of(context).parchisShort,
+                                onTap: () {
+                                },
+                                size: cardSize,
+                                isEnabled: false,
+                              ),
+                              // Poker - Deshabilitado
+                              GameCard(
+                                imagePath: 'assets/images/poker.png',
+                                title: S.of(context).poker,
+                                onTap: () {
+                                },
+                                size: cardSize,
+                                isEnabled: false,
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1237,6 +1272,7 @@ class GameCard extends StatelessWidget {
   final String title;
   final VoidCallback onTap;
   final double size;
+  final bool isEnabled;
 
   const GameCard({
     super.key,
@@ -1244,35 +1280,93 @@ class GameCard extends StatelessWidget {
     required this.title,
     required this.onTap,
     required this.size,
+    this.isEnabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: size,
-          height: size,
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Expanded(child: Image.asset(imagePath, fit: BoxFit.contain)),
-              const SizedBox(height: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+    return Stack(
+      children: [
+        InkWell(
+          onTap: isEnabled ? onTap : null,
+          borderRadius: BorderRadius.circular(16),
+          child: Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              width: size,
+              height: size,
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Image.asset(
+                      imagePath,
+                      fit: BoxFit.contain,
+                      color: isEnabled ? null : Colors.grey.withValues(alpha: 0.1),
+                      colorBlendMode: isEnabled ? null : BlendMode.srcATop,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: isEnabled ? Colors.black : Colors.grey,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+        if (!isEnabled)
+          Container(
+            width: size,
+            height: size,
+            margin: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.70),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  color: Colors.white,
+                  size: size * 0.12,
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEC7A34),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        spreadRadius: 1,
+                        blurRadius: 3,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    S.of(context).comingSoon,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: size * 0.06,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

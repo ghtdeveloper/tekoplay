@@ -64,6 +64,8 @@ flutter:
     - assets/images/splash_tekoplay.png
     - assets/images/chess.png
     - assets/images/domino.png
+    - assets/images/parchis.png
+    - assets/images/poker.png
     - assets/images/coin.png
     - assets/audio/background_music.mp3
     - assets/images/icon_lessons.png
