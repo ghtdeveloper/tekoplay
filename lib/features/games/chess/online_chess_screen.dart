@@ -45,7 +45,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   int? _userDiamonds;
   BetNegotiationState _betState = BetNegotiationState.selecting;
   String? _pendingGameId;
-  final List<int> _betOptions = [10, 25, 50, 100, 250, 500, 1000];
+  final List<int> _betOptions = [10, 25, 50, 100, 250, 500, 1000,5000,10000];
   int? _userCoins;
   final List<int> _coinBetOptions = [50, 100, 250, 500, 1000, 2500, 5000];
   String? _lastMoveFromSquare;
@@ -77,7 +77,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   String? _opponentName;
   String? _opponentPhotoUrl;
   bool _gameEnded = false;
-  bool _isProcessingMove = false;
+  bool _waitingForMoveResponse = false;
   DateTime? _gameStartTime;
 
   int _myTimeSeconds = 0;
@@ -87,10 +87,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   bool _isPlayingAgainstBot = false;
   Stockfish? _stockfish;
   bool _isStockfishReady = false;
-  bool _engineThinking = false;
   int _cpuMoveTime = 200;
   Timer? _botMoveTimer;
   final Random _random = Random();
+
 
   final List<Map<String, String>> _botProfiles = [
     {'name': 'Player1923', 'avatar': '🤖'},
@@ -127,13 +127,16 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         final parts = output.split(' ');
         if (parts.length >= 2) {
           final best = parts[1];
-          _engineThinking = false;
 
           if (best == '0000' || best == '(none)') return;
 
           if (_shouldBotMakeMove()) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _applyBotMove(best);
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (mounted) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _applyBotMove(best);
+                });
+              }
             });
           } else {
             _makeBadMove();
@@ -183,18 +186,18 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     await Future.delayed(const Duration(milliseconds: 300));
 
     if (widget.matchType == S.of(context).bet) {
-      _cpuMoveTime = 500;
+      _cpuMoveTime = 150;
       _stockfish!.stdin = "setoption name Threads value 2";
       _stockfish!.stdin = "setoption name Hash value 64";
       _stockfish!.stdin = "setoption name Skill Level value 20";
     } else if (widget.matchType == S.of(context).fun) {
-      _cpuMoveTime = 200;
+      _cpuMoveTime = 75;
       _stockfish!.stdin = "setoption name Threads value 1";
       _stockfish!.stdin = "setoption name Hash value 32";
       _stockfish!.stdin = "setoption name Skill Level value 10";
     } else {
       // Normal
-      _cpuMoveTime = 250;
+      _cpuMoveTime = 100;
       _stockfish!.stdin = "setoption name Threads value 1";
       _stockfish!.stdin = "setoption name Hash value 32";
       _stockfish!.stdin = "setoption name Skill Level value 12";
@@ -374,9 +377,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         Container(
           padding: EdgeInsets.all(14), // Reducir padding
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: .1),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.3)),
+            border: Border.all(color: Colors.white.withValues(alpha: .3)),
           ),
           child: Column(
             children: [
@@ -422,7 +425,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                           color: isSelected
-                              ? currencyColor.withOpacity(0.8)
+                              ? currencyColor.withValues(alpha: 0.8)
                               : Colors.transparent,
                           width: 2,
                         ),
@@ -727,11 +730,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   void _makeBotMove() {
     if (!_isStockfishReady || _gameEnded || !_isPlayingAgainstBot) return;
 
-    _engineThinking = true;
-    setState(() {});
-
     _botMoveTimer = Timer(
-      Duration(milliseconds: 500 + _random.nextInt(1500)),
+      Duration(milliseconds: 500 + _random.nextInt(200)),
       () {
         if (!_gameEnded && !_isMyTurn) {
           final fen = controller.getFen();
@@ -765,7 +765,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
     setState(() {
       _isMyTurn = true;
-      _engineThinking = false;
       _lastMoveFromSquare = from;
       _lastMoveToSquare = to;
       _showLastMove = true;
@@ -1426,18 +1425,18 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     final wasMyTurn = _isMyTurn;
     _isMyTurn = game.isPlayerTurn(currentUser!.uid);
-
+    _waitingForMoveResponse = false;
     bool shouldSync = false;
     bool isOpponentMove = false;
 
     if (previousGame == null) {
       shouldSync = true;
-    } else if (!_isProcessingMove && previousGame.currentFen != game.currentFen) {
+    } else if (!_waitingForMoveResponse && previousGame.currentFen != game.currentFen) {
       shouldSync = true;
       isOpponentMove = _isMyTurn && !wasMyTurn;
     }
 
-    if (shouldSync && !_isProcessingMove) {
+    if (shouldSync && !_waitingForMoveResponse) {
       _syncGameState();
 
       if (isOpponentMove && game.lastMoveFrom != null && game.lastMoveTo != null) {
@@ -1673,7 +1672,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _syncGameState() {
-    if (_currentGame == null || _isProcessingMove) return;
+    if (_currentGame == null || _waitingForMoveResponse) return;
 
     try {
       final currentFen = controller.getFen();
@@ -1705,7 +1704,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _handleBotGameMove() {
-    if (!_isMyTurn || _gameEnded || _isProcessingMove) return;
+    if (!_isMyTurn || _gameEnded || _waitingForMoveResponse) return;
 
     setState(() {
       _isMyTurn = false;
@@ -1723,11 +1722,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     String? to,
     String? promotion,
   }) async {
-    if (!_isMyTurn || _gameEnded || _isProcessingMove || _currentGame == null) {
+    if (!_isMyTurn || _gameEnded || _waitingForMoveResponse || _currentGame == null) {
       return;
     }
 
-    _isProcessingMove = true;
+    _waitingForMoveResponse = true;
     final savedFromSquare = _lastMoveFromSquare;
     final savedToSquare = _lastMoveToSquare;
     final savedShowLastMove = _showLastMove;
@@ -1783,7 +1782,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _showLastMove = false;
       });
     } finally {
-      _isProcessingMove = false;
+      _waitingForMoveResponse = false;
     }
   }
 
@@ -2140,7 +2139,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                     _myColor = null;
                     _opponentName = null;
                     _opponentPhotoUrl = null;
-                    _engineThinking = false;
                     controller.resetBoard();
                     _cleanupTimers();
                   });
@@ -2318,14 +2316,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _myColor = null;
       _opponentName = null;
       _opponentPhotoUrl = null;
-      _engineThinking = false;
       _myRanking = null;
       _opponentRanking = null;
-
       _lastMoveFromSquare = null;
       _lastMoveToSquare = null;
       _showLastMove = false;
-
       controller.resetBoard();
       _cleanupTimers();
     });
@@ -2391,9 +2386,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                       margin: EdgeInsets.symmetric(horizontal: 20),
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         S.of(context).searchingOpponent,
@@ -2481,21 +2476,13 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                           controller: controller,
                           boardColor: BoardColor.brown,
                           boardOrientation: _myColor ?? PlayerColor.white,
-                          enableUserMoves: _isMyTurn && !_gameEnded && !_isProcessingMove,
+                          enableUserMoves: _isMyTurn && !_gameEnded,
                           onMove: _playerMoved,
                         ),
-                        // Overlay para resaltar último movimiento
                         _buildLastMoveOverlay(),
                       ],
                     ),
                   ),
-                  if (_engineThinking && _isPlayingAgainstBot)
-                    Container(
-                      color: Colors.black.withOpacity(0.3),
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -2551,7 +2538,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color:
-            isPlayerTurn ? Colors.black.withOpacity(0.2) : Colors.transparent,
+            isPlayerTurn ? Colors.black.withValues(alpha: 0.2) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         border: isPlayerTurn ? Border.all(color: Colors.green, width: 2) : null,
       ),
@@ -2677,7 +2664,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         color:
             isActive
                 ? (isRunningOut ? Colors.red[700] : Colors.green[700])
-                : Colors.black.withOpacity(0.3),
+                : Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -2755,10 +2742,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   margin: EdgeInsets.symmetric(horizontal: 20),
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
+                      color: Colors.white.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -2907,17 +2894,16 @@ class LastMovePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Usar colores diferentes según quién movió
     final paintFrom = Paint()
-      ..color = (isMyMove ? Colors.blue : Colors.yellow).withOpacity(0.5)
+      ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(alpha: 0.5)
       ..style = PaintingStyle.fill;
 
     final paintTo = Paint()
-      ..color = (isMyMove ? Colors.green : Colors.orange).withOpacity(0.5)
+      ..color = (isMyMove ? Colors.green : Colors.orange).withValues(alpha: 0.5)
       ..style = PaintingStyle.fill;
 
     final strokePaint = Paint()
-      ..color = (isMyMove ? Colors.blue : Colors.yellow).withOpacity(0.8)
+      ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
@@ -2944,7 +2930,7 @@ class LastMovePainter extends CustomPainter {
     canvas.drawRect(toRect, paintTo);
 
     final strokePaintTo = Paint()
-      ..color = (isMyMove ? Colors.green : Colors.orange).withOpacity(0.8)
+      ..color = (isMyMove ? Colors.green : Colors.orange).withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawRect(toRect, strokePaintTo);

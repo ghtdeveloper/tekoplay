@@ -14,13 +14,13 @@ import '../../adds/BannerAdWidget.dart';
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
   final bool isHost;
-  final String matchType; // Agregar este parámetro
+  final String matchType;
 
   const MultiplayerChessScreen({
     super.key,
     required this.gameId,
     this.isHost = false,
-    required this.matchType, // Requerido
+    required this.matchType,
   });
 
   @override
@@ -38,7 +38,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   bool _isMyTurn = false;
   Timer? _reconnectTimer;
   bool _isConnected = true;
-  bool _isProcessingMove = false;
+  bool _waitingForMoveResponse = false; // Renombrado para ser más específico
   DateTime? _gameStartTime;
 
   // Variables para el sistema de monedas
@@ -183,6 +183,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     } else {
       if (previousGame.moves.length != game.moves.length) {
         shouldSync = true;
+        // Liberar el bloqueo cuando llega una actualización del juego
+        _waitingForMoveResponse = false;
       } else if (previousGame.currentFen != game.currentFen) {
         shouldSync = true;
       }
@@ -219,7 +221,12 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     if (_currentGame == null) return;
     try {
       if (controller.getFen() != _currentGame!.currentFen) {
-        controller.loadFen(_currentGame!.currentFen);
+        // Pequeño delay para hacer la sincronización más suave
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            controller.loadFen(_currentGame!.currentFen);
+          }
+        });
       }
     } catch (e) {
       print('Error syncing game state: $e');
@@ -228,14 +235,17 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   void _playerMoved() async {
-    if (!_isMyTurn || _gameEnded || _isProcessingMove || _currentGame == null) {
+    if (!_isMyTurn || _gameEnded || _waitingForMoveResponse || _currentGame == null) {
       return;
     }
-    _isProcessingMove = true;
+
+    // Marcar que estamos procesando pero NO bloquear inmediatamente la UI
+    _waitingForMoveResponse = true;
 
     try {
       final newFen = controller.getFen();
 
+      // Enviar el movimiento de forma optimista (sin bloquear la UI)
       final success = await _gameService.makeMove(
         gameId: widget.gameId,
         playerId: currentUser!.uid,
@@ -245,20 +255,23 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         newFen: newFen,
         moveNotation: "move",
       );
+
       if (!success) {
         print('Failed to send move to server, reverting...');
+        // Solo revertir si falló, sin mostrar loading molesto
         _syncGameState();
         _showError('Error al enviar movimiento. Inténtalo de nuevo.');
+        _waitingForMoveResponse = false;
       } else {
         print('Move sent successfully to server');
         _checkForGameEnd(newFen);
+        // El _waitingForMoveResponse se liberará cuando llegue la actualización del servidor
       }
     } catch (e) {
       print('Error in _playerMoved: $e');
       _syncGameState();
       _showError('Error al realizar movimiento');
-    } finally {
-      _isProcessingMove = false;
+      _waitingForMoveResponse = false;
     }
   }
 
@@ -349,28 +362,23 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           break;
         case GameResultModel.draw:
           pointsEarned = 5;
-          // En empate, cada uno recupera su apuesta (no hay cambio)
           currencyChange = 0;
           break;
       }
 
-      // Bonus para juegos clasificatorios
       if (_currentGame?.isRanked == true) {
         pointsEarned = (pointsEarned * 1.5).round();
       }
 
-      // Actualizar monedas o diamantes si hay cambio
       if (currencyChange != 0) {
         final userData = await _firestoreService.getUser(currentUser!.uid);
         if (userData != null) {
           if (isApuesta) {
-            // Apuestas usan diamantes
             final currentDiamonds = userData.diamonds ?? 0;
             final newDiamonds = currentDiamonds + currencyChange;
             await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
             setState(() => _userDiamonds = newDiamonds);
           } else {
-            // Diversión usa monedas
             final currentCoins = userData.coins;
             final newCoins = currentCoins + currencyChange;
             await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
@@ -523,7 +531,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
-        duration: Duration(seconds: 3),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -563,6 +571,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     final isPlayerTurn = isMe ? _isMyTurn : !_isMyTurn;
 
+    final isWaitingForResponse = isMe && _waitingForMoveResponse;
+
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -595,7 +605,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (isPlayerTurn)
+              if (isPlayerTurn && !isWaitingForResponse)
                 Text(
                   S.of(context).yourTurn,
                   style: TextStyle(color: Colors.green[300], fontSize: 12),
@@ -860,7 +870,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 controller: controller,
                 boardColor: BoardColor.brown,
                 boardOrientation: _myColor ?? PlayerColor.white,
-                enableUserMoves: _isMyTurn && !_gameEnded && !_isProcessingMove,
+                // Permitir movimientos más libremente, sin bloquear por _waitingForMoveResponse
+                enableUserMoves: _isMyTurn && !_gameEnded,
                 onMove: _playerMoved,
               ),
             ),
