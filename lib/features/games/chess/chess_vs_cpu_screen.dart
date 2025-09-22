@@ -32,9 +32,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   int cpuScore = 0;
 
   bool _isStockfishReady = false;
-  bool _engineThinking = false;
   bool _gameEnded = false;
   bool _hasStartedGame = false;
+  bool _waitingForCpuMove = false; // Nueva variable para control interno
 
   late int _cpuMoveTime;
   DateTime? _gameStartTime;
@@ -50,21 +50,22 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   void initState() {
     super.initState();
 
+    // Reducir significativamente los tiempos de movimiento del CPU
     switch (widget.selectedDifficulty.toLowerCase()) {
       case 'muy fácil':
-        _cpuMoveTime = 100;
+        _cpuMoveTime = 50; // Reducido de 100
         break;
       case 'fácil':
-        _cpuMoveTime = 150;
+        _cpuMoveTime = 75; // Reducido de 150
         break;
       case 'normal':
-        _cpuMoveTime = 250;
+        _cpuMoveTime = 100; // Reducido de 250
         break;
       case 'difícil':
-        _cpuMoveTime = 350;
+        _cpuMoveTime = 150; // Reducido de 350
         break;
       default:
-        _cpuMoveTime = 200;
+        _cpuMoveTime = 100;
     }
 
     _stockfish = Stockfish();
@@ -74,16 +75,21 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         final parts = output.split(' ');
         if (parts.length >= 2) {
           final best = parts[1];
-          _engineThinking = false;
 
-          if (best == '0000' || best == '(none)') return;
+          if (best == '0000' || best == '(none)') {
+            _waitingForCpuMove = false;
+            return;
+          }
 
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _applyUciMoveToBoard(best);
-            _checkGameEnd();
+          // Delay mínimo para hacer el movimiento más natural (opcional)
+          Future.delayed(const Duration(milliseconds: 200), () {
+            if (mounted) {
+              _applyUciMoveToBoard(best);
+              _checkGameEnd();
+              _waitingForCpuMove = false;
+              setState(() {});
+            }
           });
-
-          setState(() {});
         }
       }
     });
@@ -245,10 +251,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   void _makeCpuMove() {
-    if (!_isStockfishReady || _gameEnded) return;
+    if (!_isStockfishReady || _gameEnded || _waitingForCpuMove) return;
 
-    _engineThinking = true;
-    setState(() {});
+    _waitingForCpuMove = true;
 
     final fen = controller.getFen();
     _stockfish.stdin = "position fen $fen";
@@ -270,7 +275,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     _checkGameEnd();
 
     if (!_gameEnded) {
-      _makeCpuMove();
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _makeCpuMove();
+      });
     }
   }
 
@@ -539,7 +546,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   void _restartGame() {
     _interstitialHelper.showAdIfReady(onComplete: () {
       _gameEnded = false;
-      _engineThinking = false;
+      _waitingForCpuMove = false;
       _hasStartedGame = false;
       _gameStartTime = null;
       controller.resetBoard();
@@ -598,9 +605,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       margin: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: .3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -623,7 +630,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           Container(
             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.8),
+              color: Colors.red.withValues(alpha: .8),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -777,26 +784,15 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
               ),
             ),
             Expanded(
-              child: Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: ChessBoard(
-                      controller: controller,
-                      boardColor: BoardColor.brown,
-                      boardOrientation: _playerColor!,
-                      enableUserMoves: !_gameEnded,
-                      onMove: playerMoved,
-                    ),
-                  ),
-                  if (_engineThinking)
-                    Container(
-                      color: Colors.black.withOpacity(0.4),
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      ),
-                    ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ChessBoard(
+                  controller: controller,
+                  boardColor: BoardColor.brown,
+                  boardOrientation: _playerColor!,
+                  enableUserMoves: !_gameEnded,
+                  onMove: playerMoved,
+                ),
               ),
             ),
             Padding(
