@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:tekoplay/core/models/user.dart';
 
@@ -31,6 +30,8 @@ class MultiplayerGameMatch {
   final String? reason;
   final String? lastMoveFrom;
   final String? lastMoveTo;
+  final DateTime? lastHostActivity;
+  final DateTime? lastGuestActivity;
 
   MultiplayerGameMatch({
     required this.id,
@@ -56,7 +57,9 @@ class MultiplayerGameMatch {
     this.betAmount,
     this.reason,
     this.lastMoveFrom,
-    this.lastMoveTo
+    this.lastMoveTo,
+    this.lastHostActivity,
+    this.lastGuestActivity,
   });
 
   factory MultiplayerGameMatch.fromFirestore(DocumentSnapshot doc) {
@@ -72,22 +75,41 @@ class MultiplayerGameMatch {
       guestPhotoUrl: data['guestPhotoUrl'],
       status: data['status'] ?? 'waiting',
       currentTurn: data['currentTurn'] ?? 'host',
-      currentFen: data['currentFen'] ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      currentFen:
+          data['currentFen'] ??
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
       moves: List<String>.from(data['moves'] ?? []),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
-      startedAt: data['startedAt'] != null ? (data['startedAt'] as Timestamp).toDate() : null,
-      finishedAt: data['finishedAt'] != null ? (data['finishedAt'] as Timestamp).toDate() : null,
+      startedAt:
+          data['startedAt'] != null
+              ? (data['startedAt'] as Timestamp).toDate()
+              : null,
+      finishedAt:
+          data['finishedAt'] != null
+              ? (data['finishedAt'] as Timestamp).toDate()
+              : null,
       winnerId: data['winnerId'],
-      result: data['result'] != null ? GameResultModel.values.firstWhere(
-            (e) => e.toString().split('.').last == data['result'],
-      ) : null,
+      result:
+          data['result'] != null
+              ? GameResultModel.values.firstWhere(
+                (e) => e.toString().split('.').last == data['result'],
+              )
+              : null,
       gameSettings: data['gameSettings'],
       lastMoveNotation: data['lastMoveNotation'],
       isRanked: data['isRanked'] ?? false,
       betAmount: data['betAmount'],
       reason: data['reason'],
       lastMoveFrom: data['lastMoveFrom'],
-      lastMoveTo: data['lastMoveTo']
+      lastMoveTo: data['lastMoveTo'],
+      lastHostActivity:
+          data['lastHostActivity'] != null
+              ? (data['lastHostActivity'] as Timestamp).toDate()
+              : null,
+      lastGuestActivity:
+          data['lastGuestActivity'] != null
+              ? (data['lastGuestActivity'] as Timestamp).toDate()
+              : null,
     );
   }
 
@@ -115,7 +137,15 @@ class MultiplayerGameMatch {
       'betAmount': betAmount,
       'reason': reason,
       'lastMoveFrom': lastMoveFrom,
-      'lastMoveTo': lastMoveTo
+      'lastMoveTo': lastMoveTo,
+      'lastHostActivity':
+          lastHostActivity != null
+              ? Timestamp.fromDate(lastHostActivity!)
+              : null,
+      'lastGuestActivity':
+          lastGuestActivity != null
+              ? Timestamp.fromDate(lastGuestActivity!)
+              : null,
     };
   }
 
@@ -135,7 +165,7 @@ class MultiplayerGameMatch {
     Map<String, dynamic>? gameSettings,
     String? reason,
     String? lastMoveFrom,
-    String? lastMoveTo
+    String? lastMoveTo,
   }) {
     return MultiplayerGameMatch(
       id: id,
@@ -161,12 +191,14 @@ class MultiplayerGameMatch {
       betAmount: betAmount,
       reason: reason ?? this.reason,
       lastMoveFrom: lastMoveFrom ?? this.lastMoveFrom,
-      lastMoveTo: lastMoveTo ?? this.lastMoveTo
+      lastMoveTo: lastMoveTo ?? this.lastMoveTo,
     );
   }
 
   bool get isWaitingForPlayer => status == 'waiting' && guestId == null;
+
   bool get isActive => status == 'active';
+
   bool get isFinished => status == 'finished';
 
   String? getOpponentId(String currentUserId) {
@@ -190,8 +222,11 @@ class MultiplayerGameMatch {
 }
 
 class GameInvitationService {
-  static final GameInvitationService _instance = GameInvitationService._internal();
+  static final GameInvitationService _instance =
+      GameInvitationService._internal();
+
   factory GameInvitationService() => _instance;
+
   GameInvitationService._internal();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -206,12 +241,12 @@ class GameInvitationService {
     int? betAmount,
   }) async {
     try {
-
-      final usersQuery = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: toUserEmail.trim().toLowerCase())
-          .limit(1)
-          .get();
+      final usersQuery =
+          await _firestore
+              .collection('users')
+              .where('email', isEqualTo: toUserEmail.trim().toLowerCase())
+              .limit(1)
+              .get();
 
       if (usersQuery.docs.isEmpty) {
         return 'Usuario no encontrado';
@@ -222,7 +257,6 @@ class GameInvitationService {
       if (toUser.id == fromUserId) {
         return 'No puedes invitarte a ti mismo';
       }
-
 
       final invitationRef = _firestore.collection(_invitationsCollection).doc();
 
@@ -239,7 +273,6 @@ class GameInvitationService {
         'isRanked': isRanked,
         'betAmount': betAmount,
       });
-
 
       await _sendInvitationNotification(
         toUserId: toUser.id,
@@ -288,13 +321,18 @@ class GameInvitationService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) => doc.data()).toList();
-    });
+          return snapshot.docs.map((doc) => doc.data()).toList();
+        });
   }
 
-  Future<Map<String, dynamic>?> respondToInvitation(String invitationId, bool accept) async {
+  Future<Map<String, dynamic>?> respondToInvitation(
+    String invitationId,
+    bool accept,
+  ) async {
     try {
-      final invitationRef = _firestore.collection(_invitationsCollection).doc(invitationId);
+      final invitationRef = _firestore
+          .collection(_invitationsCollection)
+          .doc(invitationId);
       final invitationDoc = await invitationRef.get();
 
       if (!invitationDoc.exists) return null;
@@ -330,24 +368,21 @@ class GameInvitationService {
           'respondedAt': FieldValue.serverTimestamp(),
         });
 
-        return {
-          'success': true,
-          'declined': true,
-        };
+        return {'success': true, 'declined': true};
       }
     } catch (e) {
       print('Error responding to invitation: $e');
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 }
 
 class MultiplayerGameService {
-  static final MultiplayerGameService _instance = MultiplayerGameService._internal();
+  static final MultiplayerGameService _instance =
+      MultiplayerGameService._internal();
+
   factory MultiplayerGameService() => _instance;
+
   MultiplayerGameService._internal();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -395,7 +430,12 @@ class MultiplayerGameService {
     }
   }
 
-  Future<bool> joinGame(String gameId, String playerId, String playerName, String? playerPhotoUrl) async {
+  Future<bool> joinGame(
+    String gameId,
+    String playerId,
+    String playerName,
+    String? playerPhotoUrl,
+  ) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
       final gameDoc = await gameRef.get();
@@ -422,7 +462,9 @@ class MultiplayerGameService {
   }
 
   Stream<MultiplayerGameMatch?> getGameStream(String gameId) {
-    return _firestore.collection(_gamesCollection).doc(gameId).snapshots().map((snapshot) {
+    return _firestore.collection(_gamesCollection).doc(gameId).snapshots().map((
+      snapshot,
+    ) {
       if (snapshot.exists) {
         return MultiplayerGameMatch.fromFirestore(snapshot);
       }
@@ -438,8 +480,8 @@ class MultiplayerGameService {
     String? promotion,
     required String newFen,
     required String moveNotation,
-    String? lastMoveFrom,  // AGREGAR
-    String? lastMoveTo,    // AGREGAR
+    String? lastMoveFrom,
+    String? lastMoveTo,
   }) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
@@ -497,9 +539,8 @@ class MultiplayerGameService {
         'result': result.toString().split('.').last,
         'winnerId': winnerId,
         'finishedAt': FieldValue.serverTimestamp(),
-        'reason':reason
+        'reason': reason,
       });
-
 
       final gameDoc = await gameRef.get();
       if (gameDoc.exists) {
@@ -514,11 +555,12 @@ class MultiplayerGameService {
     }
   }
 
-  Future<void> _updatePlayerStats(MultiplayerGameMatch game, GameResultModel result) async {
+  Future<void> _updatePlayerStats(
+    MultiplayerGameMatch game,
+    GameResultModel result,
+  ) async {
     try {
       final firestoreService = FirestoreService();
-      final batch = _firestore.batch();
-
 
       GameResultModel hostResult = result;
       GameResultModel guestResult = result;
@@ -536,10 +578,10 @@ class MultiplayerGameService {
       int hostPoints = _calculatePoints(hostResult);
       int guestPoints = _calculatePoints(guestResult);
 
-
-      final gameDuration = game.finishedAt != null && game.startedAt != null
-          ? game.finishedAt!.difference(game.startedAt!).inMinutes
-          : 1;
+      final gameDuration =
+          game.finishedAt != null && game.startedAt != null
+              ? game.finishedAt!.difference(game.startedAt!).inMinutes
+              : 1;
 
       await firestoreService.recordGameMatch(
         userId: game.hostId,
@@ -600,19 +642,25 @@ class MultiplayerGameService {
         .where('hostId', isEqualTo: userId)
         .snapshots()
         .asyncMap((hostSnapshot) async {
-      final guestSnapshot = await _firestore
-          .collection(_gamesCollection)
-          .where('status', isEqualTo: 'active')
-          .where('guestId', isEqualTo: userId)
-          .get();
+          final guestSnapshot =
+              await _firestore
+                  .collection(_gamesCollection)
+                  .where('status', isEqualTo: 'active')
+                  .where('guestId', isEqualTo: userId)
+                  .get();
 
-      final allDocs = [...hostSnapshot.docs, ...guestSnapshot.docs];
+          final allDocs = [...hostSnapshot.docs, ...guestSnapshot.docs];
 
-      return allDocs.map((doc) => MultiplayerGameMatch.fromFirestore(doc)).toList();
-    });
+          return allDocs
+              .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
+              .toList();
+        });
   }
 
-  Future<List<MultiplayerGameMatch>> getWaitingGames({String? gameType, int limit = 10}) async {
+  Future<List<MultiplayerGameMatch>> getWaitingGames({
+    String? gameType,
+    int limit = 10,
+  }) async {
     try {
       Query query = _firestore
           .collection(_gamesCollection)
@@ -625,7 +673,9 @@ class MultiplayerGameService {
 
       final snapshot = await query.limit(limit).get();
 
-      return snapshot.docs.map((doc) => MultiplayerGameMatch.fromFirestore(doc)).toList();
+      return snapshot.docs
+          .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
+          .toList();
     } catch (e) {
       print('Error getting waiting games: $e');
       return [];
@@ -668,11 +718,7 @@ enum OnlineMatchmakingState {
   error,
 }
 
-enum TimeResult {
-  normal,
-  timeout,
-  aborted,
-}
+enum TimeResult { normal, timeout, aborted }
 
 class GameTimePreset {
   final int? minutes;

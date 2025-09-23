@@ -19,7 +19,6 @@ import '../../../generated/l10n.dart';
 import '../../adds/BannerAdWidget.dart';
 import '../../adds/InterstitialAdHelper.dart';
 
-
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;
 
@@ -45,7 +44,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   int? _userDiamonds;
   BetNegotiationState _betState = BetNegotiationState.selecting;
   String? _pendingGameId;
-  final List<int> _betOptions = [10, 25, 50, 100, 250, 500, 1000,5000,10000];
+  final List<int> _betOptions = [10, 25, 50, 100, 250, 500, 1000, 5000, 10000];
   int? _userCoins;
   final List<int> _coinBetOptions = [50, 100, 250, 500, 1000, 2500, 5000];
   String? _lastMoveFromSquare;
@@ -64,6 +63,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Timer? _matchmakingTimer;
   Timer? _gameTimer;
   int _matchmakingSeconds = 0;
+
+  Timer? _keepAliveTimer;
+  String? _activeGameId;
 
   ChessBoardController controller = ChessBoardController();
   MultiplayerGameMatch? _currentGame;
@@ -91,7 +93,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Timer? _botMoveTimer;
   final Random _random = Random();
 
-
   final List<Map<String, String>> _botProfiles = [
     {'name': 'Player1923', 'avatar': '🤖'},
     {'name': 'Player2323', 'avatar': '👾'},
@@ -114,7 +115,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-      _loadUserCurrency();
+    _loadUserCurrency();
   }
 
   void _initializeStockfish() {
@@ -159,10 +160,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Future<void> _loadUserCurrency() async {
     if (currentUser == null) return;
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.uid)
-          .get();
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser!.uid)
+              .get();
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
         setState(() {
@@ -225,6 +227,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   @override
   void dispose() {
+    _keepAliveTimer?.cancel();
+    _cleanupActiveGame();
     WidgetsBinding.instance.removeObserver(this);
     _cleanupTimers();
     _gameSubscription?.cancel();
@@ -238,6 +242,50 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     super.dispose();
   }
 
+  Future<void> _cleanupActiveGame() async {
+    if (_activeGameId != null && !_isPlayingAgainstBot) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('multiplayer_games')
+            .doc(_activeGameId!)
+            .update({
+              'status': 'cancelled',
+              'cancelledAt': FieldValue.serverTimestamp(),
+              'cancelReason': 'user_disconnected',
+            });
+      } catch (e) {
+        print('Error cleaning up game: $e');
+      }
+    }
+  }
+
+  void _startKeepAlive(String gameId) {
+    _keepAliveTimer?.cancel();
+    _activeGameId = gameId;
+    _updateLastActivity(gameId);
+    _keepAliveTimer = Timer.periodic(Duration(seconds: 5), (timer) {
+      if (_activeGameId != null && !_isPlayingAgainstBot) {
+        _updateLastActivity(_activeGameId!);
+      }
+    });
+  }
+
+  Future<void> _updateLastActivity(String gameId) async {
+    if (currentUser == null || _isPlayingAgainstBot) return;
+
+    try {
+      final isHost = _currentGame?.hostId == currentUser!.uid;
+      final fieldName = isHost ? 'lastHostActivity' : 'lastGuestActivity';
+
+      await FirebaseFirestore.instance
+          .collection('multiplayer_games')
+          .doc(gameId)
+          .update({fieldName: FieldValue.serverTimestamp()});
+    } catch (e) {
+      print('Error updating activity: $e');
+    }
+  }
+
   void _cleanupTimers() {
     _matchmakingTimer?.cancel();
     _matchmakingTimer = null;
@@ -248,8 +296,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _botMoveTimer?.cancel();
     _botMoveTimer = null;
   }
-
-
 
   Widget _buildTimeSelectionScreen() {
     return Scaffold(
@@ -273,8 +319,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   child: Column(
                     children: [
                       _buildTimeSelection(),
-                      if (_selectedTimeMinutes != null)
-                        _buildBetSelection(),
+                      if (_selectedTimeMinutes != null) _buildBetSelection(),
                     ],
                   ),
                 ),
@@ -316,10 +361,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                 borderRadius: BorderRadius.circular(12),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  onTap: () => setState(() {
-                    _selectedTimeMinutes = option.minutes;
-                    _selectedBetAmount = null;
-                  }),
+                  onTap:
+                      () => setState(() {
+                        _selectedTimeMinutes = option.minutes;
+                        _selectedBetAmount = null;
+                      }),
                   child: Container(
                     padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -344,12 +390,14 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                             option.display,
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: isSelected
-                                  ? Colors.green[800]
-                                  : Colors.black87,
+                              fontWeight:
+                                  isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                              color:
+                                  isSelected
+                                      ? Colors.green[800]
+                                      : Colors.black87,
                             ),
                           ),
                         ),
@@ -415,53 +463,75 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: betOptions.map((amount) {
-                  final isSelected = _selectedBetAmount == amount;
-                  final canAfford = _getCurrentBalance() != null &&
-                      _getCurrentBalance()! >= amount;
+                children:
+                    betOptions.map((amount) {
+                      final isSelected = _selectedBetAmount == amount;
+                      final canAfford =
+                          _getCurrentBalance() != null &&
+                          _getCurrentBalance()! >= amount;
 
-                  return GestureDetector(
-                    onTap: canAfford ? () => setState(() => _selectedBetAmount = amount) : null,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? currencyColor
-                            : (canAfford ? Colors.white : Colors.grey[400]),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isSelected
-                              ? currencyColor.withValues(alpha: 0.8)
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            currencyIcon,
-                            color: isSelected
-                                ? Colors.white
-                                : (canAfford ? currencyColor : Colors.grey[600]),
-                            size: 14,
+                      return GestureDetector(
+                        onTap:
+                            canAfford
+                                ? () =>
+                                    setState(() => _selectedBetAmount = amount)
+                                : null,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
                           ),
-                          SizedBox(width: 3),
-                          Text(
-                            amount.toString(),
-                            style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : (canAfford ? Colors.black : Colors.grey[600]),
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              fontSize: 13,
+                          decoration: BoxDecoration(
+                            color:
+                                isSelected
+                                    ? currencyColor
+                                    : (canAfford
+                                        ? Colors.white
+                                        : Colors.grey[400]),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color:
+                                  isSelected
+                                      ? currencyColor.withValues(alpha: 0.8)
+                                      : Colors.transparent,
+                              width: 2,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                currencyIcon,
+                                color:
+                                    isSelected
+                                        ? Colors.white
+                                        : (canAfford
+                                            ? currencyColor
+                                            : Colors.grey[600]),
+                                size: 14,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                amount.toString(),
+                                style: TextStyle(
+                                  color:
+                                      isSelected
+                                          ? Colors.white
+                                          : (canAfford
+                                              ? Colors.black
+                                              : Colors.grey[600]),
+                                  fontWeight:
+                                      isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
               ),
             ],
           ),
@@ -498,13 +568,14 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _startMatchmaking() async {
-
     if (currentUser == null) {
       return;
     }
 
     if (widget.matchType == S.of(context).bet && !_canAffordBet()) {
-      _showError('${S.of(context).notEnough} ${_getCurrencyName()} ${S.of(context).forThisBet}');
+      _showError(
+        '${S.of(context).notEnough} ${_getCurrencyName()} ${S.of(context).forThisBet}',
+      );
       return;
     }
 
@@ -527,8 +598,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
 
     _matchmakingTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
-
-
       // Verificar si el widget está montado
       if (!mounted) {
         timer.cancel();
@@ -544,11 +613,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           try {
             final waitingGames = await OnlineMatchmakingChessService()
                 .findWaitingGamesProgressive(
-              gameType: 'Ajedrez',
-              userRanking: userRanking,
-              timeMinutes: _selectedTimeMinutes,
-              searchTimeSeconds: _matchmakingSeconds,
-            );
+                  gameType: 'Ajedrez',
+                  userRanking: userRanking,
+                  timeMinutes: _selectedTimeMinutes,
+                  searchTimeSeconds: _matchmakingSeconds,
+                );
 
             if (waitingGames.isNotEmpty && mounted) {
               final game = waitingGames.first;
@@ -575,7 +644,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           timer.cancel();
           _startBotGame();
         }
-
       } catch (e) {
         print('💥 ERROR CRÍTICO en timer: $e');
         timer.cancel();
@@ -586,7 +654,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       }
     });
   }
-
 
   void _startBotGame() {
     setState(() {
@@ -602,7 +669,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       if (widget.matchType == S.of(context).bet && _selectedBetAmount != null) {
         _opponentBetAmount = _selectedBetAmount;
         _betAccepted = true;
-        print('Rival acepta apuesta de $_selectedBetAmount ${_getCurrencyName()}');
+        print(
+          'Rival acepta apuesta de $_selectedBetAmount ${_getCurrencyName()}',
+        );
       }
 
       _loadMyRankingAndGenerateBotRanking();
@@ -625,98 +694,100 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
   }
 
-
   void _showRivalFoundDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              Icons.check_circle,
-              color: Colors.green,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                SizedBox(width: 8),
+                Text(S.of(context).opponentFound),
+              ],
             ),
-            SizedBox(width: 8),
-            Text(S.of(context).opponentFound),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.green[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green[200]!),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.person, size: 48, color: Colors.green),
-                  SizedBox(height: 12),
-                  Text(
-                    '$_opponentName ${S.of(context).acceptsYourBet}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green[800],
-                    ),
-                    textAlign: TextAlign.center,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green[200]!),
                   ),
-                  SizedBox(height: 8),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          widget.matchType == S.of(context).bet ? Icons.diamond : Icons.monetization_on,
-                          color: Colors.white,
-                          size: 18,
+                  child: Column(
+                    children: [
+                      Icon(Icons.person, size: 48, color: Colors.green),
+                      SizedBox(height: 12),
+                      Text(
+                        '$_opponentName ${S.of(context).acceptsYourBet}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green[800],
                         ),
-                        SizedBox(width: 6),
-                        Text(
-                          '${_selectedBetAmount} ${_getCurrencyName()}',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
                         ),
-                      ],
-                    ),
+                        decoration: BoxDecoration(
+                          color:
+                              widget.matchType == S.of(context).bet
+                                  ? Colors.amber
+                                  : Colors.blue,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              widget.matchType == S.of(context).bet
+                                  ? Icons.diamond
+                                  : Icons.monetization_on,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              '${_selectedBetAmount} ${_getCurrencyName()}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+                SizedBox(height: 16),
+                Text(
+                  '¡Que comience la partida!',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.green,
+                  backgroundColor: Colors.green[50],
+                ),
+                child: Text('¡Jugar!'),
               ),
-            ),
-            SizedBox(height: 16),
-            Text(
-              '¡Que comience la partida!',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.green,
-              backgroundColor: Colors.green[50],
-            ),
-            child: Text('¡Jugar!'),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -809,7 +880,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Future<String?> _findOrCreateGame(int userRanking) async {
     try {
       final waitingGames = await OnlineMatchmakingChessService()
-          .findWaitingGames(
+          .findActiveWaitingGames(
             gameType: 'Ajedrez',
             userRanking: userRanking,
             timeMinutes: _selectedTimeMinutes,
@@ -834,15 +905,19 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
         return success ? game.id : null;
       } else {
-        return await OnlineMatchmakingChessService().createOnlineGame(
-          hostId: currentUser!.uid,
-          hostName: currentUser!.displayName ?? 'Usuario',
-          hostPhotoUrl: currentUser!.photoURL,
-          gameType: 'Ajedrez',
-          timeMinutes: _selectedTimeMinutes,
-          hostRanking: userRanking,
-          betAmount: _selectedBetAmount,
-        );
+        final newGameId = await OnlineMatchmakingChessService()
+            .createOnlineGame(
+              hostId: currentUser!.uid,
+              hostName: currentUser!.displayName ?? 'Usuario',
+              hostPhotoUrl: currentUser!.photoURL,
+              gameType: 'Ajedrez',
+              timeMinutes: _selectedTimeMinutes,
+              hostRanking: userRanking,
+              betAmount: _selectedBetAmount,
+            );
+        if (newGameId != null) {
+          _startKeepAlive(newGameId);
+        }
       }
     } catch (e) {
       print('Error in matchmaking: $e');
@@ -960,7 +1035,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   runSpacing: 8,
                   children:
                       _betOptions.map((amount) {
-                        final canAfford = _getCurrentBalance() != null && _getCurrentBalance()! >= amount;
+                        final canAfford =
+                            _getCurrentBalance() != null &&
+                            _getCurrentBalance()! >= amount;
 
                         return GestureDetector(
                           onTap:
@@ -1038,7 +1115,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   ) async {
     try {
       if (_userDiamonds != null && _userDiamonds! < newAmount) {
-        _showError('No tienes suficientes ${_getCurrencyName()} para esta apuesta');
+        _showError(
+          'No tienes suficientes ${_getCurrencyName()} para esta apuesta',
+        );
         setState(() => _gameState = OnlineGameState.timeSelection);
         return;
       }
@@ -1110,7 +1189,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
   }
 
-
   void _startBetNegotiationListener(String gameId) {
     _betNegotiationSubscription?.cancel();
 
@@ -1119,31 +1197,34 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         .doc(gameId)
         .snapshots()
         .listen((snapshot) {
-      if (!snapshot.exists) return;
+          if (!snapshot.exists) return;
 
-      final gameData = snapshot.data() as Map<String, dynamic>;
-      final betNegotiation = gameData['betNegotiation'] as Map<String, dynamic>?;
+          final gameData = snapshot.data() as Map<String, dynamic>;
+          final betNegotiation =
+              gameData['betNegotiation'] as Map<String, dynamic>?;
 
-      if (betNegotiation != null) {
-        final status = betNegotiation['status'] as String?;
+          if (betNegotiation != null) {
+            final status = betNegotiation['status'] as String?;
 
-        if (status == 'accepted') {
-          _betNegotiationSubscription?.cancel();
-          Navigator.of(context).pop();
-          _handleCounterOfferAccepted(MultiplayerGameMatch.fromFirestore(snapshot));
-        } else if (status == 'rejected') {
-          _betNegotiationSubscription?.cancel();
-          Navigator.of(context).pop();
-          _handleCounterOfferRejected();
-        } else if (status == 'new_counter_offer' &&
-            betNegotiation['counterOfferBy'] != currentUser!.uid) {
-          _betNegotiationSubscription?.cancel();
-          Navigator.of(context).pop();
-          final newAmount = betNegotiation['counterAmount'] as int;
-          _handleNewCounterOffer(newAmount, betNegotiation);
-        }
-      }
-    });
+            if (status == 'accepted') {
+              _betNegotiationSubscription?.cancel();
+              Navigator.of(context).pop();
+              _handleCounterOfferAccepted(
+                MultiplayerGameMatch.fromFirestore(snapshot),
+              );
+            } else if (status == 'rejected') {
+              _betNegotiationSubscription?.cancel();
+              Navigator.of(context).pop();
+              _handleCounterOfferRejected();
+            } else if (status == 'new_counter_offer' &&
+                betNegotiation['counterOfferBy'] != currentUser!.uid) {
+              _betNegotiationSubscription?.cancel();
+              Navigator.of(context).pop();
+              final newAmount = betNegotiation['counterAmount'] as int;
+              _handleNewCounterOffer(newAmount, betNegotiation);
+            }
+          }
+        });
   }
 
   Future<void> _handleCounterOfferAccepted(MultiplayerGameMatch game) async {
@@ -1201,139 +1282,169 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     );
   }
 
-  void _handleNewCounterOffer(int newAmount, Map<String, dynamic> negotiationData) {
+  void _handleNewCounterOffer(
+    int newAmount,
+    Map<String, dynamic> negotiationData,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(S.of(context).newCounteroffer),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('${negotiationData['counterOfferName']} ${S.of(context).madeNewCounteroffer}'),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.diamond, color: Colors.amber),
-                  SizedBox(width: 8),
-                  Text(
-                    '$newAmount ${_getCurrencyName()}',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+      builder:
+          (context) => AlertDialog(
+            title: Text(S.of(context).newCounteroffer),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${negotiationData['counterOfferName']} ${S.of(context).madeNewCounteroffer}',
+                ),
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber),
                   ),
-                ],
-              ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.diamond, color: Colors.amber),
+                      SizedBox(width: 8),
+                      Text(
+                        '$newAmount ${_getCurrencyName()}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _rejectCounterOffer();
-            },
-            child: Text(S.of(context).reject),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _rejectCounterOffer();
+                },
+                child: Text(S.of(context).reject),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _acceptCounterOffer(newAmount);
+                },
+                style: TextButton.styleFrom(foregroundColor: Colors.green),
+                child: Text(S.of(context).accept),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _showSimpleCounterOfferDialog();
+                },
+                style: TextButton.styleFrom(foregroundColor: Colors.orange),
+                child: Text(S.of(context).counteroffer),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _acceptCounterOffer(newAmount);
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.green),
-            child: Text(S.of(context).accept),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showSimpleCounterOfferDialog();
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.orange),
-            child: Text(S.of(context).counteroffer),
-          ),
-        ],
-      ),
     );
   }
 
   void _showSimpleCounterOfferDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(S.of(context).makeCounteroffer),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(S.of(context).selectYourCounteroffer),
-            SizedBox(height: 16),
-            Container(
-              constraints: BoxConstraints(maxHeight: 200),
-              child: SingleChildScrollView(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _betOptions.map((amount) {
-                    final canAfford = _getCurrentBalance() != null && _getCurrentBalance()! >= amount;
+      builder:
+          (context) => AlertDialog(
+            title: Text(S.of(context).makeCounteroffer),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(S.of(context).selectYourCounteroffer),
+                SizedBox(height: 16),
+                Container(
+                  constraints: BoxConstraints(maxHeight: 200),
+                  child: SingleChildScrollView(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children:
+                          _betOptions.map((amount) {
+                            final canAfford =
+                                _getCurrentBalance() != null &&
+                                _getCurrentBalance()! >= amount;
 
-                    return GestureDetector(
-                      onTap: canAfford ? () {
-                        Navigator.of(context).pop();
-                        _sendSimpleCounterOffer(amount);
-                      } : null,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: canAfford ? Colors.amber : Colors.grey[300],
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.diamond,
-                              color: canAfford ? Colors.white : Colors.grey[600],
-                              size: 16,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              amount.toString(),
-                              style: TextStyle(
-                                color: canAfford ? Colors.white : Colors.grey[600],
+                            return GestureDetector(
+                              onTap:
+                                  canAfford
+                                      ? () {
+                                        Navigator.of(context).pop();
+                                        _sendSimpleCounterOffer(amount);
+                                      }
+                                      : null,
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      canAfford
+                                          ? Colors.amber
+                                          : Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.diamond,
+                                      color:
+                                          canAfford
+                                              ? Colors.white
+                                              : Colors.grey[600],
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      amount.toString(),
+                                      style: TextStyle(
+                                        color:
+                                            canAfford
+                                                ? Colors.white
+                                                : Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                            );
+                          }).toList(),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              setState(() => _gameState = OnlineGameState.timeSelection);
-            },
-            child: Text('Cancelar'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  setState(() => _gameState = OnlineGameState.timeSelection);
+                },
+                child: Text('Cancelar'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
   Future<void> _sendSimpleCounterOffer(int newAmount) async {
     try {
       if (_userDiamonds != null && _userDiamonds! < newAmount) {
-        _showError('${S.of(context).notEnough} ${_getCurrencyName()}${S.of(context).forThisBet}');
+        _showError(
+          '${S.of(context).notEnough} ${_getCurrencyName()}${S.of(context).forThisBet}',
+        );
         setState(() => _gameState = OnlineGameState.timeSelection);
         return;
       }
@@ -1342,22 +1453,21 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           .collection('multiplayer_games')
           .doc(_pendingGameId!)
           .update({
-        'betNegotiation': {
-          'status': 'new_counter_offer',
-          'counterOfferBy': currentUser!.uid,
-          'counterOfferName': currentUser!.displayName ?? 'Usuario',
-          'counterAmount': newAmount,
-          'timestamp': FieldValue.serverTimestamp(),
-        },
-        'betAmount': newAmount,
-        'gameSettings.betAmount': newAmount,
-      });
+            'betNegotiation': {
+              'status': 'new_counter_offer',
+              'counterOfferBy': currentUser!.uid,
+              'counterOfferName': currentUser!.displayName ?? 'Usuario',
+              'counterAmount': newAmount,
+              'timestamp': FieldValue.serverTimestamp(),
+            },
+            'betAmount': newAmount,
+            'gameSettings.betAmount': newAmount,
+          });
 
       setState(() {
         _selectedBetAmount = newAmount;
         _gameState = OnlineGameState.betNegotiation;
       });
-
     } catch (e) {
       print('Error enviando contraoferta: $e');
       _showError('Error enviando contraoferta');
@@ -1365,23 +1475,20 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
   }
 
-
-
   Future<void> _acceptCounterOffer(int amount) async {
     try {
       await FirebaseFirestore.instance
           .collection('multiplayer_games')
           .doc(_pendingGameId!)
           .update({
-        'betNegotiation.status': 'accepted',
-        'betNegotiation.acceptedBy': currentUser!.uid,
-        'betNegotiation.acceptedAt': FieldValue.serverTimestamp(),
-        'betAmount': amount,
-        'gameSettings.betAmount': amount,
-      });
+            'betNegotiation.status': 'accepted',
+            'betNegotiation.acceptedBy': currentUser!.uid,
+            'betNegotiation.acceptedAt': FieldValue.serverTimestamp(),
+            'betAmount': amount,
+            'gameSettings.betAmount': amount,
+          });
 
       setState(() => _selectedBetAmount = amount);
-
     } catch (e) {
       print('Error aceptando contraoferta: $e');
       _showError(S.of(context).errorAcceptingCounteroffer);
@@ -1423,17 +1530,20 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _startGameSubscription(String gameId) {
+    _startKeepAlive(gameId);
     _gameSubscription = MultiplayerGameService()
         .getGameStream(gameId)
         .listen(
           (game) {
             if (game == null) {
+              _keepAliveTimer?.cancel();
               _showErrorAndReturn(S.of(context).gameNotFound);
               return;
             }
             _handleGameUpdate(game);
           },
           onError: (error) {
+            _keepAliveTimer?.cancel();
             print('Error in game stream: $error');
             _showErrorAndReturn(S.of(context).connectionError);
           },
@@ -1457,7 +1567,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     if (previousGame == null) {
       shouldSync = true;
-    } else if (!_waitingForMoveResponse && previousGame.currentFen != game.currentFen) {
+    } else if (!_waitingForMoveResponse &&
+        previousGame.currentFen != game.currentFen) {
       shouldSync = true;
       isOpponentMove = _isMyTurn && !wasMyTurn;
     }
@@ -1465,9 +1576,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     if (shouldSync && !_waitingForMoveResponse) {
       _syncGameState();
 
-      if (isOpponentMove && game.lastMoveFrom != null && game.lastMoveTo != null) {
+      if (isOpponentMove &&
+          game.lastMoveFrom != null &&
+          game.lastMoveTo != null) {
         setState(() {
-          // Reemplazar con el movimiento del oponente
           _lastMoveFromSquare = game.lastMoveFrom;
           _lastMoveToSquare = game.lastMoveTo;
           _showLastMove = true;
@@ -1484,9 +1596,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     setState(() {});
   }
 
-
   Widget _buildLastMoveOverlay() {
-    if (!_showLastMove || _lastMoveFromSquare == null || _lastMoveToSquare == null) {
+    if (!_showLastMove ||
+        _lastMoveFromSquare == null ||
+        _lastMoveToSquare == null) {
       return SizedBox.shrink();
     }
 
@@ -1503,7 +1616,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       ),
     );
   }
-
 
   void _setupGame(MultiplayerGameMatch game) {
     final isHost = game.hostId == currentUser!.uid;
@@ -1748,7 +1860,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     String? to,
     String? promotion,
   }) async {
-    if (!_isMyTurn || _gameEnded || _waitingForMoveResponse || _currentGame == null) {
+    if (!_isMyTurn ||
+        _gameEnded ||
+        _waitingForMoveResponse ||
+        _currentGame == null) {
       return;
     }
 
@@ -1764,9 +1879,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       String moveTo = to ?? _lastMoveTo ?? "xx";
       String? movePromotion = promotion ?? _lastMovePromotion;
 
-      String moveNotation = movePromotion != null
-          ? '$moveFrom$moveTo$movePromotion'
-          : '$moveFrom$moveTo';
+      String moveNotation =
+          movePromotion != null
+              ? '$moveFrom$moveTo$movePromotion'
+              : '$moveFrom$moveTo';
 
       final success = await MultiplayerGameService().makeMove(
         gameId: _currentGame!.id,
@@ -1964,9 +2080,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           if (_selectedBetAmount != null) {
             if (_isPlayingAgainstBot) {
               if (isApuesta) {
-                currencyChange = _selectedBetAmount! + (_selectedBetAmount! * 0.8).round();
+                currencyChange =
+                    _selectedBetAmount! + (_selectedBetAmount! * 0.8).round();
               } else {
-                currencyChange = _selectedBetAmount! + (_selectedBetAmount! * 0.5).round();
+                currencyChange =
+                    _selectedBetAmount! + (_selectedBetAmount! * 0.5).round();
               }
             } else {
               final winnings = (_selectedBetAmount! * 0.7).round();
@@ -1979,7 +2097,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           pointsEarned = -5;
           if (_selectedBetAmount != null) {
             currencyChange = -_selectedBetAmount!;
-
           }
           break;
 
@@ -1997,7 +2114,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           if (useDiamonds) {
             final currentDiamonds = userData.diamonds ?? 0;
             final newDiamonds = currentDiamonds + currencyChange;
-            await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+            await _firestoreService.updateUserDiamonds(
+              currentUser!.uid,
+              newDiamonds,
+            );
             setState(() {
               _userDiamonds = newDiamonds;
             });
@@ -2019,14 +2139,17 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         result: result,
         pointsEarned: pointsEarned,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName: _opponentName ??
+        opponentName:
+            _opponentName ??
             (_isPlayingAgainstBot ? 'Bot Player' : 'Jugador en línea'),
         additionalData: {
-          'gameMode': _isPlayingAgainstBot ? 'online_bot' : 'online_matchmaking',
+          'gameMode':
+              _isPlayingAgainstBot ? 'online_bot' : 'online_matchmaking',
           'matchType': widget.matchType,
-          'timeControl': _selectedTimeMinutes != null
-              ? '${_selectedTimeMinutes!} minutos'
-              : 'Sin límite',
+          'timeControl':
+              _selectedTimeMinutes != null
+                  ? '${_selectedTimeMinutes!} minutos'
+                  : 'Sin límite',
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
           'finalFEN': controller.getFen(),
           'betAmount': _selectedBetAmount,
@@ -2046,7 +2169,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${S.of(context).youWonShort} $currencyChange $currency!'),
+                content: Text(
+                  '${S.of(context).youWonShort} $currencyChange $currency!',
+                ),
                 backgroundColor: Colors.green,
                 duration: Duration(seconds: 3),
               ),
@@ -2059,17 +2184,22 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${S.of(context).youLost} ${currencyChange.abs()} $currency'),
+                content: Text(
+                  '${S.of(context).youLost} ${currencyChange.abs()} $currency',
+                ),
                 backgroundColor: Colors.red,
                 duration: Duration(seconds: 3),
               ),
             );
           }
-        } else if (result == GameResultModel.draw && _selectedBetAmount != null) {
+        } else if (result == GameResultModel.draw &&
+            _selectedBetAmount != null) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${S.of(context).drawBetReturned} $_selectedBetAmount ${_getCurrencyName()}'),
+                content: Text(
+                  '${S.of(context).drawBetReturned} $_selectedBetAmount ${_getCurrencyName()}',
+                ),
                 backgroundColor: Colors.orange,
                 duration: Duration(seconds: 3),
               ),
@@ -2355,7 +2485,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     });
   }
 
-
   bool _onWillPop() {
     if (_gameState == OnlineGameState.playing && !_gameEnded) {
       _showAbandonGameDialog();
@@ -2394,7 +2523,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                  CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 3,
+                  ),
                   SizedBox(height: 30),
                   Text(
                     '${S.of(context).searchingOpponent}...',
@@ -2413,11 +2545,16 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                     SizedBox(height: 20),
                     Container(
                       margin: EdgeInsets.symmetric(horizontal: 20),
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Text(
                         S.of(context).searchingOpponent,
@@ -2437,11 +2574,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   ),
                   SizedBox(height: 40),
                   ElevatedButton(
-                    onPressed: () => _cancelMatchmaking(S.of(context).searchCanceled),
+                    onPressed:
+                        () => _cancelMatchmaking(S.of(context).searchCanceled),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2573,7 +2714,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color:
-            isPlayerTurn ? Colors.black.withValues(alpha: 0.2) : Colors.transparent,
+            isPlayerTurn
+                ? Colors.black.withValues(alpha: 0.2)
+                : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         border: isPlayerTurn ? Border.all(color: Colors.green, width: 2) : null,
       ),
@@ -2811,11 +2954,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                       SizedBox(height: 12),
 
                       Text(
-                       S.of(context).waitingOpponentResponse,
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
+                        S.of(context).waitingOpponentResponse,
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -2839,10 +2979,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   ),
                   child: Text(
                     S.of(context).cancelNegotiation,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -2873,7 +3010,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     });
   }
 
-
   @override
   Widget build(BuildContext context) {
     if (_gameState == OnlineGameState.betNegotiation) {
@@ -2898,7 +3034,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   String _getCurrencyName() {
     return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
   }
-
 
   int? _getCurrentBalance() {
     return widget.matchType == S.of(context).bet ? _userDiamonds : _userCoins;
@@ -2929,18 +3064,27 @@ class LastMovePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paintFrom = Paint()
-      ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(alpha: 0.5)
-      ..style = PaintingStyle.fill;
+    final paintFrom =
+        Paint()
+          ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(
+            alpha: 0.5,
+          )
+          ..style = PaintingStyle.fill;
 
-    final paintTo = Paint()
-      ..color = (isMyMove ? Colors.green : Colors.orange).withValues(alpha: 0.5)
-      ..style = PaintingStyle.fill;
+    final paintTo =
+        Paint()
+          ..color = (isMyMove ? Colors.green : Colors.orange).withValues(
+            alpha: 0.5,
+          )
+          ..style = PaintingStyle.fill;
 
-    final strokePaint = Paint()
-      ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(alpha: 0.8)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+    final strokePaint =
+        Paint()
+          ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(
+            alpha: 0.8,
+          )
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0;
 
     final squareSize = size.width / 8;
 
@@ -2964,10 +3108,13 @@ class LastMovePainter extends CustomPainter {
     );
     canvas.drawRect(toRect, paintTo);
 
-    final strokePaintTo = Paint()
-      ..color = (isMyMove ? Colors.green : Colors.orange).withValues(alpha: 0.8)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+    final strokePaintTo =
+        Paint()
+          ..color = (isMyMove ? Colors.green : Colors.orange).withValues(
+            alpha: 0.8,
+          )
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0;
     canvas.drawRect(toRect, strokePaintTo);
   }
 
@@ -2997,5 +3144,3 @@ class LastMovePainter extends CustomPainter {
         oldDelegate.boardOrientation != boardOrientation;
   }
 }
-
-

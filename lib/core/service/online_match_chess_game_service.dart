@@ -119,6 +119,62 @@ class OnlineMatchmakingChessService {
     }
   }
 
+  Future<List<MultiplayerGameMatch>> findActiveWaitingGames({
+    required String gameType,
+    required int userRanking,
+    required int? timeMinutes,
+    int? betAmount,
+  }) async {
+    try {
+      const int maxRankingDifference = 300;
+      const int maxInactivitySeconds = 30;
+
+      final DateTime minActivityTime = DateTime.now()
+          .subtract(Duration(seconds: maxInactivitySeconds));
+
+      final query = await _firestore
+          .collection('multiplayer_games')
+          .where('status', isEqualTo: 'waiting')
+          .where('gameType', isEqualTo: gameType)
+          .where('gameSettings.timeMinutes', isEqualTo: timeMinutes)
+          .where(
+        'gameSettings.hostRanking',
+        isGreaterThanOrEqualTo: userRanking - maxRankingDifference,
+      )
+          .where(
+        'gameSettings.hostRanking',
+        isLessThanOrEqualTo: userRanking + maxRankingDifference,
+      )
+          .orderBy('gameSettings.hostRanking')
+          .orderBy('createdAt')
+          .limit(10)
+          .get();
+
+      final games = query.docs
+          .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
+          .where((game) {
+        if (game.lastHostActivity == null) {
+          return game.createdAt.isAfter(minActivityTime);
+        }
+        return game.lastHostActivity!.isAfter(minActivityTime);
+      })
+          .toList();
+
+      if (games.isNotEmpty) {
+        games.sort((a, b) {
+          final diffA = ((a.gameSettings!['hostRanking'] as int) - userRanking).abs();
+          final diffB = ((b.gameSettings!['hostRanking'] as int) - userRanking).abs();
+          return diffA.compareTo(diffB);
+        });
+      }
+
+      return games;
+    } catch (e) {
+      print('Error finding active waiting games: $e');
+      return [];
+    }
+  }
+
   Future<String?> createOnlineGame({
     required String hostId,
     required String hostName,
@@ -144,6 +200,7 @@ class OnlineMatchmakingChessService {
         createdAt: DateTime.now(),
         isRanked: true,
         betAmount: betAmount,
+        lastHostActivity: DateTime.now(),
         gameSettings: {
           'timeMinutes': timeMinutes,
           'hostRanking': hostRanking,

@@ -38,10 +38,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   bool _isMyTurn = false;
   Timer? _reconnectTimer;
   bool _isConnected = true;
-  bool _waitingForMoveResponse = false; // Renombrado para ser más específico
+  bool _waitingForMoveResponse = false;
   DateTime? _gameStartTime;
 
-  // Variables para el sistema de monedas
   int? _userCoins;
   int? _userDiamonds;
   int? _selectedBetAmount;
@@ -89,7 +88,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     }
   }
 
-  // Funciones helper para determinar tipo de moneda
   String _getCurrencyType() {
     return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
   }
@@ -183,7 +181,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     } else {
       if (previousGame.moves.length != game.moves.length) {
         shouldSync = true;
-        // Liberar el bloqueo cuando llega una actualización del juego
         _waitingForMoveResponse = false;
       } else if (previousGame.currentFen != game.currentFen) {
         shouldSync = true;
@@ -213,7 +210,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _opponentName = game.getOpponentName(currentUser!.uid);
     _opponentPhotoUrl = isHost ? game.guestPhotoUrl : game.hostPhotoUrl;
 
-    // Obtener monto de apuesta si existe
     _selectedBetAmount = game.betAmount;
   }
 
@@ -221,7 +217,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     if (_currentGame == null) return;
     try {
       if (controller.getFen() != _currentGame!.currentFen) {
-        // Pequeño delay para hacer la sincronización más suave
         Future.delayed(const Duration(milliseconds: 100), () {
           if (mounted) {
             controller.loadFen(_currentGame!.currentFen);
@@ -238,14 +233,11 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     if (!_isMyTurn || _gameEnded || _waitingForMoveResponse || _currentGame == null) {
       return;
     }
-
-    // Marcar que estamos procesando pero NO bloquear inmediatamente la UI
     _waitingForMoveResponse = true;
 
     try {
       final newFen = controller.getFen();
 
-      // Enviar el movimiento de forma optimista (sin bloquear la UI)
       final success = await _gameService.makeMove(
         gameId: widget.gameId,
         playerId: currentUser!.uid,
@@ -258,14 +250,12 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
       if (!success) {
         print('Failed to send move to server, reverting...');
-        // Solo revertir si falló, sin mostrar loading molesto
         _syncGameState();
         _showError('Error al enviar movimiento. Inténtalo de nuevo.');
         _waitingForMoveResponse = false;
       } else {
         print('Move sent successfully to server');
         _checkForGameEnd(newFen);
-        // El _waitingForMoveResponse se liberará cuando llegue la actualización del servidor
       }
     } catch (e) {
       print('Error in _playerMoved: $e');
