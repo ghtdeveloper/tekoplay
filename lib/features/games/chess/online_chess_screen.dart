@@ -2472,12 +2472,18 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                     padding: const EdgeInsets.all(16),
                     child: Stack(
                       children: [
-                        ChessBoard(
-                          controller: controller,
-                          boardColor: BoardColor.brown,
-                          boardOrientation: _myColor ?? PlayerColor.white,
-                          enableUserMoves: _isMyTurn && !_gameEnded,
-                          onMove: _playerMoved,
+                        GestureDetector(
+                          onPanUpdate: (_) {},
+                          onPanStart: (_) {},
+                          onPanEnd: (_) {},
+                          behavior: HitTestBehavior.opaque,
+                          child: ChessBoard(
+                            controller: controller,
+                            boardColor: BoardColor.brown,
+                            boardOrientation: _myColor ?? PlayerColor.white,
+                            enableUserMoves: _isMyTurn && !_gameEnded,
+                            onMove: _playerMoved,
+                          ),
                         ),
                         _buildLastMoveOverlay(),
                       ],
