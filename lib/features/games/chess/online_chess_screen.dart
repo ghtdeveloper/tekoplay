@@ -240,10 +240,16 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   void _cleanupTimers() {
     _matchmakingTimer?.cancel();
+    _matchmakingTimer = null;
     _gameTimer?.cancel();
+    _gameTimer = null;
     _playerTimer?.cancel();
+    _playerTimer = null;
     _botMoveTimer?.cancel();
+    _botMoveTimer = null;
   }
+
+
 
   Widget _buildTimeSelectionScreen() {
     return Scaffold(
@@ -492,7 +498,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _startMatchmaking() async {
-    if (currentUser == null) return;
+
+    if (currentUser == null) {
+      return;
+    }
+
     if (widget.matchType == S.of(context).bet && !_canAffordBet()) {
       _showError('${S.of(context).notEnough} ${_getCurrencyName()} ${S.of(context).forThisBet}');
       return;
@@ -504,63 +514,79 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     });
 
     final userRanking = await _getUserRanking();
-    String? gameId;
+
+    // Búsqueda inicial
+    try {
+      final gameId = await _findOrCreateGame(userRanking);
+      if (gameId != null && !_isPlayingAgainstBot && mounted) {
+        _startGameSubscription(gameId);
+        return;
+      }
+    } catch (e) {
+      print('Error en búsqueda inicial: $e');
+    }
 
     _matchmakingTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
-      setState(() => _matchmakingSeconds++);
 
-      if (_matchmakingSeconds % 5 == 0 && !_isPlayingAgainstBot) {
-        try {
-          final waitingGames = await OnlineMatchmakingChessService()
-              .findWaitingGamesProgressive(
-            gameType: 'Ajedrez',
-            userRanking: userRanking,
-            timeMinutes: _selectedTimeMinutes,
-            searchTimeSeconds: _matchmakingSeconds,
-          );
 
-          if (waitingGames.isNotEmpty) {
-            final game = waitingGames.first;
-            final success = await MultiplayerGameService().joinGame(
-              game.id,
-              currentUser!.uid,
-              currentUser!.displayName ?? 'Usuario',
-              currentUser!.photoURL,
+      // Verificar si el widget está montado
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        setState(() {
+          _matchmakingSeconds++;
+        });
+
+        if (_matchmakingSeconds % 5 == 0 && !_isPlayingAgainstBot) {
+          try {
+            final waitingGames = await OnlineMatchmakingChessService()
+                .findWaitingGamesProgressive(
+              gameType: 'Ajedrez',
+              userRanking: userRanking,
+              timeMinutes: _selectedTimeMinutes,
+              searchTimeSeconds: _matchmakingSeconds,
             );
 
-            if (success) {
-              gameId = game.id;
-              timer.cancel();
-              _startGameSubscription(gameId!);
-              return;
+            if (waitingGames.isNotEmpty && mounted) {
+              final game = waitingGames.first;
+              final success = await MultiplayerGameService().joinGame(
+                game.id,
+                currentUser!.uid,
+                currentUser!.displayName ?? 'Usuario',
+                currentUser!.photoURL,
+              );
+
+              if (success && mounted) {
+                timer.cancel();
+                _startGameSubscription(game.id);
+                return;
+              }
             }
+          } catch (e) {
+            print('❌ Error en búsqueda progresiva: $e');
           }
-        } catch (e) {
-          print('Error durante la búsqueda progresiva: $e');
         }
-      }
 
-      if (_matchmakingSeconds == 1) {
-        try {
-          gameId = await _findOrCreateGame(userRanking);
-          if (gameId != null && !_isPlayingAgainstBot) {
-            timer.cancel();
-            _startGameSubscription(gameId!);
-            return;
-          }
-        } catch (e) {
-          print('Error creando partida inicial: $e');
+        const int maxWaitTime = 45;
+        if (_matchmakingSeconds >= maxWaitTime && !_isPlayingAgainstBot) {
+          timer.cancel();
+          _startBotGame();
         }
-      }
 
-      const int maxWaitTime = 45;
-
-      if (_matchmakingSeconds >= maxWaitTime && !_isPlayingAgainstBot) {
+      } catch (e) {
+        print('💥 ERROR CRÍTICO en timer: $e');
         timer.cancel();
-        _startBotGame();
+        if (mounted) {
+          _showError('Error en la búsqueda: $e');
+          setState(() => _gameState = OnlineGameState.timeSelection);
+        }
       }
     });
   }
+
 
   void _startBotGame() {
     setState(() {
@@ -2075,7 +2101,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   void _cancelMatchmaking(String reason) {
     _matchmakingTimer?.cancel();
-    _showErrorAndReturn(reason);
+    _matchmakingTimer = null;
+    if (mounted) {
+      _showErrorAndReturn(reason);
+    }
   }
 
   void _showErrorAndReturn(String message) {
