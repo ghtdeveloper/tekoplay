@@ -64,6 +64,8 @@ class _GameScreenState extends State<GameScreen> {
 
   bool get isDomino => gameType == S.of(context).domino;
 
+  List<MultiplayerGameMatch> _previousActiveGames = [];
+
   @override
   void initState() {
     super.initState();
@@ -90,7 +92,6 @@ class _GameScreenState extends State<GameScreen> {
     _updateAnonymousWalletUI();
   }
 
-
   void _setupFirestoreWalletListener() {
     _diamondsSubscription?.cancel();
 
@@ -100,25 +101,25 @@ class _GameScreenState extends State<GameScreen> {
         .snapshots()
         .listen(
           (DocumentSnapshot document) {
-        if (document.exists && mounted && !_isDisposed) {
-          final userData = document.data() as Map<String, dynamic>;
+            if (document.exists && mounted && !_isDisposed) {
+              final userData = document.data() as Map<String, dynamic>;
 
-          setState(() {
-            _userDiamonds = userData['diamonds'] ?? 0;
-            _userCoins = userData['coins'] ?? 0;
-          });
-        }
-      },
-      onError: (error) {
-        print('Error listening to diamonds: $error');
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _userDiamonds = 0;
-            _userCoins = 0;
-          });
-        }
-      },
-    );
+              setState(() {
+                _userDiamonds = userData['diamonds'] ?? 0;
+                _userCoins = userData['coins'] ?? 0;
+              });
+            }
+          },
+          onError: (error) {
+            print('Error listening to diamonds: $error');
+            if (mounted && !_isDisposed) {
+              setState(() {
+                _userDiamonds = 0;
+                _userCoins = 0;
+              });
+            }
+          },
+        );
   }
 
   Future<void> _updateAnonymousWalletUI() async {
@@ -264,6 +265,9 @@ class _GameScreenState extends State<GameScreen> {
             (games) {
               if (mounted && !_isDisposed) {
                 setState(() {});
+
+                // NUEVA LÓGICA: Auto-navegar al juego si hay uno nuevo
+                _handleNewActiveGames(games);
               }
             },
             onError: (error) {
@@ -273,6 +277,35 @@ class _GameScreenState extends State<GameScreen> {
     } catch (e) {
       print('Error configurando streams: $e');
     }
+  }
+
+  void _handleNewActiveGames(List<MultiplayerGameMatch> currentGames) {
+    // Buscar juegos nuevos (que no estaban en la lista anterior)
+    final newGames = currentGames.where((game) {
+      return !_previousActiveGames.any((prevGame) => prevGame.id == game.id);
+    }).toList();
+
+    // Si hay un juego nuevo donde soy el host, navegar automáticamente
+    for (final newGame in newGames) {
+      if (newGame.hostId == _currentUser!.uid &&
+          newGame.status == 'active' &&
+          newGame.guestId != null) {
+        print('Navegando automáticamente al juego como host: ${newGame.id}');
+        // Navegar al juego
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MultiplayerChessScreen(
+              gameId: newGame.id,
+              isHost: true,  // Explícitamente marcado como host
+              matchType: matchType,
+            ),
+          ),
+        );
+        break; // Solo navegar al primer juego nuevo
+      }
+    }
+    _previousActiveGames = List.from(currentGames);
   }
 
   void _showCoinPurchaseDialog() {
@@ -323,7 +356,9 @@ class _GameScreenState extends State<GameScreen> {
           }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${S.of(context).purchaseSuccessful} +$coins ${S.of(context).coins}'),
+              content: Text(
+                '${S.of(context).purchaseSuccessful} +$coins ${S.of(context).coins}',
+              ),
               backgroundColor: Colors.green,
             ),
           );
@@ -363,11 +398,9 @@ class _GameScreenState extends State<GameScreen> {
       );
 
       if (result != null && result['success'] == true) {
-        // Usar AuthService para manejar la actualización según el tipo de usuario
         final success = await AuthService().addDiamonds(diamonds);
 
         if (success) {
-          // Actualizar UI según el tipo de usuario
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
           } else {
@@ -376,7 +409,9 @@ class _GameScreenState extends State<GameScreen> {
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${S.of(context).purchaseSuccessful} +$diamonds ${S.of(context).diamonds}'),
+              content: Text(
+                '${S.of(context).purchaseSuccessful} +$diamonds ${S.of(context).diamonds}',
+              ),
               backgroundColor: Colors.green,
             ),
           );
@@ -402,6 +437,7 @@ class _GameScreenState extends State<GameScreen> {
     _activeGamesSubscription?.cancel();
     _diamondsSubscription?.cancel();
     _audioPlayer.dispose();
+    _previousActiveGames.clear();
     if (_isAnonymousMode) {
       try {
         AuthService().disableAnonymousMode();

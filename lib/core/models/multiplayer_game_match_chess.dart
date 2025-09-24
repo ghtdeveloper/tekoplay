@@ -32,6 +32,10 @@ class MultiplayerGameMatch {
   final String? lastMoveTo;
   final DateTime? lastHostActivity;
   final DateTime? lastGuestActivity;
+  final String? abandonedBy;
+  final DateTime? endTime;
+  final String? drawOffer;
+  final DateTime? drawOfferTime;
 
   MultiplayerGameMatch({
     required this.id,
@@ -60,6 +64,10 @@ class MultiplayerGameMatch {
     this.lastMoveTo,
     this.lastHostActivity,
     this.lastGuestActivity,
+    this.abandonedBy,
+    this.endTime,
+    this.drawOffer,
+    this.drawOfferTime,
   });
 
   factory MultiplayerGameMatch.fromFirestore(DocumentSnapshot doc) {
@@ -110,6 +118,16 @@ class MultiplayerGameMatch {
           data['lastGuestActivity'] != null
               ? (data['lastGuestActivity'] as Timestamp).toDate()
               : null,
+      abandonedBy: data['abandonedBy'],
+      endTime:
+          data['endTime'] != null
+              ? (data['endTime'] as Timestamp).toDate()
+              : null,
+      drawOffer: data['drawOffer'],
+      drawOfferTime:
+          data['drawOfferTime'] != null
+              ? (data['drawOfferTime'] as Timestamp).toDate()
+              : null,
     );
   }
 
@@ -146,6 +164,11 @@ class MultiplayerGameMatch {
           lastGuestActivity != null
               ? Timestamp.fromDate(lastGuestActivity!)
               : null,
+      'abandonedBy': abandonedBy,
+      'endTime': endTime != null ? Timestamp.fromDate(endTime!) : null,
+      'drawOffer': drawOffer,
+      'drawOfferTime':
+          drawOfferTime != null ? Timestamp.fromDate(drawOfferTime!) : null,
     };
   }
 
@@ -218,6 +241,16 @@ class MultiplayerGameMatch {
     if (currentTurn == 'host' && hostId == currentUserId) return true;
     if (currentTurn == 'guest' && guestId == currentUserId) return true;
     return false;
+  }
+
+  bool get isAbandoned => status == 'abandoned';
+
+  bool didIAbandon(String currentUserId) {
+    return isAbandoned && abandonedBy == currentUserId;
+  }
+
+  bool didOpponentAbandon(String currentUserId) {
+    return isAbandoned && abandonedBy != null && abandonedBy != currentUserId;
   }
 }
 
@@ -521,6 +554,60 @@ class MultiplayerGameService {
       return true;
     } catch (e) {
       print('Error making move: $e');
+      return false;
+    }
+  }
+
+  Future<bool> abandonGame({
+    required String gameId,
+    required String playerId,
+  }) async {
+    try {
+      print(
+        '🚀 Enviando abandono al servidor. GameId: $gameId, PlayerId: $playerId',
+      );
+
+      final gameRef = FirebaseFirestore.instance
+          .collection('multiplayer_games')
+          .doc(gameId);
+
+      final gameDoc = await gameRef.get();
+      if (!gameDoc.exists) {
+        print('❌ Juego no encontrado');
+        return false;
+      }
+
+      final gameData = gameDoc.data() as Map<String, dynamic>;
+      final currentStatus = gameData['status'] ?? '';
+
+      if (currentStatus != 'active') {
+        print('⚠️ No se puede abandonar un juego con status: $currentStatus');
+        return false;
+      }
+
+      String? winnerId;
+      final hostId = gameData['hostId'];
+      final guestId = gameData['guestId'];
+
+      if (playerId == hostId) {
+        winnerId = guestId;
+      } else if (playerId == guestId) {
+        winnerId = hostId;
+      }
+      await gameRef.update({
+        'status': 'abandoned',
+        'abandonedBy': playerId,
+        'winnerId': winnerId,
+        'endTime': FieldValue.serverTimestamp(),
+        'result': 'win',
+        'finishedAt': FieldValue.serverTimestamp(),
+        'reason': 'abandoned',
+      });
+
+      print('✅ Abandono registrado exitosamente en el servidor');
+      return true;
+    } catch (e) {
+      print('💥 Error abandonando juego: $e');
       return false;
     }
   }

@@ -45,6 +45,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   int? _userDiamonds;
   int? _selectedBetAmount;
 
+  bool _hasUserExitedGame = false;
+  int? _myRanking;
+  int? _opponentRanking;
+
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   MultiplayerGameService get _gameService => MultiplayerGameService();
@@ -60,7 +64,39 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     WidgetsBinding.instance.addObserver(this);
     _gameStartTime = DateTime.now();
     _loadUserCurrency();
+    _loadPlayerRankings();
     _initializeGame();
+  }
+
+  Future<void> _loadPlayerRankings() async {
+    if (currentUser == null) return;
+
+    try {
+      final myUserDoc = await _firestoreService.getUser(currentUser!.uid);
+      if (myUserDoc != null) {
+        setState(() {
+          _myRanking = myUserDoc.totalPoints ?? 0;
+        });
+      }
+
+      if (_currentGame != null) {
+        final opponentId =
+            _currentGame!.hostId == currentUser!.uid
+                ? _currentGame!.guestId
+                : _currentGame!.hostId;
+
+        if (opponentId != null) {
+          final opponentDoc = await _firestoreService.getUser(opponentId);
+          if (opponentDoc != null) {
+            setState(() {
+              _opponentRanking = opponentDoc.totalPoints ?? 0;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      print('Error cargando rankings: $e');
+    }
   }
 
   @override
@@ -97,7 +133,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   IconData _getCurrencyIcon() {
-    return widget.matchType == S.of(context).bet ? Icons.diamond : Icons.monetization_on;
+    return widget.matchType == S.of(context).bet
+        ? Icons.diamond
+        : Icons.monetization_on;
   }
 
   int? _getCurrentBalance() {
@@ -142,19 +180,19 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         .getGameStream(widget.gameId)
         .listen(
           (game) {
-        if (game == null) {
-          _showErrorAndExit(S.of(context).gameNotFound);
-          return;
-        }
+            if (game == null) {
+              _showErrorAndExit(S.of(context).gameNotFound);
+              return;
+            }
 
-        _handleGameUpdate(game);
-      },
-      onError: (error) {
-        print('Error in game stream: $error');
-        setState(() => _isConnected = false);
-        _startReconnectTimer();
-      },
-    );
+            _handleGameUpdate(game);
+          },
+          onError: (error) {
+            print('Error in game stream: $error');
+            setState(() => _isConnected = false);
+            _startReconnectTimer();
+          },
+        );
   }
 
   void _startReconnectTimer() {
@@ -170,6 +208,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     if (previousGame == null) {
       _setupGameInfo(game);
+      _loadPlayerRankings();
     }
 
     _isMyTurn = game.isPlayerTurn(currentUser!.uid);
@@ -191,16 +230,218 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _syncGameState();
     }
 
-    if (!_gameEnded && game.isFinished) {
+    if (game.isAbandoned && !_gameEnded) {
+      print('🔍 Juego detectado como abandonado. AbandonedBy: ${game.abandonedBy}, CurrentUser: ${currentUser!.uid}');
+
+      if (game.didOpponentAbandon(currentUser!.uid)) {
+        print('✅ El oponente abandonó la partida');
+        _handleOpponentAbandoned(game);
+      } else if (game.didIAbandon(currentUser!.uid) && !_hasUserExitedGame) {
+        print('⚠️ Yo abandoné la partida (detectado desde servidor)');
+        _gameEnded = true;
+      }
+    }
+
+    else if (!_gameEnded && game.isFinished) {
+      print('🏁 Juego terminado normalmente');
       _gameEnded = true;
       _handleGameEnd(game);
     }
 
-    if (game.status == 'waiting' && previousGame?.status == 'active') {
+    else if (game.status == 'waiting' && previousGame?.status == 'active') {
+      print('📡 Oponente desconectado temporalmente');
       _showOpponentDisconnected();
     }
 
     setState(() {});
+  }
+
+  void _handleOpponentAbandoned(MultiplayerGameMatch game) {
+    if (_gameEnded) {
+      print('❌ Juego ya terminado, no procesando abandono');
+      return;
+    }
+
+    print('🎯 Procesando abandono del oponente...');
+    _gameEnded = true;
+
+    final opponentName = game.getOpponentName(currentUser!.uid) ?? S.of(context).rivals;
+
+    // Registrar la victoria por abandono ANTES de mostrar el diálogo
+    _recordGameResult(GameResultModel.win);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.person_off, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Text(
+              S.of(context).gameOver,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.person_off, size: 48, color: Colors.orange),
+                  SizedBox(height: 12),
+                  Text(
+                    '$opponentName ha abandonado la partida',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.emoji_events, color: Colors.green, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    '¡Has ganado por abandono!',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        actions: [
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            icon: Icon(Icons.check_circle),
+            label: Text(S.of(context).exit),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _showAbandonDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (context) => AlertDialog(
+                title: Text(
+                  '¿${S.of(context).abandonGame}?',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning, size: 48, color: Colors.orange),
+                    SizedBox(height: 16),
+                    Text(
+                      S.of(context).abandonGameWarning,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      S.of(context).areYouSure,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(S.of(context).continueGame),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Text(S.of(context).abandonGame),
+                    ),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+  }
+
+  Future<void> _abandonGame() async {
+    if (_gameEnded) {
+      print('❌ Juego ya terminado, no se puede abandonar');
+      return;
+    }
+    print('🏃‍♂️ Iniciando proceso de abandono...');
+
+    try {
+      _hasUserExitedGame = true;
+      _gameEnded = true;
+
+      // Enviar abandono al servidor
+      final success = await _gameService.abandonGame(
+        gameId: widget.gameId,
+        playerId: currentUser!.uid,
+      );
+
+      if (success) {
+        print('✅ Abandono enviado correctamente al servidor');
+        _recordGameResult(GameResultModel.loss);
+      } else {
+        print('❌ Error enviando abandono al servidor');
+        _gameEnded = false;
+        _hasUserExitedGame = false;
+      }
+
+    } catch (e) {
+      print('💥 Error abandonando juego: $e');
+      _hasUserExitedGame = false;
+    }
   }
 
   void _setupGameInfo(MultiplayerGameMatch game) {
@@ -230,7 +471,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   void _playerMoved() async {
-    if (!_isMyTurn || _gameEnded || _waitingForMoveResponse || _currentGame == null) {
+    if (!_isMyTurn ||
+        _gameEnded ||
+        _waitingForMoveResponse ||
+        _currentGame == null) {
       return;
     }
     _waitingForMoveResponse = true;
@@ -366,7 +610,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           if (isApuesta) {
             final currentDiamonds = userData.diamonds ?? 0;
             final newDiamonds = currentDiamonds + currencyChange;
-            await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+            await _firestoreService.updateUserDiamonds(
+              currentUser!.uid,
+              newDiamonds,
+            );
             setState(() => _userDiamonds = newDiamonds);
           } else {
             final currentCoins = userData.coins;
@@ -392,9 +639,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           'currencyType': _getCurrencyType(),
           'matchType': widget.matchType,
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
-          'opponentId': _currentGame?.hostId == currentUser!.uid
-              ? _currentGame?.guestId
-              : _currentGame?.hostId,
+          'opponentId':
+              _currentGame?.hostId == currentUser!.uid
+                  ? _currentGame?.guestId
+                  : _currentGame?.hostId,
           'gameId': widget.gameId,
           'finalFEN': controller.getFen(),
           'totalMoves': _currentGame?.moves.length ?? 0,
@@ -534,77 +782,190 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       barrierDismissible: false,
       builder:
           (context) => AlertDialog(
-        title: Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            child: Text('OK'),
+            title: Text('Error'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
+                child: Text('OK'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
   Widget _buildPlayerInfo(bool isMe) {
     if (_currentGame == null) return SizedBox();
 
-    final name =
-    isMe
+    final name = isMe
         ? (currentUser?.displayName ?? S.of(context).you)
         : (_opponentName ?? S.of(context).rivals);
 
     final photoUrl = isMe ? currentUser?.photoURL : _opponentPhotoUrl;
-
     final isPlayerTurn = isMe ? _isMyTurn : !_isMyTurn;
-
     final isWaitingForResponse = isMe && _waitingForMoveResponse;
+    final ranking = isMe ? _myRanking : _opponentRanking;
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color:
-        isPlayerTurn ? Colors.black.withValues(alpha: 0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        border: isPlayerTurn ? Border.all(color: Colors.green, width: 2) : null,
+        color: isPlayerTurn
+            ? Colors.green.withOpacity(0.2)
+            : Colors.black.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: isPlayerTurn
+            ? Border.all(color: Colors.green, width: 2)
+            : Border.all(color: Colors.white.withOpacity(0.2)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Colors.grey[300],
-            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-            child: photoUrl == null ? Icon(Icons.person, size: 20) : null,
-          ),
-          SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          // Avatar del jugador
+          Stack(
             children: [
-              Text(
-                name,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              CircleAvatar(
+                radius: 25,
+                backgroundColor: Colors.grey[300],
+                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                child: photoUrl == null ? Icon(Icons.person, size: 25) : null,
               ),
               if (isPlayerTurn && !isWaitingForResponse)
-                Text(
-                  S.of(context).yourTurn,
-                  style: TextStyle(color: Colors.green[300], fontSize: 12),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
                 ),
             ],
+          ),
+
+          SizedBox(width: 12),
+
+          // Información del jugador
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (ranking != null) ...[
+                      SizedBox(width: 8),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getRankingColor(ranking),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.star,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              '$ranking',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+
+                SizedBox(height: 4),
+
+                Row(
+                  children: [
+                    if (isPlayerTurn && !isWaitingForResponse) ...[
+                      Icon(Icons.play_arrow, color: Colors.green, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        S.of(context).yourTurn,
+                        style: TextStyle(color: Colors.green[300], fontSize: 12),
+                      ),
+                    ] else if (isWaitingForResponse) ...[
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Enviando...',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                    ] else ...[
+                      Icon(Icons.hourglass_empty, color: Colors.white60, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        'Esperando',
+                        style: TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
+                    ],
+
+                    Spacer(),
+
+                    // Mostrar color de piezas
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: isMe
+                            ? (_myColor == PlayerColor.white ? Colors.white : Colors.black)
+                            : (_myColor == PlayerColor.white ? Colors.black : Colors.white),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  MaterialColor _getRankingColor(int points) {
+    if (points >= 1000) return Colors.purple;
+    if (points >= 500) return Colors.amber;
+    if (points >= 200) return Colors.blue;
+    if (points >= 50) return Colors.green;
+    return Colors.grey;
   }
 
   Widget _buildConnectionStatus() {
@@ -661,14 +1022,20 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
               children: [
                 Icon(
                   _getCurrencyIcon(),
-                  color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+                  color:
+                      widget.matchType == S.of(context).bet
+                          ? Colors.amber
+                          : Colors.blue,
                   size: 16,
                 ),
                 SizedBox(width: 4),
                 Text(
                   '$_selectedBetAmount ${_getCurrencyName()}',
                   style: TextStyle(
-                    color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+                    color:
+                        widget.matchType == S.of(context).bet
+                            ? Colors.amber
+                            : Colors.blue,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -695,7 +1062,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         children: [
           Icon(
             _getCurrencyIcon(),
-            color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+            color:
+                widget.matchType == S.of(context).bet
+                    ? Colors.amber
+                    : Colors.blue,
             size: 16,
           ),
           SizedBox(width: 6),
@@ -714,6 +1084,19 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   @override
   void dispose() {
+    print('🧹 Disposing MultiplayerChessScreen...');
+
+    // Solo abandonar si estamos saliendo inesperadamente
+    if (!_gameEnded && !_hasUserExitedGame && _currentGame != null && _currentGame!.isActive) {
+      print('⚠️ Salida inesperada detectada, abandonando juego...');
+      // No usar await aquí, solo fire-and-forget
+      _gameService.abandonGame(
+        gameId: widget.gameId,
+        playerId: currentUser!.uid,
+      ).catchError((e) {
+        print('Error en abandono desde dispose: $e');
+      });
+    }
     WidgetsBinding.instance.removeObserver(this);
     _gameSubscription?.cancel();
     _reconnectTimer?.cancel();
@@ -827,66 +1210,80 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       );
     }
 
-    return Scaffold(
-      backgroundColor: const ui.Color(0xFFEC7A34),
-      appBar: AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        if (_gameEnded || _hasUserExitedGame) {
+          return true;
+        }
+        final shouldAbandon = await _showAbandonDialog();
+        if (shouldAbandon) {
+          await _abandonGame();
+          return true;
+        }
+        return false;
+      },
+      child: Scaffold(
         backgroundColor: const ui.Color(0xFFEC7A34),
-        elevation: 0,
-        title: Text(
-          S.of(context).multiplayer,
-          style: TextStyle(color: Colors.white),
+        appBar: AppBar(
+          backgroundColor: const ui.Color(0xFFEC7A34),
+          elevation: 0,
+          title: Text(
+            S.of(context).multiplayer,
+            style: TextStyle(color: Colors.white),
+          ),
+          iconTheme: const IconThemeData(color: Colors.white),
+          actions: [
+            Center(child: _buildCurrencyDisplay()),
+            SizedBox(width: 16),
+          ],
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          Center(child: _buildCurrencyDisplay()),
-          SizedBox(width: 16),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildConnectionStatus(),
+        body: Column(
+          children: [
+            _buildConnectionStatus(),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: _buildPlayerInfo(false),
-          ),
-
-          _buildGameInfo(),
-
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: ChessBoard(
-                controller: controller,
-                boardColor: BoardColor.brown,
-                boardOrientation: _myColor ?? PlayerColor.white,
-                // Permitir movimientos más libremente, sin bloquear por _waitingForMoveResponse
-                enableUserMoves: _isMyTurn && !_gameEnded,
-                onMove: _playerMoved,
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: _buildPlayerInfo(false),
             ),
-          ),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: _buildPlayerInfo(true),
-          ),
+            _buildGameInfo(),
 
-          if (!_gameEnded)
-            Container(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                _isMyTurn ? S.of(context).yourTurn : S.of(context).opponentTurn,
-                style: TextStyle(
-                  color: _isMyTurn ? Colors.green[300] : Colors.white70,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ChessBoard(
+                  controller: controller,
+                  boardColor: BoardColor.brown,
+                  boardOrientation: _myColor ?? PlayerColor.white,
+                  enableUserMoves: _isMyTurn && !_gameEnded,
+                  onMove: _playerMoved,
                 ),
               ),
             ),
-          const BannerAdWidget(),
-          SizedBox(height: 16),
-        ],
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: _buildPlayerInfo(true),
+            ),
+
+            if (!_gameEnded)
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  _isMyTurn
+                      ? S.of(context).yourTurn
+                      : S.of(context).opponentTurn,
+                  style: TextStyle(
+                    color: _isMyTurn ? Colors.green[300] : Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            const BannerAdWidget(),
+            SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
