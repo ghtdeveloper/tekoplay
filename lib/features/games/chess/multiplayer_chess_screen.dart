@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
+import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/utils/game_earnings_calculator.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../../core/utils/game_result.dart';
 import '../../adds/BannerAdWidget.dart';
+import '../../adds/InterstitialAdHelper.dart';
 
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
@@ -51,6 +54,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
+  late InterstitialAdHelper _interstitialHelper;
+
   MultiplayerGameService get _gameService => MultiplayerGameService();
   final FirestoreService _firestoreService = FirestoreService();
 
@@ -66,18 +71,16 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _loadUserCurrency();
     _loadPlayerRankings();
     _initializeGame();
+    _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
 
   Future<void> _loadPlayerRankings() async {
     if (currentUser == null) return;
-
     try {
-      final myUserDoc = await _firestoreService.getUser(currentUser!.uid);
-      if (myUserDoc != null) {
-        setState(() {
-          _myRanking = myUserDoc.totalPoints ?? 0;
-        });
-      }
+      final myGameStats = await AuthService().getCurrentUserGameStats(
+        GameTypeModel.chess,
+      );
+      _myRanking = myGameStats?.points ?? 1000;
 
       if (_currentGame != null) {
         final opponentId =
@@ -88,9 +91,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         if (opponentId != null) {
           final opponentDoc = await _firestoreService.getUser(opponentId);
           if (opponentDoc != null) {
-            setState(() {
-              _opponentRanking = opponentDoc.totalPoints ?? 0;
-            });
+            final opponentGameStats = await AuthService()
+                .getOpponentUserGameStats(opponentDoc.id, GameTypeModel.chess);
+            _opponentRanking = opponentGameStats?.points ?? 1000;
           }
         }
       }
@@ -105,18 +108,23 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _loadUserCurrency();
   }
 
-  Future<void> _loadUserCurrency() async {
+  Future<void> _loadUserCurrency({bool forceRefresh = false}) async {
     if (currentUser == null) return;
     try {
+      print('💳 Cargando moneda del usuario${forceRefresh ? ' (forzando actualización)' : ''}...');
+
       final userDoc = await _firestoreService.getUser(currentUser!.uid);
       if (userDoc != null) {
         setState(() {
           _userDiamonds = userDoc.diamonds ?? 0;
           _userCoins = userDoc.coins;
         });
+        print('💳 Moneda cargada - Monedas: $_userCoins, Diamantes: $_userDiamonds');
+      } else {
+        print('❌ No se encontraron datos del usuario');
       }
     } catch (e) {
-      print('Error loading user currency: $e');
+      print('💥 Error loading user currency: $e');
       setState(() {
         _userDiamonds = 0;
         _userCoins = 0;
@@ -231,7 +239,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     }
 
     if (game.isAbandoned && !_gameEnded) {
-      print('🔍 Juego detectado como abandonado. AbandonedBy: ${game.abandonedBy}, CurrentUser: ${currentUser!.uid}');
+      print(
+        '🔍 Juego detectado como abandonado. AbandonedBy: ${game.abandonedBy}, CurrentUser: ${currentUser!.uid}',
+      );
 
       if (game.didOpponentAbandon(currentUser!.uid)) {
         print('✅ El oponente abandonó la partida');
@@ -240,15 +250,11 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         print('⚠️ Yo abandoné la partida (detectado desde servidor)');
         _gameEnded = true;
       }
-    }
-
-    else if (!_gameEnded && game.isFinished) {
+    } else if (!_gameEnded && game.isFinished) {
       print('🏁 Juego terminado normalmente');
       _gameEnded = true;
       _handleGameEnd(game);
-    }
-
-    else if (game.status == 'waiting' && previousGame?.status == 'active') {
+    } else if (game.status == 'waiting' && previousGame?.status == 'active') {
       print('📡 Oponente desconectado temporalmente');
       _showOpponentDisconnected();
     }
@@ -265,92 +271,95 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     print('🎯 Procesando abandono del oponente...');
     _gameEnded = true;
 
-    final opponentName = game.getOpponentName(currentUser!.uid) ?? S.of(context).rivals;
+    final opponentName =
+        game.getOpponentName(currentUser!.uid) ?? S.of(context).rivals;
 
-    // Registrar la victoria por abandono ANTES de mostrar el diálogo
-    _recordGameResult(GameResultModel.win);
+    _recordGameResult(GameResultModel.win).then((_) {
+      _loadUserCurrency(forceRefresh: true);
+    });
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.person_off, color: Colors.orange, size: 24),
-            SizedBox(width: 8),
-            Text(
-              S.of(context).gameOver,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.person_off, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Text(
+                  S.of(context).gameOver,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.person_off, size: 48, color: Colors.orange),
-                  SizedBox(height: 12),
-                  Text(
-                    '$opponentName ha abandonado la partida',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ],
-              ),
-            ),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.emoji_events, color: Colors.green, size: 24),
-                  SizedBox(width: 8),
-                  Text(
-                    '¡Has ganado por abandono!',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.person_off, size: 48, color: Colors.orange),
+                      SizedBox(height: 12),
+                      Text(
+                        '$opponentName ${S.of(context).hasLeftTheGame}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.emoji_events, color: Colors.green, size: 24),
+                      SizedBox(width: 8),
+                      Text(
+                        S.of(context).opponentAbandonedMessage,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        actions: [
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            icon: Icon(Icons.check_circle),
-            label: Text(S.of(context).exit),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
             ),
+            actions: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
+                icon: Icon(Icons.check_circle),
+                label: Text(S.of(context).exit),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -423,7 +432,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _hasUserExitedGame = true;
       _gameEnded = true;
 
-      // Enviar abandono al servidor
       final success = await _gameService.abandonGame(
         gameId: widget.gameId,
         playerId: currentUser!.uid,
@@ -437,7 +445,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         _gameEnded = false;
         _hasUserExitedGame = false;
       }
-
     } catch (e) {
       print('💥 Error abandonando juego: $e');
       _hasUserExitedGame = false;
@@ -567,36 +574,71 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           .replaceAll('CPU', _opponentName ?? S.of(context).rivals);
       gameResult = GameResultModel.loss;
     }
-    _recordGameResult(gameResult);
+    _recordGameResult(gameResult).then((_) {
+      _loadUserCurrency(forceRefresh: true);
+    });
     _showGameEndDialog(message);
   }
 
   Future<void> _recordGameResult(GameResultModel result) async {
-    if (currentUser == null || _gameStartTime == null) return;
+    if (currentUser == null || _gameStartTime == null || _currentGame == null) return;
 
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
-      int currencyChange = 0;
       bool isApuesta = widget.matchType == S.of(context).bet;
 
+      final myUserId = currentUser!.uid;
+      final opponentId = _currentGame!.hostId == myUserId
+          ? _currentGame!.guestId
+          : _currentGame!.hostId;
+
+      if (opponentId == null) {
+        print('❌ Error: No se pudo obtener ID del oponente');
+        return;
+      }
+
+      // Calcular cambios de moneda para cada jugador
+      int myCurrencyChange = GameCalculator.calculate(
+        result: result,
+        isBetMode: isApuesta,
+        betAmount: _selectedBetAmount,
+      );
+
+      // El oponente tiene el resultado opuesto
+      GameResultModel opponentResult;
+      switch (result) {
+        case GameResultModel.win:
+          opponentResult = GameResultModel.loss;
+          break;
+        case GameResultModel.loss:
+          opponentResult = GameResultModel.win;
+          break;
+        case GameResultModel.draw:
+          opponentResult = GameResultModel.draw;
+          break;
+      }
+
+      int opponentCurrencyChange = GameCalculator.calculate(
+        result: opponentResult,
+        isBetMode: isApuesta,
+        betAmount: _selectedBetAmount,
+      );
+
+      print('💰 Cambios de moneda:');
+      print('  Mi resultado: $result -> $myCurrencyChange');
+      print('  Oponente resultado: $opponentResult -> $opponentCurrencyChange');
+
+      // Calcular puntos
       switch (result) {
         case GameResultModel.win:
           pointsEarned = 15;
-          if (isApuesta && _selectedBetAmount != null) {
-            final winnings = (_selectedBetAmount! * 0.7).round();
-            currencyChange = winnings + _selectedBetAmount!;
-          }
           break;
         case GameResultModel.loss:
           pointsEarned = -5;
-          if (isApuesta && _selectedBetAmount != null) {
-            currencyChange = -_selectedBetAmount!;
-          }
           break;
         case GameResultModel.draw:
           pointsEarned = 5;
-          currencyChange = 0;
           break;
       }
 
@@ -604,26 +646,16 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         pointsEarned = (pointsEarned * 1.5).round();
       }
 
-      if (currencyChange != 0) {
-        final userData = await _firestoreService.getUser(currentUser!.uid);
-        if (userData != null) {
-          if (isApuesta) {
-            final currentDiamonds = userData.diamonds ?? 0;
-            final newDiamonds = currentDiamonds + currencyChange;
-            await _firestoreService.updateUserDiamonds(
-              currentUser!.uid,
-              newDiamonds,
-            );
-            setState(() => _userDiamonds = newDiamonds);
-          } else {
-            final currentCoins = userData.coins;
-            final newCoins = currentCoins + currencyChange;
-            await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
-            setState(() => _userCoins = newCoins);
-          }
-        }
-      }
+      // Actualizar monedas de ambos jugadores
+      await _updateBothPlayersBalance(
+        myUserId: myUserId,
+        opponentId: opponentId,
+        myCurrencyChange: myCurrencyChange,
+        opponentCurrencyChange: opponentCurrencyChange,
+        isApuesta: isApuesta,
+      );
 
+      // Registrar la partida para el usuario actual
       final success = await _firestoreService.recordGameMatch(
         userId: currentUser!.uid,
         gameType: GameTypeModel.chess,
@@ -635,34 +667,39 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           'gameMode': 'multiplayer',
           'isRanked': _currentGame?.isRanked ?? false,
           'betAmount': _selectedBetAmount,
-          'currencyChange': currencyChange,
+          'currencyChange': myCurrencyChange,
           'currencyType': _getCurrencyType(),
           'matchType': widget.matchType,
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
-          'opponentId':
-              _currentGame?.hostId == currentUser!.uid
-                  ? _currentGame?.guestId
-                  : _currentGame?.hostId,
+          'opponentId': opponentId,
           'gameId': widget.gameId,
           'finalFEN': controller.getFen(),
           'totalMoves': _currentGame?.moves.length ?? 0,
         },
       );
 
+      // También registrar la partida para el oponente
+      await _recordOpponentGameResult(
+        opponentId: opponentId,
+        result: opponentResult,
+        gameDuration: gameDuration,
+        opponentCurrencyChange: opponentCurrencyChange,
+      );
+
       if (success) {
-        print('Partida multijugador registrada exitosamente');
-        if (currencyChange > 0) {
+        print('✅ Partida registrada para ambos jugadores');
+        if (myCurrencyChange > 0) {
           String currency = _getCurrencyName();
-          print('Ganaste $currencyChange $currency');
-        } else if (currencyChange < 0) {
+          print('📈 Ganaste $myCurrencyChange $currency');
+        } else if (myCurrencyChange < 0) {
           String currency = _getCurrencyName();
-          print('Perdiste ${currencyChange.abs()} $currency');
+          print('📉 Perdiste ${myCurrencyChange.abs()} $currency');
         }
       } else {
-        print('Error al registrar la partida en Firestore');
+        print('❌ Error al registrar la partida en Firestore');
       }
     } catch (e) {
-      print('Error al registrar la partida: $e');
+      print('💥 Error al registrar la partida: $e');
       if (mounted && currentUser != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -674,6 +711,131 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       }
     }
   }
+
+  Future<void> _updateBothPlayersBalance({
+    required String myUserId,
+    required String opponentId,
+    required int myCurrencyChange,
+    required int opponentCurrencyChange,
+    required bool isApuesta,
+  }) async {
+    try {
+      // Obtener datos actuales de ambos usuarios
+      final futures = await Future.wait([
+        _firestoreService.getUser(myUserId),
+        _firestoreService.getUser(opponentId),
+      ]);
+
+      final myUserData = futures[0];
+      final opponentUserData = futures[1];
+
+      if (myUserData == null || opponentUserData == null) {
+        print('❌ Error: No se pudieron obtener datos de uno o ambos usuarios');
+        return;
+      }
+
+      // Actualizar mi balance
+      if (myCurrencyChange != 0) {
+        if (isApuesta) {
+          final myCurrentDiamonds = myUserData.diamonds ?? 0;
+          final myNewDiamonds = (myCurrentDiamonds + myCurrencyChange).clamp(0, double.infinity).toInt();
+
+          print('💎 Mis diamantes - Antes: $myCurrentDiamonds, Cambio: $myCurrencyChange, Después: $myNewDiamonds');
+
+          await _firestoreService.updateUserDiamonds(myUserId, myNewDiamonds);
+          setState(() => _userDiamonds = myNewDiamonds);
+        } else {
+          final myCurrentCoins = myUserData.coins;
+          final myNewCoins = (myCurrentCoins + myCurrencyChange).clamp(0, double.infinity).toInt();
+
+          print('🪙 Mis monedas - Antes: $myCurrentCoins, Cambio: $myCurrencyChange, Después: $myNewCoins');
+
+          await _firestoreService.updateUserCoins(myUserId, myNewCoins);
+          setState(() => _userCoins = myNewCoins);
+        }
+      }
+
+      // Actualizar balance del oponente
+      if (opponentCurrencyChange != 0) {
+        if (isApuesta) {
+          final opponentCurrentDiamonds = opponentUserData.diamonds ?? 0;
+          final opponentNewDiamonds = (opponentCurrentDiamonds + opponentCurrencyChange).clamp(0, double.infinity).toInt();
+
+          print('💎 Diamantes oponente - Antes: $opponentCurrentDiamonds, Cambio: $opponentCurrencyChange, Después: $opponentNewDiamonds');
+
+          await _firestoreService.updateUserDiamonds(opponentId, opponentNewDiamonds);
+        } else {
+          final opponentCurrentCoins = opponentUserData.coins;
+          final opponentNewCoins = (opponentCurrentCoins + opponentCurrencyChange).clamp(0, double.infinity).toInt();
+
+          print('🪙 Monedas oponente - Antes: $opponentCurrentCoins, Cambio: $opponentCurrencyChange, Después: $opponentNewCoins');
+
+          await _firestoreService.updateUserCoins(opponentId, opponentNewCoins);
+        }
+      }
+
+      print('✅ Balance actualizado para ambos jugadores');
+
+    } catch (e) {
+      print('💥 Error actualizando balance de jugadores: $e');
+    }
+  }
+
+
+  Future<void> _recordOpponentGameResult({
+    required String opponentId,
+    required GameResultModel result,
+    required int gameDuration,
+    required int opponentCurrencyChange,
+  }) async {
+    try {
+      int opponentPointsEarned = 0;
+
+      switch (result) {
+        case GameResultModel.win:
+          opponentPointsEarned = 15;
+          break;
+        case GameResultModel.loss:
+          opponentPointsEarned = -5;
+          break;
+        case GameResultModel.draw:
+          opponentPointsEarned = 5;
+          break;
+      }
+
+      if (_currentGame?.isRanked == true) {
+        opponentPointsEarned = (opponentPointsEarned * 1.5).round();
+      }
+
+      await _firestoreService.recordGameMatch(
+        userId: opponentId,
+        gameType: GameTypeModel.chess,
+        result: result,
+        pointsEarned: opponentPointsEarned,
+        durationMinutes: gameDuration > 0 ? gameDuration : 1,
+        opponentName: currentUser?.displayName ?? 'Jugador desconocido',
+        additionalData: {
+          'gameMode': 'multiplayer',
+          'isRanked': _currentGame?.isRanked ?? false,
+          'betAmount': _selectedBetAmount,
+          'currencyChange': opponentCurrencyChange,
+          'currencyType': _getCurrencyType(),
+          'matchType': widget.matchType,
+          'playerColor': _myColor == PlayerColor.white ? 'black' : 'white',
+          'opponentId': currentUser!.uid,
+          'gameId': widget.gameId,
+          'finalFEN': controller.getFen(),
+          'totalMoves': _currentGame?.moves.length ?? 0,
+        },
+      );
+
+      print('✅ Resultado registrado para el oponente');
+    } catch (e) {
+      print('💥 Error registrando resultado del oponente: $e');
+    }
+  }
+
+
 
   void _showGameEndDialog(String message) {
     showDialog(
@@ -800,9 +962,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   Widget _buildPlayerInfo(bool isMe) {
     if (_currentGame == null) return SizedBox();
 
-    final name = isMe
-        ? (currentUser?.displayName ?? S.of(context).you)
-        : (_opponentName ?? S.of(context).rivals);
+    final name =
+        isMe
+            ? (currentUser?.displayName ?? S.of(context).you)
+            : (_opponentName ?? S.of(context).rivals);
 
     final photoUrl = isMe ? currentUser?.photoURL : _opponentPhotoUrl;
     final isPlayerTurn = isMe ? _isMyTurn : !_isMyTurn;
@@ -812,13 +975,15 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isPlayerTurn
-            ? Colors.green.withOpacity(0.2)
-            : Colors.black.withOpacity(0.1),
+        color:
+            isPlayerTurn
+                ? Colors.green.withOpacity(0.2)
+                : Colors.black.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: isPlayerTurn
-            ? Border.all(color: Colors.green, width: 2)
-            : Border.all(color: Colors.white.withOpacity(0.2)),
+        border:
+            isPlayerTurn
+                ? Border.all(color: Colors.green, width: 2)
+                : Border.all(color: Colors.white.withOpacity(0.2)),
       ),
       child: Row(
         children: [
@@ -828,7 +993,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
               CircleAvatar(
                 radius: 25,
                 backgroundColor: Colors.grey[300],
-                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                backgroundImage:
+                    photoUrl != null ? NetworkImage(photoUrl) : null,
                 child: photoUrl == null ? Icon(Icons.person, size: 25) : null,
               ),
               if (isPlayerTurn && !isWaitingForResponse)
@@ -873,7 +1039,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                     if (ranking != null) ...[
                       SizedBox(width: 8),
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: _getRankingColor(ranking),
                           borderRadius: BorderRadius.circular(12),
@@ -881,11 +1050,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.star,
-                              color: Colors.white,
-                              size: 14,
-                            ),
+                            Icon(Icons.star, color: Colors.white, size: 14),
                             SizedBox(width: 4),
                             Text(
                               '$ranking',
@@ -911,7 +1076,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                       SizedBox(width: 4),
                       Text(
                         S.of(context).yourTurn,
-                        style: TextStyle(color: Colors.green[300], fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.green[300],
+                          fontSize: 12,
+                        ),
                       ),
                     ] else if (isWaitingForResponse) ...[
                       SizedBox(
@@ -928,7 +1096,11 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                         style: TextStyle(color: Colors.orange, fontSize: 12),
                       ),
                     ] else ...[
-                      Icon(Icons.hourglass_empty, color: Colors.white60, size: 16),
+                      Icon(
+                        Icons.hourglass_empty,
+                        color: Colors.white60,
+                        size: 16,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Esperando',
@@ -943,9 +1115,14 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                       width: 20,
                       height: 20,
                       decoration: BoxDecoration(
-                        color: isMe
-                            ? (_myColor == PlayerColor.white ? Colors.white : Colors.black)
-                            : (_myColor == PlayerColor.white ? Colors.black : Colors.white),
+                        color:
+                            isMe
+                                ? (_myColor == PlayerColor.white
+                                    ? Colors.white
+                                    : Colors.black)
+                                : (_myColor == PlayerColor.white
+                                    ? Colors.black
+                                    : Colors.white),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                       ),
@@ -1085,21 +1262,21 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   @override
   void dispose() {
     print('🧹 Disposing MultiplayerChessScreen...');
-
-    // Solo abandonar si estamos saliendo inesperadamente
-    if (!_gameEnded && !_hasUserExitedGame && _currentGame != null && _currentGame!.isActive) {
+    if (!_gameEnded &&
+        !_hasUserExitedGame &&
+        _currentGame != null &&
+        _currentGame!.isActive) {
       print('⚠️ Salida inesperada detectada, abandonando juego...');
-      // No usar await aquí, solo fire-and-forget
-      _gameService.abandonGame(
-        gameId: widget.gameId,
-        playerId: currentUser!.uid,
-      ).catchError((e) {
-        print('Error en abandono desde dispose: $e');
-      });
+      _gameService
+          .abandonGame(gameId: widget.gameId, playerId: currentUser!.uid)
+          .catchError((e) {
+            print('Error en abandono desde dispose: $e');
+          });
     }
     WidgetsBinding.instance.removeObserver(this);
     _gameSubscription?.cancel();
     _reconnectTimer?.cancel();
+    _interstitialHelper.dispose();
     super.dispose();
   }
 
@@ -1217,7 +1394,11 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         }
         final shouldAbandon = await _showAbandonDialog();
         if (shouldAbandon) {
-          await _abandonGame();
+          _interstitialHelper.forceShowAd(
+            onComplete: () async {
+              await _abandonGame();
+            },
+          );
           return true;
         }
         return false;

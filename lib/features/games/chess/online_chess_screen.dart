@@ -13,6 +13,7 @@ import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/online_match_chess_game_service.dart';
 import '../../../core/utils/bet_negotation_state.dart';
+import '../../../core/utils/game_earnings_calculator.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
@@ -2070,41 +2071,23 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
-      int currencyChange = 0;
       bool isApuesta = widget.matchType == S.of(context).bet;
       bool useDiamonds = isApuesta;
+      int currencyChange = GameCalculator.calculate(
+        result: result,
+        isBetMode: isApuesta,
+        betAmount: _selectedBetAmount,
+      );
 
       switch (result) {
         case GameResultModel.win:
-          pointsEarned = 20;
-          if (_selectedBetAmount != null) {
-            if (_isPlayingAgainstBot) {
-              if (isApuesta) {
-                currencyChange =
-                    _selectedBetAmount! + (_selectedBetAmount! * 0.8).round();
-              } else {
-                currencyChange =
-                    _selectedBetAmount! + (_selectedBetAmount! * 0.5).round();
-              }
-            } else {
-              final winnings = (_selectedBetAmount! * 0.7).round();
-              currencyChange = winnings + _selectedBetAmount!;
-            }
-          }
+          pointsEarned = 15;
           break;
-
         case GameResultModel.loss:
           pointsEarned = -5;
-          if (_selectedBetAmount != null) {
-            currencyChange = -_selectedBetAmount!;
-          }
           break;
-
         case GameResultModel.draw:
-          pointsEarned = 8;
-          if (_isPlayingAgainstBot && _selectedBetAmount != null) {
-            currencyChange = 0;
-          }
+          pointsEarned = 5;
           break;
       }
 

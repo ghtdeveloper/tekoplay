@@ -460,6 +460,14 @@ class AuthService {
     return null;
   }
 
+  Future<GameStats?> getOpponentUserGameStats(String userId,GameTypeModel gameType) async {
+    final user = getCurrentUser();
+    if (user != null && await canAccessApp()) {
+      return await _firestoreService.getUserGameStats(userId, gameType);
+    }
+    return null;
+  }
+
   Future<int> getCurrentUserTotalPoints() async {
     final userData = await getCurrentUserData();
     return userData?.totalPoints ?? 0;

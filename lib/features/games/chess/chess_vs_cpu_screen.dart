@@ -374,11 +374,11 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
       switch (result) {
         case GameResultModel.win:
-          pointsEarned = 10;
+          pointsEarned = 15;
           currencyChange = gameCost + (gameCost ~/ 2);
           break;
         case GameResultModel.loss:
-          pointsEarned = -10;
+          pointsEarned = -5;
           currencyChange = 0;
           break;
         case GameResultModel.draw:
@@ -387,7 +387,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           break;
       }
 
-      // Aplicar recompensas si las hay
       if (currencyChange > 0) {
         final userData = await _firestoreService.getUser(currentUser!.uid);
         if (userData != null) {
