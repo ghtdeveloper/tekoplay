@@ -132,6 +132,118 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     }
   }
 
+  Future<void> _validateUserFunds() async {
+    if (currentUser == null) return;
+    try {
+      await _loadUserCurrency();
+      final currentBalance = _getCurrentBalance() ?? 0;
+      final betAmount = _selectedBetAmount ?? 0;
+      bool hasInsufficientFunds = false;
+      String currencyName = _getCurrencyName();
+
+      if (widget.matchType == S.of(context).bet) {
+        hasInsufficientFunds = currentBalance < betAmount || currentBalance <= 0;
+      } else {
+        hasInsufficientFunds = currentBalance < 100;
+      }
+      if (hasInsufficientFunds) {
+        _showInsufficientFundsDialog();
+        return;
+      }
+    } catch (e) {
+      print('💥 Error validating user funds: $e');
+      _showErrorAndExit(S.of(context).userDataLoadError);
+    }
+  }
+
+  void _showInsufficientFundsDialog() {
+    if (!mounted) return;
+
+    final currencyName = _getCurrencyName();
+    final currencyIcon = _getCurrencyIcon();
+    final betAmount = _selectedBetAmount ?? 0;
+    final currentBalance = _getCurrentBalance() ?? 0;
+
+    String title = S.of(context).insufficientFunds;
+    String message;
+
+    if (widget.matchType == S.of(context).bet) {
+      message = '${S.of(context).insufficientFunds} $currencyName ${S.of(context).toJoinThisGame}\n\n'
+          '${S.of(context).youNeed}: $betAmount $currencyName\n'
+          '${S.of(context).youHave}: $currentBalance $currencyName\n\n'
+          '${S.of(context).buyMore} $currencyName ${S.of(context).inOurStore}';
+    } else {
+      message = '${S.of(context).youDontHave}$currencyName ${S.of(context).enoughToPlay}.\n\n'
+          '${S.of(context).needAtLeast100} $currencyName${S.of(context).toParticipate}.\n'
+          '${S.of(context).youHave}: $currentBalance $currencyName\n\n'
+          '${S.of(context).buyMore} $currencyName ${S.of(context).inOurStore}';
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                title,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(currencyIcon, size: 48, color: Colors.red),
+                  SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+          ],
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        actions: [
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            icon: Icon(Icons.arrow_back),
+            label: Text(S.of(context).back ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   String _getCurrencyType() {
     return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
   }
@@ -183,7 +295,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _showErrorAndExit(S.of(context).userNotFound);
       return;
     }
-
+    _validateUserFunds();
     _gameSubscription = _gameService
         .getGameStream(widget.gameId)
         .listen(
@@ -299,7 +411,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 Container(
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -318,7 +430,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
+                    color: Colors.green.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -459,6 +571,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _opponentPhotoUrl = isHost ? game.guestPhotoUrl : game.hostPhotoUrl;
 
     _selectedBetAmount = game.betAmount;
+
+    Future.delayed(Duration.zero, () {
+      _validateUserFunds();
+    });
   }
 
   void _syncGameState() {
@@ -977,13 +1093,13 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       decoration: BoxDecoration(
         color:
             isPlayerTurn
-                ? Colors.green.withOpacity(0.2)
-                : Colors.black.withOpacity(0.1),
+                ? Colors.green.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border:
             isPlayerTurn
                 ? Border.all(color: Colors.green, width: 2)
-                : Border.all(color: Colors.white.withOpacity(0.2)),
+                : Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -1230,9 +1346,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1342,9 +1458,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                   padding: EdgeInsets.all(16),
                   margin: EdgeInsets.symmetric(horizontal: 40),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,

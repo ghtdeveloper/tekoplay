@@ -324,7 +324,33 @@
   "parchisShort": "Jeu de ludo",
   "comingSoon": "BIENTÔT DISPONIBLE",
   "areYouSure": "Êtes-vous sûr ?",
-  "hasLeftTheGame": "a quitté la partie"
+  "hasLeftTheGame": "a quitté la partie",
+  "userDataLoadError": "Erreur lors du chargement des données utilisateur",
+  "insufficientFunds": "Fonds insuffisants",
+  "toJoinThisGame": "pour participer à cette partie.",
+  "youNeed": "Vous avez besoin de",
+  "youHave": "Vous avez",
+  "getMore": "Obtenez plus",
+  "buyMore": "Achetez plus",
+  "inOurStore": "dans notre boutique.",
+  "youDontHave": "Vous n’avez pas",
+  "enoughToPlay": "suffisants pour jouer",
+  "needAtLeast100": "Vous avez besoin d'au moins 100",
+  "toParticipate": "pour participer"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

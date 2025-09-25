@@ -122,6 +122,140 @@ class _GameScreenState extends State<GameScreen> {
         );
   }
 
+  Future<bool> _validateUserFundsForInvitation() async {
+    if (_currentUser == null) return false;
+
+    try {
+      final currentBalance =
+          matchType == S.of(context).bet
+              ? (_userDiamonds ?? 0)
+              : (_userCoins ?? 0);
+
+      bool hasInsufficientFunds = false;
+      if (matchType == S.of(context).bet) {
+        hasInsufficientFunds = currentBalance < 50;
+      } else {
+        hasInsufficientFunds = currentBalance < 100;
+      }
+
+      if (hasInsufficientFunds) {
+        _showInsufficientFundsDialog();
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      print('💥 Error validating user funds for invitation: $e');
+      return false;
+    }
+  }
+
+  void _showInsufficientFundsDialog() {
+    if (!mounted) return;
+
+    final currencyName = _getCurrencyName();
+    final currencyIcon = _getCurrencyIcon();
+    final currentBalance = _getCurrentBalance() ?? 0;
+
+    String title = S.of(context).insufficientFunds;
+    String message;
+
+    if (widget.matchType == S.of(context).bet) {
+      message =
+          '${S.of(context).insufficientFunds} $currencyName ${S.of(context).toJoinThisGame}\n\n'
+          '${S.of(context).youNeed}:  $currencyName\n'
+          '${S.of(context).youHave}: $currentBalance $currencyName\n\n'
+          '${S.of(context).buyMore} $currencyName ${S.of(context).inOurStore}';
+    } else {
+      message =
+          '${S.of(context).youDontHave}$currencyName ${S.of(context).enoughToPlay}.\n\n'
+          '${S.of(context).needAtLeast100} $currencyName${S.of(context).toParticipate}.\n'
+          '${S.of(context).youHave}: $currentBalance $currencyName\n\n'
+          '${S.of(context).buyMore} $currencyName ${S.of(context).inOurStore}';
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.orange, size: 24),
+                SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(currencyIcon, size: 48, color: Colors.red),
+                      SizedBox(height: 12),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 16),
+              ],
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            actions: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                icon: Icon(Icons.arrow_back),
+                label: Text(S.of(context).back),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  String _getCurrencyType() {
+    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
+  }
+
+  String _getCurrencyName() {
+    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
+  }
+
+  IconData _getCurrencyIcon() {
+    return widget.matchType == S.of(context).bet
+        ? Icons.diamond
+        : Icons.monetization_on;
+  }
+
+  int? _getCurrentBalance() {
+    return widget.matchType == S.of(context).bet ? _userDiamonds : _userCoins;
+  }
+
   Future<void> _updateAnonymousWalletUI() async {
     if (_currentUser != null) return;
 
@@ -281,9 +415,12 @@ class _GameScreenState extends State<GameScreen> {
 
   void _handleNewActiveGames(List<MultiplayerGameMatch> currentGames) {
     // Buscar juegos nuevos (que no estaban en la lista anterior)
-    final newGames = currentGames.where((game) {
-      return !_previousActiveGames.any((prevGame) => prevGame.id == game.id);
-    }).toList();
+    final newGames =
+        currentGames.where((game) {
+          return !_previousActiveGames.any(
+            (prevGame) => prevGame.id == game.id,
+          );
+        }).toList();
 
     // Si hay un juego nuevo donde soy el host, navegar automáticamente
     for (final newGame in newGames) {
@@ -295,11 +432,12 @@ class _GameScreenState extends State<GameScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MultiplayerChessScreen(
-              gameId: newGame.id,
-              isHost: true,  // Explícitamente marcado como host
-              matchType: matchType,
-            ),
+            builder:
+                (context) => MultiplayerChessScreen(
+                  gameId: newGame.id,
+                  isHost: true, // Explícitamente marcado como host
+                  matchType: matchType,
+                ),
           ),
         );
         break; // Solo navegar al primer juego nuevo
@@ -1204,141 +1342,195 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
 
-    final TextEditingController emailController = TextEditingController();
-    bool isLoading = false;
+    _validateUserFundsForInvitation().then((hasEnoughFunds) {
+      if (!hasEnoughFunds) {
+        return;
+      }
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              backgroundColor: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          S.of(context).playWithFriend,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
+      final TextEditingController emailController = TextEditingController();
+      bool isLoading = false;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return Dialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                backgroundColor: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            S.of(context).playWithFriend,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.close),
-                          onPressed:
-                              isLoading
-                                  ? null
-                                  : () => Navigator.of(context).pop(),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 20),
+                          IconButton(
+                            icon: Icon(Icons.close),
+                            onPressed:
+                                isLoading
+                                    ? null
+                                    : () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
 
-                    TextField(
-                      controller: emailController,
-                      enabled: !isLoading,
-                      keyboardType: TextInputType.emailAddress,
-                      onChanged: (value) {
-                        setState(() {});
-                      },
-                      decoration: InputDecoration(
-                        labelText: S.of(context).opponentEmail,
-                        hintText: 'ejemplo@email.com',
-                        prefixIcon: Icon(Icons.email),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              matchType == S.of(context).bet
+                                  ? Icons.diamond
+                                  : Icons.monetization_on,
+                              color:
+                                  matchType == S.of(context).bet
+                                      ? Colors.amber
+                                      : Colors.blue,
+                              size: 16,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              '${S.of(context).youHave}: ${matchType == S.of(context).bet ? (_userDiamonds ?? 0) : (_userCoins ?? 0)} ${matchType == S.of(context).bet ? 'diamantes' : 'monedas'}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green[800],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    SizedBox(height: 20),
 
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            (isLoading || emailController.text.trim().isEmpty)
-                                ? null
-                                : () async {
-                                  setState(() => isLoading = true);
+                      SizedBox(height: 20),
 
-                                  final error = await GameInvitationService()
-                                      .createInvitation(
-                                        fromUserId: _currentUser!.uid,
-                                        fromUserName:
-                                            _currentUser!.displayName ??
-                                            'Usuario',
-                                        toUserEmail:
-                                            emailController.text.trim(),
-                                        gameType: gameType,
-                                      );
-
-                                  setState(() => isLoading = false);
-
-                                  if (error == null) {
-                                    Navigator.of(context).pop();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          S
-                                              .of(context)
-                                              .successfulSentInvitation,
-                                        ),
-                                        backgroundColor: Colors.green,
-                                      ),
-                                    );
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(error),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                },
-                        icon:
-                            isLoading
-                                ? SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                                : Icon(Icons.send),
-                        label: Text(
-                          isLoading
-                              ? S.of(context).sending
-                              : S.of(context).sentInvitation,
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEC7A34),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
+                      TextField(
+                        controller: emailController,
+                        enabled: !isLoading,
+                        keyboardType: TextInputType.emailAddress,
+                        onChanged: (value) {
+                          setState(() {});
+                        },
+                        decoration: InputDecoration(
+                          labelText: S.of(context).opponentEmail,
+                          hintText: 'ejemplo@email.com',
+                          prefixIcon: Icon(Icons.email),
+                          border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          padding: EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
-                    ),
-                  ],
+                      SizedBox(height: 20),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              (isLoading || emailController.text.trim().isEmpty)
+                                  ? null
+                                  : () async {
+                                    // Revalidar fondos antes de enviar invitación
+                                    final stillHasEnoughFunds =
+                                        await _validateUserFundsForInvitation();
+                                    if (!stillHasEnoughFunds) {
+                                      Navigator.of(
+                                        context,
+                                      ).pop(); // Cerrar el diálogo actual
+                                      return;
+                                    }
+
+                                    setState(() => isLoading = true);
+
+                                    final error = await GameInvitationService()
+                                        .createInvitation(
+                                          fromUserId: _currentUser!.uid,
+                                          fromUserName:
+                                              _currentUser!.displayName ??
+                                              'Usuario',
+                                          toUserEmail:
+                                              emailController.text.trim(),
+                                          gameType: gameType,
+                                        );
+
+                                    setState(() => isLoading = false);
+
+                                    if (error == null) {
+                                      Navigator.of(context).pop();
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            S
+                                                .of(context)
+                                                .successfulSentInvitation,
+                                          ),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(error),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  },
+                          icon:
+                              isLoading
+                                  ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                  : Icon(Icons.send),
+                          label: Text(
+                            isLoading
+                                ? S.of(context).sending
+                                : S.of(context).sentInvitation,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEC7A34),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    });
   }
 
   void _showTutorial(BuildContext context) {

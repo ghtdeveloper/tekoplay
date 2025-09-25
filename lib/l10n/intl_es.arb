@@ -326,7 +326,33 @@
   "parchisShort": "Parchís",
   "comingSoon": "PRÓXIMAMENTE",
   "areYouSure": "¿Estás seguro?",
-  "hasLeftTheGame": "ha abandonado la partida"
+  "hasLeftTheGame": "ha abandonado la partida",
+  "userDataLoadError": "Error cargando datos del usuario",
+  "insufficientFunds": "Fondos Insuficientes",
+  "toJoinThisGame": "para participar en esta partida.",
+  "youNeed": "Necesitas",
+  "youHave": "Tienes",
+  "getMore": "Consigue más",
+  "buyMore": "Compra más",
+  "inOurStore": "en nuestra tienda.",
+  "youDontHave": "No tienes",
+  "enoughToPlay": "suficientes para jugar",
+  "needAtLeast100": "Necesitas al menos 100",
+  "toParticipate": "para participar"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

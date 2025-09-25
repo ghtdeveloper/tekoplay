@@ -326,7 +326,33 @@
   "parchisShort": "Ludo",
   "comingSoon": "COMING SOON",
   "areYouSure": "Are you sure?",
-  "hasLeftTheGame": "has left the game"
+  "hasLeftTheGame": "has left the game",
+  "userDataLoadError": "Error loading user data",
+  "insufficientFunds": "Insufficient Funds",
+  "toJoinThisGame": "to join this game.",
+  "youNeed": "You need",
+  "youHave": "You have",
+  "getMore": "Get more",
+  "buyMore": "Buy more",
+  "inOurStore": "in our store.",
+  "youDontHave": "You don’t have",
+  "enoughToPlay": "enough to play",
+  "needAtLeast100": "You need at least 100",
+  "toParticipate": "to participate"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
