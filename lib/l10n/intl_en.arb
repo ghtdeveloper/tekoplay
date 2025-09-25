@@ -338,7 +338,12 @@
   "youDontHave": "You don’t have",
   "enoughToPlay": "enough to play",
   "needAtLeast100": "You need at least 100",
-  "toParticipate": "to participate"
+  "toParticipate": "to participate",
+  "notEnoughCurrencyForMultiplayer": "You don't have enough coins or diamonds to join multiplayer games",
+  "funGamesRequirement": "For fun games, you need at least 100 coins.",
+  "betGamesRequirement": "For betting games, you need at least 50 diamonds."
+
+
 
 
 

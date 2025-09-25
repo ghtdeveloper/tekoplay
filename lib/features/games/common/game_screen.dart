@@ -1288,6 +1288,14 @@ class _GameScreenState extends State<GameScreen> {
                                         ),
                                         ElevatedButton(
                                           onPressed: () async {
+                                            if (_currentUser == null) return;
+
+                                            final hasEnoughFunds = await _validateUserFundsForInvitation();
+                                            if (!hasEnoughFunds) {
+                                              Navigator.of(context).pop();
+                                              return;
+                                            }
+
                                             showDialog(
                                               context: context,
                                               barrierDismissible: false,

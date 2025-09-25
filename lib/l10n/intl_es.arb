@@ -338,7 +338,12 @@
   "youDontHave": "No tienes",
   "enoughToPlay": "suficientes para jugar",
   "needAtLeast100": "Necesitas al menos 100",
-  "toParticipate": "para participar"
+  "toParticipate": "para participar",
+  "notEnoughCurrencyForMultiplayer": "No tienes monedas o diamantes suficientes para participar en partidas multijugador",
+  "funGamesRequirement": "Para partidas de diversión necesitas al menos 100 monedas.",
+  "betGamesRequirement": "Para partidas de apuesta necesitas al menos 50 diamantes."
+
+
 
 
 

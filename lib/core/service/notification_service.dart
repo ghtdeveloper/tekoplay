@@ -9,6 +9,7 @@ import '../../features/games/chess/multiplayer_chess_screen.dart';
 import '../../generated/l10n.dart';
 
 import '../models/multiplayer_game_match_chess.dart';
+import 'firestore_service.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -268,7 +269,19 @@ class NotificationService {
         barrierDismissible: false,
         builder: (context) => Center(child: CircularProgressIndicator()),
       );
-
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: Usuario no autenticado"), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      final hasEnoughFunds = await _validateUserFundsForInvitation(context, currentUser.uid);
+      if (!hasEnoughFunds) {
+        Navigator.of(context).pop();
+        return;
+      }
       final result = await GameInvitationService().respondToInvitation(invitationId, true);
 
       if (!context.mounted) return;
@@ -281,7 +294,7 @@ class NotificationService {
             builder: (context) => MultiplayerChessScreen(
               gameId: result['gameId'],
               isHost: false,
-              matchType: "",
+              matchType: result['matchType'] ?? "",
             ),
           ),
         );
@@ -291,12 +304,141 @@ class NotificationService {
         );
       }
     } catch (e) {
-      Navigator.of(context).pop(); // Cerrar loading si está abierto
+      Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(S.of(context).errorProcessInvitation), backgroundColor: Colors.red),
       );
     }
   }
+
+  Future<bool> _validateUserFundsForInvitation(BuildContext context, String userId) async {
+    try {
+      final FirestoreService firestoreService = FirestoreService();
+      final userDoc = await firestoreService.getUser(userId);
+
+      if (userDoc == null) {
+        _showInsufficientFundsDialog(context, "Error al cargar datos del usuario", "", 0, 0, Icons.error);
+        return false;
+      }
+
+      final userCoins = userDoc.coins;
+      final userDiamonds = userDoc.diamonds;
+
+      if (userCoins < 100 && userDiamonds < 50) {
+        _showInsufficientFundsDialog(
+            context,
+            S.of(context).insufficientFunds,
+            "${S.of(context).notEnoughCurrencyForMultiplayer}.\n\n"
+                "${S.of(context).funGamesRequirement}.\n"
+                "${S.of(context).betGamesRequirement}\n\n"
+                "T${S.of(context).youHave}: $userCoins ${S.of(context).coins} y $userDiamonds ${S.of(context).diamonds}",
+            userCoins,
+            userDiamonds,
+            Icons.warning
+        );
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      _showInsufficientFundsDialog(context, "Error", "Error al validar fondos del usuario", 0, 0, Icons.error);
+      return false;
+    }
+  }
+
+
+  void _showInsufficientFundsDialog(
+      BuildContext context,
+      String title,
+      String message,
+      int coins,
+      int diamonds,
+      IconData icon
+      ) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                title,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.account_balance_wallet, size: 48, color: Colors.red),
+                  SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info, color: Colors.blue, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Juega contra la computadora o compra más monedas/diamantes en la tienda.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        actions: [
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: Icon(Icons.arrow_back),
+            label: Text("Entendido"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
 
   Future<void> _declineInvitation(String invitationId) async {
     await GameInvitationService().respondToInvitation(invitationId, false);
