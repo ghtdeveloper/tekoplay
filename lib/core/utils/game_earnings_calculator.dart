@@ -23,7 +23,11 @@ class GameCalculator {
       case GameResultModel.loss:
         return -amount;
       case GameResultModel.draw:
-        return (amount * _drawReturn).round();
+        if (isBetMode) {
+          return -(amount * _winBonus).round();
+        } else {
+          return (amount * _drawReturn).round();
+        }
     }
   }
 }
