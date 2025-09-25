@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,7 +20,9 @@ class AnonymousWalletService {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getInt(_coinsKey) ?? 0;
     } catch (e) {
-      print('Error obteniendo monedas anónimas: $e');
+      if (kDebugMode) {
+        print('Error obteniendo monedas anónimas: $e');
+      }
       return 0;
     }
   }
@@ -30,7 +33,9 @@ class AnonymousWalletService {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getInt(_diamondsKey) ?? 0; // 0 diamantes iniciales por defecto
     } catch (e) {
-      print('Error obteniendo diamantes anónimos: $e');
+      if (kDebugMode) {
+        print('Error obteniendo diamantes anónimos: $e');
+      }
       return 0;
     }
   }
@@ -42,7 +47,9 @@ class AnonymousWalletService {
       await prefs.setInt(_coinsKey, newCoins);
       return true;
     } catch (e) {
-      print('Error actualizando monedas anónimas: $e');
+      if (kDebugMode) {
+        print('Error actualizando monedas anónimas: $e');
+      }
       return false;
     }
   }
@@ -54,7 +61,9 @@ class AnonymousWalletService {
       await prefs.setInt(_diamondsKey, newDiamonds);
       return true;
     } catch (e) {
-      print('Error actualizando diamantes anónimos: $e');
+      if (kDebugMode) {
+        print('Error actualizando diamantes anónimos: $e');
+      }
       return false;
     }
   }
@@ -65,7 +74,9 @@ class AnonymousWalletService {
       final currentCoins = await getAnonymousCoins();
       return await updateAnonymousCoins(currentCoins + coinsToAdd);
     } catch (e) {
-      print('Error añadiendo monedas anónimas: $e');
+      if (kDebugMode) {
+        print('Error añadiendo monedas anónimas: $e');
+      }
       return false;
     }
   }
@@ -76,7 +87,9 @@ class AnonymousWalletService {
       final currentDiamonds = await getAnonymousDiamonds();
       return await updateAnonymousDiamonds(currentDiamonds + diamondsToAdd);
     } catch (e) {
-      print('Error añadiendo diamantes anónimos: $e');
+      if (kDebugMode) {
+        print('Error añadiendo diamantes anónimos: $e');
+      }
       return false;
     }
   }
@@ -88,7 +101,9 @@ class AnonymousWalletService {
       final newCoins = (currentCoins - coinsToSubtract).clamp(0, double.infinity).toInt();
       return await updateAnonymousCoins(newCoins);
     } catch (e) {
-      print('Error restando monedas anónimas: $e');
+      if (kDebugMode) {
+        print('Error restando monedas anónimas: $e');
+      }
       return false;
     }
   }
@@ -100,7 +115,9 @@ class AnonymousWalletService {
       final newDiamonds = (currentDiamonds - diamondsToSubtract).clamp(0, double.infinity).toInt();
       return await updateAnonymousDiamonds(newDiamonds);
     } catch (e) {
-      print('Error restando diamantes anónimos: $e');
+      if (kDebugMode) {
+        print('Error restando diamantes anónimos: $e');
+      }
       return false;
     }
   }
@@ -125,7 +142,9 @@ class AnonymousWalletService {
       // Verificar si ya se transfirió anteriormente
       final hasTransferred = prefs.getBool(_hasTransferredKey) ?? false;
       if (hasTransferred) {
-        print('La wallet anónima ya fue transferida anteriormente');
+        if (kDebugMode) {
+          print('La wallet anónima ya fue transferida anteriormente');
+        }
         return true;
       }
 
@@ -135,7 +154,9 @@ class AnonymousWalletService {
 
       // Solo transferir si hay algo que transferir
       if (anonymousCoins <= 500 && anonymousDiamonds <= 0) {
-        print('No hay recursos significativos para transferir');
+        if (kDebugMode) {
+          print('No hay recursos significativos para transferir');
+        }
         await prefs.setBool(_hasTransferredKey, true);
         return true;
       }
@@ -176,10 +197,11 @@ class AnonymousWalletService {
       // Limpiar datos anónimos
       await _clearAnonymousWallet();
 
-      print('Wallet transferida exitosamente: $coinsToTransfer monedas extra + $anonymousDiamonds diamantes');
       return true;
     } catch (e) {
-      print('Error transfiriendo wallet anónima: $e');
+      if (kDebugMode) {
+        print('Error transfiriendo wallet anónima: $e');
+      }
       return false;
     }
   }
@@ -191,7 +213,9 @@ class AnonymousWalletService {
       await prefs.remove(_coinsKey);
       await prefs.remove(_diamondsKey);
     } catch (e) {
-      print('Error limpiando wallet anónima: $e');
+      if (kDebugMode) {
+        print('Error limpiando wallet anónima: $e');
+      }
     }
   }
 
@@ -201,7 +225,9 @@ class AnonymousWalletService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_hasTransferredKey);
     } catch (e) {
-      print('Error reseteando flag de transferencia: $e');
+      if (kDebugMode) {
+        print('Error reseteando flag de transferencia: $e');
+      }
     }
   }
 
@@ -228,7 +254,9 @@ class AnonymousWalletService {
         await prefs.setInt(_diamondsKey, 0); // 0 diamantes iniciales
       }
     } catch (e) {
-      print('Error inicializando wallet anónima: $e');
+      if (kDebugMode) {
+        print('Error inicializando wallet anónima: $e');
+      }
     }
   }
 
@@ -249,7 +277,9 @@ class AnonymousWalletService {
         }
         return 0;
       } catch (e) {
-        print('Error obteniendo monedas del usuario: $e');
+        if (kDebugMode) {
+          print('Error obteniendo monedas del usuario: $e');
+        }
         return 0;
       }
     }
@@ -272,7 +302,9 @@ class AnonymousWalletService {
         }
         return 0;
       } catch (e) {
-        print('Error obteniendo diamantes del usuario: $e');
+        if (kDebugMode) {
+          print('Error obteniendo diamantes del usuario: $e');
+        }
         return 0;
       }
     }

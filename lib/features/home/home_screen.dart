@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 
 import '../../generated/l10n.dart';
-import '../adds/BannerAdWidget.dart';
-import '../adds/InterstitialAdHelper.dart';
+import '../adds/banner_ad_widget.dart';
+import '../adds/Interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
@@ -284,7 +284,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   child: ElevatedButton.icon(
                     onPressed: () async {
                       final success = await AuthService().resendEmailVerification();
-                      if (mounted) {
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(success
@@ -614,7 +614,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                               nameController.text.trim(),
                             );
 
-                            if (!mounted) return;
+                            if (!context.mounted) return;
 
                             Navigator.of(context).pop();
 
@@ -840,7 +840,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                               passwordController.text.trim(),
                             );
 
-                            if (!mounted) return;
+                            if (!context.mounted) return;
 
                             Navigator.of(context).pop();
 

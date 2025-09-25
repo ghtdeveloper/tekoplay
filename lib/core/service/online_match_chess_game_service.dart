@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/multiplayer_game_match_chess.dart';
 
 class OnlineMatchmakingChessService {
@@ -54,7 +55,9 @@ class OnlineMatchmakingChessService {
 
       return games;
     } catch (e) {
-      print('Error finding waiting games: $e');
+      if (kDebugMode) {
+        print('Error finding waiting games: $e');
+      }
       return [];
     }
   }
@@ -114,7 +117,9 @@ class OnlineMatchmakingChessService {
 
       return games;
     } catch (e) {
-      print('Error finding waiting games progressive: $e');
+      if (kDebugMode) {
+        print('Error finding waiting games progressive: $e');
+      }
       return [];
     }
   }
@@ -170,7 +175,9 @@ class OnlineMatchmakingChessService {
 
       return games;
     } catch (e) {
-      print('Error finding active waiting games: $e');
+      if (kDebugMode) {
+        print('Error finding active waiting games: $e');
+      }
       return [];
     }
   }
@@ -212,7 +219,9 @@ class OnlineMatchmakingChessService {
       await gameRef.set(game.toFirestore());
       return gameRef.id;
     } catch (e) {
-      print('Error creating online game: $e');
+      if (kDebugMode) {
+        print('Error creating online game: $e');
+      }
       return null;
     }
   }

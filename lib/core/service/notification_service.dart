@@ -1,5 +1,6 @@
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -36,7 +37,6 @@ class NotificationService {
       sound: true,
     );
 
-    print('Permisos de notificación: ${settings.authorizationStatus}');
   }
 
   Future<void> _initializeLocalNotifications() async {
@@ -88,12 +88,13 @@ class NotificationService {
         });
       });
     } catch (e) {
-      print('Error saving device token: $e');
+      if (kDebugMode) {
+        print('Error saving device token: $e');
+      }
     }
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    print('Mensaje recibido en primer plano: ${message.notification?.title}');
 
     _showLocalNotification(
       title: message.notification?.title ?? 'Notificación',
@@ -103,11 +104,8 @@ class NotificationService {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    print('Notificación tocada: ${message.data}');
-
     final data = message.data;
     final type = data['type'];
-
     switch (type) {
       case 'game_invitation':
         _handleGameInvitationTap(data);
@@ -117,7 +115,9 @@ class NotificationService {
   void _onNotificationTapped(NotificationResponse details) {
     final payload = details.payload;
     if (payload != null) {
-      print('Local notification tapped: $payload');
+      if (kDebugMode) {
+        print('Local notification tapped: $payload');
+      }
     }
   }
 
@@ -157,7 +157,6 @@ class NotificationService {
 
   void _handleGameInvitationTap(Map<String, dynamic> data) {
     final invitationId = data['invitationId'];
-    print('Opening game invitation: $invitationId');
   }
 
   Future<void> sendNotificationToUser({
@@ -178,7 +177,9 @@ class NotificationService {
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('Error sending notification: $e');
+      if (kDebugMode) {
+        print('Error sending notification: $e');
+      }
     }
   }
 
@@ -189,7 +190,9 @@ class NotificationService {
         'readAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('Error marking notification as read: $e');
+      if (kDebugMode) {
+        print('Error marking notification as read: $e');
+      }
     }
   }
 
@@ -268,6 +271,7 @@ class NotificationService {
 
       final result = await GameInvitationService().respondToInvitation(invitationId, true);
 
+      if (!context.mounted) return;
       Navigator.of(context).pop();
 
       if (result != null && result['success'] == true && result['gameId'] != null) {
@@ -443,7 +447,7 @@ class NotificationsWidget extends StatelessWidget {
                               ),
                               if (body.isNotEmpty) ...[
                                 SizedBox(height: 4),
-                                Container(
+                                SizedBox(
                                   width: double.infinity,
                                   child: Text(
                                     body,

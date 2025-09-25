@@ -1,18 +1,20 @@
 import 'dart:ui' as ui;
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/service/multiplayer_game_service.dart';
 import '../../../core/utils/game_earnings_calculator.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../../core/utils/game_result.dart';
-import '../../adds/BannerAdWidget.dart';
-import '../../adds/InterstitialAdHelper.dart';
+import '../../adds/banner_ad_widget.dart';
+import '../../adds/Interstitial_ad_helper.dart';
 
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
@@ -98,7 +100,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         }
       }
     } catch (e) {
-      print('Error cargando rankings: $e');
+      if (kDebugMode) {
+        print('Error cargando rankings: $e');
+      }
     }
   }
 
@@ -111,20 +115,17 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   Future<void> _loadUserCurrency({bool forceRefresh = false}) async {
     if (currentUser == null) return;
     try {
-      print('💳 Cargando moneda del usuario${forceRefresh ? ' (forzando actualización)' : ''}...');
-
       final userDoc = await _firestoreService.getUser(currentUser!.uid);
       if (userDoc != null) {
         setState(() {
-          _userDiamonds = userDoc.diamonds ?? 0;
+          _userDiamonds = userDoc.diamonds;
           _userCoins = userDoc.coins;
         });
-        print('💳 Moneda cargada - Monedas: $_userCoins, Diamantes: $_userDiamonds');
-      } else {
-        print('❌ No se encontraron datos del usuario');
       }
     } catch (e) {
-      print('💥 Error loading user currency: $e');
+      if (kDebugMode) {
+        print('💥 Error loading user currency: $e');
+      }
       setState(() {
         _userDiamonds = 0;
         _userCoins = 0;
@@ -151,7 +152,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         return;
       }
     } catch (e) {
-      print('💥 Error validating user funds: $e');
+      if (kDebugMode) {
+        print('💥 Error validating user funds: $e');
+      }
       _showErrorAndExit(S.of(context).userDataLoadError);
     }
   }
@@ -308,7 +311,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
             _handleGameUpdate(game);
           },
           onError: (error) {
-            print('Error in game stream: $error');
+            if (kDebugMode) {
+              print('Error in game stream: $error');
+            }
             setState(() => _isConnected = false);
             _startReconnectTimer();
           },
@@ -351,23 +356,16 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     }
 
     if (game.isAbandoned && !_gameEnded) {
-      print(
-        '🔍 Juego detectado como abandonado. AbandonedBy: ${game.abandonedBy}, CurrentUser: ${currentUser!.uid}',
-      );
 
       if (game.didOpponentAbandon(currentUser!.uid)) {
-        print('✅ El oponente abandonó la partida');
         _handleOpponentAbandoned(game);
       } else if (game.didIAbandon(currentUser!.uid) && !_hasUserExitedGame) {
-        print('⚠️ Yo abandoné la partida (detectado desde servidor)');
         _gameEnded = true;
       }
     } else if (!_gameEnded && game.isFinished) {
-      print('🏁 Juego terminado normalmente');
       _gameEnded = true;
       _handleGameEnd(game);
     } else if (game.status == 'waiting' && previousGame?.status == 'active') {
-      print('📡 Oponente desconectado temporalmente');
       _showOpponentDisconnected();
     }
 
@@ -376,11 +374,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   void _handleOpponentAbandoned(MultiplayerGameMatch game) {
     if (_gameEnded) {
-      print('❌ Juego ya terminado, no procesando abandono');
       return;
     }
-
-    print('🎯 Procesando abandono del oponente...');
     _gameEnded = true;
 
     final opponentName =
@@ -535,11 +530,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   Future<void> _abandonGame() async {
     if (_gameEnded) {
-      print('❌ Juego ya terminado, no se puede abandonar');
       return;
     }
-    print('🏃‍♂️ Iniciando proceso de abandono...');
-
     try {
       _hasUserExitedGame = true;
       _gameEnded = true;
@@ -550,15 +542,12 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       );
 
       if (success) {
-        print('✅ Abandono enviado correctamente al servidor');
         _recordGameResult(GameResultModel.loss);
       } else {
-        print('❌ Error enviando abandono al servidor');
         _gameEnded = false;
         _hasUserExitedGame = false;
       }
     } catch (e) {
-      print('💥 Error abandonando juego: $e');
       _hasUserExitedGame = false;
     }
   }
@@ -588,8 +577,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         });
       }
     } catch (e) {
-      print('Error syncing game state: $e');
-      print('Could not sync with FEN, keeping current board state');
+      if (kDebugMode) {
+        print('Error syncing game state: $e');
+        print('Could not sync with FEN, keeping current board state');
+      }
     }
   }
 
@@ -616,16 +607,16 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       );
 
       if (!success) {
-        print('Failed to send move to server, reverting...');
         _syncGameState();
         _showError('Error al enviar movimiento. Inténtalo de nuevo.');
         _waitingForMoveResponse = false;
       } else {
-        print('Move sent successfully to server');
         _checkForGameEnd(newFen);
       }
     } catch (e) {
-      print('Error in _playerMoved: $e');
+      if (kDebugMode) {
+        print('Error in _playerMoved: $e');
+      }
       _syncGameState();
       _showError('Error al realizar movimiento');
       _waitingForMoveResponse = false;
@@ -669,7 +660,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         winnerId: winnerId,
       );
     } catch (e) {
-      print('Error finishing game: $e');
+      if (kDebugMode) {
+        print('Error finishing game: $e');
+      }
     }
   }
 
@@ -710,7 +703,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           : _currentGame!.hostId;
 
       if (opponentId == null) {
-        print('❌ Error: No se pudo obtener ID del oponente');
         return;
       }
 
@@ -740,10 +732,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         isBetMode: isApuesta,
         betAmount: _selectedBetAmount,
       );
-
-      print('💰 Cambios de moneda:');
-      print('  Mi resultado: $result -> $myCurrencyChange');
-      print('  Oponente resultado: $opponentResult -> $opponentCurrencyChange');
 
       // Calcular puntos
       switch (result) {
@@ -803,19 +791,13 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       );
 
       if (success) {
-        print('✅ Partida registrada para ambos jugadores');
         if (myCurrencyChange > 0) {
           String currency = _getCurrencyName();
-          print('📈 Ganaste $myCurrencyChange $currency');
         } else if (myCurrencyChange < 0) {
           String currency = _getCurrencyName();
-          print('📉 Perdiste ${myCurrencyChange.abs()} $currency');
         }
-      } else {
-        print('❌ Error al registrar la partida en Firestore');
       }
     } catch (e) {
-      print('💥 Error al registrar la partida: $e');
       if (mounted && currentUser != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -846,26 +828,19 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       final opponentUserData = futures[1];
 
       if (myUserData == null || opponentUserData == null) {
-        print('❌ Error: No se pudieron obtener datos de uno o ambos usuarios');
         return;
       }
 
       // Actualizar mi balance
       if (myCurrencyChange != 0) {
         if (isApuesta) {
-          final myCurrentDiamonds = myUserData.diamonds ?? 0;
+          final myCurrentDiamonds = myUserData.diamonds;
           final myNewDiamonds = (myCurrentDiamonds + myCurrencyChange).clamp(0, double.infinity).toInt();
-
-          print('💎 Mis diamantes - Antes: $myCurrentDiamonds, Cambio: $myCurrencyChange, Después: $myNewDiamonds');
-
           await _firestoreService.updateUserDiamonds(myUserId, myNewDiamonds);
           setState(() => _userDiamonds = myNewDiamonds);
         } else {
           final myCurrentCoins = myUserData.coins;
           final myNewCoins = (myCurrentCoins + myCurrencyChange).clamp(0, double.infinity).toInt();
-
-          print('🪙 Mis monedas - Antes: $myCurrentCoins, Cambio: $myCurrencyChange, Después: $myNewCoins');
-
           await _firestoreService.updateUserCoins(myUserId, myNewCoins);
           setState(() => _userCoins = myNewCoins);
         }
@@ -874,26 +849,19 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       // Actualizar balance del oponente
       if (opponentCurrencyChange != 0) {
         if (isApuesta) {
-          final opponentCurrentDiamonds = opponentUserData.diamonds ?? 0;
+          final opponentCurrentDiamonds = opponentUserData.diamonds;
           final opponentNewDiamonds = (opponentCurrentDiamonds + opponentCurrencyChange).clamp(0, double.infinity).toInt();
-
-          print('💎 Diamantes oponente - Antes: $opponentCurrentDiamonds, Cambio: $opponentCurrencyChange, Después: $opponentNewDiamonds');
-
           await _firestoreService.updateUserDiamonds(opponentId, opponentNewDiamonds);
         } else {
           final opponentCurrentCoins = opponentUserData.coins;
           final opponentNewCoins = (opponentCurrentCoins + opponentCurrencyChange).clamp(0, double.infinity).toInt();
-
-          print('🪙 Monedas oponente - Antes: $opponentCurrentCoins, Cambio: $opponentCurrencyChange, Después: $opponentNewCoins');
-
           await _firestoreService.updateUserCoins(opponentId, opponentNewCoins);
         }
       }
-
-      print('✅ Balance actualizado para ambos jugadores');
-
     } catch (e) {
-      print('💥 Error actualizando balance de jugadores: $e');
+      if (kDebugMode) {
+        print('💥 Error actualizando balance de jugadores: $e');
+      }
     }
   }
 
@@ -945,9 +913,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         },
       );
 
-      print('✅ Resultado registrado para el oponente');
     } catch (e) {
-      print('💥 Error registrando resultado del oponente: $e');
+      if (kDebugMode) {
+        print('💥 Error registrando resultado del oponente: $e');
+      }
     }
   }
 
@@ -1377,16 +1346,16 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   @override
   void dispose() {
-    print('🧹 Disposing MultiplayerChessScreen...');
     if (!_gameEnded &&
         !_hasUserExitedGame &&
         _currentGame != null &&
         _currentGame!.isActive) {
-      print('⚠️ Salida inesperada detectada, abandonando juego...');
       _gameService
           .abandonGame(gameId: widget.gameId, playerId: currentUser!.uid)
-          .catchError((e) {
-            print('Error en abandono desde dispose: $e');
+          .catchError((e){
+            if (kDebugMode) {
+              print('Error en abandono desde dispose: $e');
+            }
           });
     }
     WidgetsBinding.instance.removeObserver(this);

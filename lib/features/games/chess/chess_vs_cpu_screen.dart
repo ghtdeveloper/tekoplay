@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
@@ -10,8 +11,8 @@ import '../../../core/service/firestore_service.dart';
 import '../../../generated/l10n.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/utils/game_result.dart';
-import '../../adds/BannerAdWidget.dart';
-import '../../adds/InterstitialAdHelper.dart';
+import '../../adds/banner_ad_widget.dart';
+import '../../adds/Interstitial_ad_helper.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
@@ -129,7 +130,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         });
       }
     } catch (e) {
-      print('Error loading user currency: $e');
+      if (kDebugMode) {
+        print('Error loading user currency: $e');
+      }
       setState(() {
         _userDiamonds = 0;
         _userCoins = 0;
@@ -172,7 +175,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       final userData = await _firestoreService.getUser(currentUser!.uid);
       if (userData != null) {
         if (widget.matchType == S.of(context).bet) {
-          final newDiamonds = userData.diamonds! - gameCost;
+          final newDiamonds = userData.diamonds - gameCost;
           await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
           setState(() => _userDiamonds = newDiamonds);
         } else {
@@ -183,7 +186,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       }
       return true;
     } catch (e) {
-      print('Error deducting game cost: $e');
+      if (kDebugMode) {
+        print('Error deducting game cost: $e');
+      }
       _showError('Error al procesar el pago del juego');
       return false;
     }
@@ -357,12 +362,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   Future<void> _recordGameResult(GameResultModel result) async {
     if (currentUser == null) {
-      print('Usuario no autenticado, no se registrará la partida');
       return;
     }
 
     if (_gameStartTime == null) {
-      print('Tiempo de juego no válido, no se registrará la partida');
       return;
     }
 
@@ -421,15 +424,20 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       );
 
       if (success) {
-        print('Partida registrada exitosamente');
         if (currencyChange > 0) {
-          print('Recompensa: $currencyChange ${_getCurrencyName()}');
+          if (kDebugMode) {
+            print('Recompensa: $currencyChange ${_getCurrencyName()}');
+          }
         }
       } else {
-        print('Error al registrar la partida en Firestore');
+        if (kDebugMode) {
+          print('Error al registrar la partida en Firestore');
+        }
       }
     } catch (e) {
-      print('Error al registrar la partida: $e');
+      if (kDebugMode) {
+        print('Error al registrar la partida: $e');
+      }
       if (mounted && currentUser != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

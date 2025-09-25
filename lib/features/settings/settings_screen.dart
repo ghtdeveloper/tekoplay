@@ -9,7 +9,7 @@ import 'dart:async';
 import '../../app.dart';
 import '../../core/service/auth_service.dart';
 import '../../generated/l10n.dart';
-import '../adds/BannerAdWidget.dart';
+import '../adds/banner_ad_widget.dart';
 import '../games/common/widget_profile_image_editor.dart';
 
 
@@ -147,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                   child: ElevatedButton.icon(
                     onPressed: () async {
                       final success = await AuthService().resendEmailVerification();
-                      if (mounted) {
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(success
@@ -610,7 +610,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                               nameController.text.trim(),
                             );
 
-                            if (!mounted) return;
+                            if (!context.mounted) return;
 
                             Navigator.of(context).pop();
 
@@ -811,7 +811,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                               passwordController.text.trim(),
                             );
 
-                            if (!mounted) return;
+                            if (!context.mounted) return;
 
                             Navigator.of(context).pop();
 
@@ -998,7 +998,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                               email: emailController.text.trim(),
                             );
 
-                            if (!mounted) return;
+                            if (!context.mounted) return;
 
                             Navigator.of(context).pop();
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -1011,7 +1011,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                               ),
                             );
                           } catch (e) {
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             setDialogState(() {
                               isLoading = false;
                             });

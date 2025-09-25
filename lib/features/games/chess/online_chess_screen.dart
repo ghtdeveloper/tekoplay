@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
@@ -11,14 +12,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/service/multiplayer_game_service.dart';
 import '../../../core/service/online_match_chess_game_service.dart';
 import '../../../core/utils/bet_negotation_state.dart';
 import '../../../core/utils/game_earnings_calculator.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
-import '../../adds/BannerAdWidget.dart';
-import '../../adds/InterstitialAdHelper.dart';
+import '../../adds/banner_ad_widget.dart';
+import '../../adds/Interstitial_ad_helper.dart';
 
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;
@@ -174,7 +176,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         });
       }
     } catch (e) {
-      print('Error loading user currency: $e');
+      if (kDebugMode) {
+        print('Error loading user currency: $e');
+      }
       setState(() {
         _userDiamonds = 0;
         _userCoins = 0;
@@ -255,7 +259,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               'cancelReason': 'user_disconnected',
             });
       } catch (e) {
-        print('Error cleaning up game: $e');
+        if (kDebugMode) {
+          print('Error cleaning up game: $e');
+        }
       }
     }
   }
@@ -283,7 +289,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           .doc(gameId)
           .update({fieldName: FieldValue.serverTimestamp()});
     } catch (e) {
-      print('Error updating activity: $e');
+      if (kDebugMode) {
+        print('Error updating activity: $e');
+      }
     }
   }
 
@@ -595,7 +603,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         return;
       }
     } catch (e) {
-      print('Error en búsqueda inicial: $e');
+      if (kDebugMode) {
+        print('Error en búsqueda inicial: $e');
+      }
     }
 
     _matchmakingTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
@@ -636,7 +646,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               }
             }
           } catch (e) {
-            print('❌ Error en búsqueda progresiva: $e');
+            if (kDebugMode) {
+              print('❌ Error en búsqueda progresiva: $e');
+            }
           }
         }
 
@@ -646,7 +658,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           _startBotGame();
         }
       } catch (e) {
-        print('💥 ERROR CRÍTICO en timer: $e');
+        if (kDebugMode) {
+          print('💥 ERROR CRÍTICO en timer: $e');
+        }
         timer.cancel();
         if (mounted) {
           _showError('Error en la búsqueda: $e');
@@ -670,9 +684,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       if (widget.matchType == S.of(context).bet && _selectedBetAmount != null) {
         _opponentBetAmount = _selectedBetAmount;
         _betAccepted = true;
-        print(
-          'Rival acepta apuesta de $_selectedBetAmount ${_getCurrencyName()}',
-        );
       }
 
       _loadMyRankingAndGenerateBotRanking();
@@ -756,7 +767,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                             ),
                             SizedBox(width: 6),
                             Text(
-                              '${_selectedBetAmount} ${_getCurrencyName()}',
+                              '$_selectedBetAmount ${_getCurrencyName()}',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -818,7 +829,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       setState(() {});
     } catch (e) {
-      print('Error cargando mi ranking: $e');
+      if (kDebugMode) {
+        print('Error cargando mi ranking: $e');
+      }
       _myRanking = 1000;
       _opponentRanking = 1000 + _random.nextInt(400) - 200;
       setState(() {});
@@ -921,7 +934,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         }
       }
     } catch (e) {
-      print('Error in matchmaking: $e');
+      if (kDebugMode) {
+        print('Error in matchmaking: $e');
+      }
       return null;
     }
   }
@@ -1156,7 +1171,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       _startBetNegotiationListener(game.id);
     } catch (e) {
-      print('Error enviando contraoferta: $e');
+      if (kDebugMode) {
+        print('Error enviando contraoferta: $e');
+      }
       _showError('Error enviando contraoferta');
       setState(() => _gameState = OnlineGameState.timeSelection);
     }
@@ -1186,7 +1203,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('Error enviando notificación: $e');
+      if (kDebugMode) {
+        print('Error enviando notificación: $e');
+      }
     }
   }
 
@@ -1470,7 +1489,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _gameState = OnlineGameState.betNegotiation;
       });
     } catch (e) {
-      print('Error enviando contraoferta: $e');
+      if (kDebugMode) {
+        print('Error enviando contraoferta: $e');
+      }
       _showError('Error enviando contraoferta');
       setState(() => _gameState = OnlineGameState.timeSelection);
     }
@@ -1491,7 +1512,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       setState(() => _selectedBetAmount = amount);
     } catch (e) {
-      print('Error aceptando contraoferta: $e');
+      if (kDebugMode) {
+        print('Error aceptando contraoferta: $e');
+      }
       _showError(S.of(context).errorAcceptingCounteroffer);
     }
   }
@@ -1509,26 +1532,13 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       setState(() => _gameState = OnlineGameState.timeSelection);
     } catch (e) {
-      print('Error rechazando contraoferta: $e');
+      if (kDebugMode) {
+        print('Error rechazando contraoferta: $e');
+      }
       _showError(S.of(context).errorRejectingCounteroffer);
     }
   }
 
-  Future<void> _updateUserDiamonds(int change) async {
-    if (currentUser == null) return;
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.uid)
-          .update({'diamonds': FieldValue.increment(change)});
-      setState(() {
-        _userDiamonds = (_userDiamonds ?? 0) + change;
-      });
-    } catch (e) {
-      print('Error actualizando diamantes: $e');
-    }
-  }
 
   void _startGameSubscription(String gameId) {
     _startKeepAlive(gameId);
@@ -1545,7 +1555,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           },
           onError: (error) {
             _keepAliveTimer?.cancel();
-            print('Error in game stream: $error');
+            if (kDebugMode) {
+              print('Error in game stream: $error');
+            }
             _showErrorAndReturn(S.of(context).connectionError);
           },
         );
@@ -1651,7 +1663,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       setState(() {});
     } catch (e) {
-      print('Error cargando rankings: $e');
+      if (kDebugMode) {
+        print('Error cargando rankings: $e');
+      }
       _myRanking = 1000;
       _opponentRanking = 1000;
       setState(() {});
@@ -1821,7 +1835,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         controller.loadFen(targetFen);
       }
     } catch (e) {
-      print('Error syncing game state: $e');
+      if (kDebugMode) {
+        print('Error syncing game state: $e');
+      }
     }
   }
 
@@ -1918,7 +1934,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _checkForGameEnd(newFen);
       }
     } catch (e) {
-      print('Error in _handleOnlineGameMove: $e');
+      if (kDebugMode) {
+        print('Error in _handleOnlineGameMove: $e');
+      }
       _syncGameState();
       _showError(S.of(context).errorMakeMove);
       setState(() {
@@ -2021,7 +2039,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         winnerId: winnerId,
       );
     } catch (e) {
-      print('Error finishing game: $e');
+      if (kDebugMode) {
+        print('Error finishing game: $e');
+      }
     }
   }
 
@@ -2095,7 +2115,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         final userData = await _firestoreService.getUser(currentUser!.uid);
         if (userData != null) {
           if (useDiamonds) {
-            final currentDiamonds = userData.diamonds ?? 0;
+            final currentDiamonds = userData.diamonds;
             final newDiamonds = currentDiamonds + currencyChange;
             await _firestoreService.updateUserDiamonds(
               currentUser!.uid,
@@ -2144,11 +2164,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       );
 
       if (success) {
-        print('Partida registrada exitosamente');
         if (currencyChange > 0) {
           String currency = _getCurrencyName();
-          print('Ganaste $currencyChange $currency');
-
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -2162,7 +2179,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           }
         } else if (currencyChange < 0) {
           String currency = _getCurrencyName();
-          print('Perdiste ${currencyChange.abs()} $currency');
+          if (kDebugMode) {
+            print('Perdiste ${currencyChange.abs()} $currency');
+          }
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2191,7 +2210,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         }
       }
     } catch (e) {
-      print('Error al registrar la partida: $e');
+      if (kDebugMode) {
+        print('Error al registrar la partida: $e');
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2363,7 +2384,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         );
         _recordGameResult(GameResultModel.loss);
       } catch (e) {
-        print('Error al abandonar la partida: $e');
+        if (kDebugMode) {
+          print('Error al abandonar la partida: $e');
+        }
         _recordGameResult(GameResultModel.loss);
       }
     }

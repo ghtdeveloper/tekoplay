@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/domino_tile.dart';
 import '../../../generated/l10n.dart';
-import '../../adds/BannerAdWidget.dart';
+import '../../adds/banner_ad_widget.dart';
 
 
 class DominoController {
@@ -542,7 +542,7 @@ class _DominoImmersiveTutorialScreenState
         ),
         boxShadow: isSelected ? [
           BoxShadow(
-            color: Colors.yellow.withOpacity(0.5),
+            color: Colors.yellow.withValues(alpha: 0.5),
             blurRadius: 8,
             spreadRadius: 2,
           )

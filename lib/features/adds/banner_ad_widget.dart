@@ -1,7 +1,8 @@
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'AdManager.dart';
+import 'ad_manager.dart';
 
 class BannerAdWidget extends StatefulWidget {
   final AdSize adSize;
@@ -45,7 +46,9 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
           }
         },
         onAdFailedToLoad: (ad, error) {
-          print('Banner ad failed to load: $error');
+          if (kDebugMode) {
+            print('Banner ad failed to load: $error');
+          }
           ad.dispose();
         },
       ),

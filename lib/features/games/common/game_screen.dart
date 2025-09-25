@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
@@ -12,11 +13,12 @@ import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/anonymous_wallet_service.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/service/multiplayer_game_service.dart';
 import '../../../core/service/notification_service.dart';
 import '../../../core/service/payment_service.dart';
 import '../../../generated/l10n.dart';
 import '../../../widgets/game_mode_widget.dart';
-import '../../adds/BannerAdWidget.dart';
+import '../../adds/banner_ad_widget.dart';
 import '../../coins/coin_purchase_dialog.dart';
 import '../../coins/diamond_purchase_dialog.dart';
 import '../../home/home_screen.dart';
@@ -111,7 +113,9 @@ class _GameScreenState extends State<GameScreen> {
             }
           },
           onError: (error) {
-            print('Error listening to diamonds: $error');
+            if (kDebugMode) {
+              print('Error listening to diamonds: $error');
+            }
             if (mounted && !_isDisposed) {
               setState(() {
                 _userDiamonds = 0;
@@ -145,7 +149,9 @@ class _GameScreenState extends State<GameScreen> {
 
       return true;
     } catch (e) {
-      print('💥 Error validating user funds for invitation: $e');
+      if (kDebugMode) {
+        print('💥 Error validating user funds for invitation: $e');
+      }
       return false;
     }
   }
@@ -270,7 +276,9 @@ class _GameScreenState extends State<GameScreen> {
         });
       }
     } catch (e) {
-      print('Error actualizando UI de wallet anónima: $e');
+      if (kDebugMode) {
+        print('Error actualizando UI de wallet anónima: $e');
+      }
     }
   }
 
@@ -294,7 +302,9 @@ class _GameScreenState extends State<GameScreen> {
         });
       }
     } catch (e) {
-      print('Error en inicialización: $e');
+      if (kDebugMode) {
+        print('Error en inicialización: $e');
+      }
       if (mounted && !_isDisposed) {
         setState(() {
           _isInitialized = true;
@@ -310,7 +320,9 @@ class _GameScreenState extends State<GameScreen> {
       await _audioPlayer.setVolume(newVolume);
       if (mounted) setState(() {});
     } catch (e) {
-      print('Error actualizando volumen: $e');
+      if (kDebugMode) {
+        print('Error actualizando volumen: $e');
+      }
     }
   }
 
@@ -327,7 +339,9 @@ class _GameScreenState extends State<GameScreen> {
         await _updateAnonymousWalletUI();
       }
     } catch (e) {
-      print('Error en modo anónimo: $e');
+      if (kDebugMode) {
+        print('Error en modo anónimo: $e');
+      }
     }
   }
 
@@ -355,7 +369,9 @@ class _GameScreenState extends State<GameScreen> {
         await _updateAnonymousWalletUI();
       }
     } catch (e) {
-      print('Error cargando usuario: $e');
+      if (kDebugMode) {
+        print('Error cargando usuario: $e');
+      }
     }
   }
 
@@ -365,7 +381,9 @@ class _GameScreenState extends State<GameScreen> {
     try {
       NotificationService().initialize();
     } catch (e) {
-      print('Error inicializando notificaciones: $e');
+      if (kDebugMode) {
+        print('Error inicializando notificaciones: $e');
+      }
     }
   }
 
@@ -377,7 +395,9 @@ class _GameScreenState extends State<GameScreen> {
       _invitationsSubscription = GameInvitationService()
           .getPendingInvitations(_currentUser!.uid)
           .handleError((error) {
-            print('Error en stream de invitaciones: $error');
+            if (kDebugMode) {
+              print('Error en stream de invitaciones: $error');
+            }
           })
           .listen(
             (invitations) {
@@ -386,35 +406,40 @@ class _GameScreenState extends State<GameScreen> {
               }
             },
             onError: (error) {
-              print('Error en subscription de invitaciones: $error');
+              if (kDebugMode) {
+                print('Error en subscription de invitaciones: $error');
+              }
             },
           );
 
       _activeGamesSubscription = MultiplayerGameService()
           .getActiveGames(_currentUser!.uid)
           .handleError((error) {
-            print('Error en stream de juegos: $error');
+            if (kDebugMode) {
+              print('Error en stream de juegos: $error');
+            }
           })
           .listen(
             (games) {
               if (mounted && !_isDisposed) {
                 setState(() {});
-
-                // NUEVA LÓGICA: Auto-navegar al juego si hay uno nuevo
                 _handleNewActiveGames(games);
               }
             },
             onError: (error) {
-              print('Error en subscription de juegos: $error');
+              if (kDebugMode) {
+                print('Error en subscription de juegos: $error');
+              }
             },
           );
     } catch (e) {
-      print('Error configurando streams: $e');
+      if (kDebugMode) {
+        print('Error configurando streams: $e');
+      }
     }
   }
 
   void _handleNewActiveGames(List<MultiplayerGameMatch> currentGames) {
-    // Buscar juegos nuevos (que no estaban en la lista anterior)
     final newGames =
         currentGames.where((game) {
           return !_previousActiveGames.any(
@@ -422,25 +447,22 @@ class _GameScreenState extends State<GameScreen> {
           );
         }).toList();
 
-    // Si hay un juego nuevo donde soy el host, navegar automáticamente
     for (final newGame in newGames) {
       if (newGame.hostId == _currentUser!.uid &&
           newGame.status == 'active' &&
           newGame.guestId != null) {
-        print('Navegando automáticamente al juego como host: ${newGame.id}');
-        // Navegar al juego
         Navigator.push(
           context,
           MaterialPageRoute(
             builder:
                 (context) => MultiplayerChessScreen(
                   gameId: newGame.id,
-                  isHost: true, // Explícitamente marcado como host
+                  isHost: true,
                   matchType: matchType,
                 ),
           ),
         );
-        break; // Solo navegar al primer juego nuevo
+        break;
       }
     }
     _previousActiveGames = List.from(currentGames);
@@ -450,7 +472,6 @@ class _GameScreenState extends State<GameScreen> {
     showCoinPurchaseDialog(
       context,
       onPurchase: (coinAmount, price) {
-        print('Comprando $coinAmount monedas por \$${price} CLP');
         _processCoinPurchase(coinAmount, price);
       },
     );
@@ -505,7 +526,9 @@ class _GameScreenState extends State<GameScreen> {
         }
       }
     } catch (e) {
-      print('Error en compra: $e');
+      if (kDebugMode) {
+        print('Error en compra: $e');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(S.of(context).paymentProcessingError),
@@ -558,7 +581,9 @@ class _GameScreenState extends State<GameScreen> {
         }
       }
     } catch (e) {
-      print('Error en compra: $e');
+      if (kDebugMode) {
+        print('Error en compra: $e');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(S.of(context).paymentProcessingError),
@@ -580,7 +605,9 @@ class _GameScreenState extends State<GameScreen> {
       try {
         AuthService().disableAnonymousMode();
       } catch (e) {
-        print('Error deshabilitando modo anónimo: $e');
+        if (kDebugMode) {
+          print('Error deshabilitando modo anónimo: $e');
+        }
       }
     }
 
@@ -1113,7 +1140,6 @@ class _GameScreenState extends State<GameScreen> {
       stream: GameInvitationService().getPendingInvitations(_currentUser!.uid),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          print('Error en StreamBuilder de notificaciones: ${snapshot.error}');
           return Icon(Icons.notifications, color: Colors.white, size: 30);
         }
 
@@ -1390,7 +1416,7 @@ class _GameScreenState extends State<GameScreen> {
                       Container(
                         padding: EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
+                          color: Colors.green.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -1833,7 +1859,6 @@ class _GameScreenState extends State<GameScreen> {
                     onPressed: () {
                       final roomCode = roomCodeController.text.trim();
                       if (roomCode.isNotEmpty) {
-                        print('Unirse a la sala con código: $roomCode');
                         Navigator.of(context).pop();
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1879,7 +1904,6 @@ class _GameScreenState extends State<GameScreen> {
                           ),
                         ),
                       );
-                      print('Sala creada: $generatedRoomCode');
                       Navigator.of(context).pop();
                     },
                     icon: Icon(Icons.add),

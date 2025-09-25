@@ -34,7 +34,7 @@ class DiamondPurchaseDialog extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 10,
               offset: Offset(0, 5),
             ),
@@ -185,7 +185,7 @@ class DiamondPurchaseDialog extends StatelessWidget {
               Container(
                 padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -235,11 +235,11 @@ class DiamondPurchaseDialog extends StatelessWidget {
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
               colors: isPopular
-                  ? [Color(0xFF00BFFF).withOpacity(0.1), Color(0xFF00BFFF).withOpacity(0.05)]
+                  ? [Color(0xFF00BFFF).withValues(alpha: 0.1), Color(0xFF00BFFF).withValues(alpha:0.05)]
                   : isBestValue
-                  ? [Color(0xFF32CD32).withOpacity(0.1), Color(0xFF32CD32).withOpacity(0.05)]
+                  ? [Color(0xFF32CD32).withValues(alpha:0.1), Color(0xFF32CD32).withValues(alpha:0.05)]
                   : isMegaPack
-                  ? [Color(0xFF8A2BE2).withOpacity(0.1), Color(0xFF8A2BE2).withOpacity(0.05)]
+                  ? [Color(0xFF8A2BE2).withValues(alpha:0.1), Color(0xFF8A2BE2).withValues(alpha:0.05)]
                   : [Colors.grey[50]!, Colors.white],
             ),
             borderRadius: BorderRadius.circular(16),
@@ -256,8 +256,8 @@ class DiamondPurchaseDialog extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: isMegaPack
-                    ? Color(0xFF8A2BE2).withOpacity(0.2)
-                    : Colors.black.withOpacity(0.05),
+                    ? Color(0xFF8A2BE2).withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha:0.05),
                 blurRadius: isMegaPack ? 12 : 8,
                 offset: Offset(0, 2),
               ),
@@ -283,7 +283,7 @@ class DiamondPurchaseDialog extends StatelessWidget {
                     boxShadow: [
                       BoxShadow(
                         color: (isMegaPack ? Color(0xFF8A2BE2) : Color(0xFF00BFFF))
-                            .withOpacity(0.3),
+                            .withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: Offset(0, 2),
                       ),
@@ -386,7 +386,7 @@ class DiamondPurchaseDialog extends StatelessWidget {
                         : isBestValue
                         ? Color(0xFF32CD32)
                         : Color(0xFF8A2BE2))
-                        .withOpacity(0.3),
+                        .withValues(alpha: 0.3),
                     blurRadius: 4,
                     offset: Offset(0, 2),
                   ),

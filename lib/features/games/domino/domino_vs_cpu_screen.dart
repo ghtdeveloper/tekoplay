@@ -1,14 +1,14 @@
 import 'dart:ui' as ui;
 import 'dart:math';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/domino_tile.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
-import '../../adds/BannerAdWidget.dart';
-import '../../adds/InterstitialAdHelper.dart';
+import '../../adds/Interstitial_ad_helper.dart';
 
 enum GameState { playerTurn, computerTurn, gameOver, roundEnd }
 enum GameResult { playerWins, computerWins, draw, none }
@@ -1165,12 +1165,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   Future<void> _recordGameResult(GameResult dominoResult) async {
     if (currentUser == null) {
-      print('Usuario no autenticado, no se registrará la partida');
       return;
     }
 
     if (_gameStartTime == null) {
-      print('Tiempo de juego no válido, no se registrará la partida');
       return;
     }
 
@@ -1232,13 +1230,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         },
       );
 
-      if (success) {
-        print('Partida de dominó por rondas registrada exitosamente');
-      } else {
-        print('Error al registrar la partida en Firestore');
-      }
     } catch (e) {
-      print('Error al registrar la partida: $e');
+      if (kDebugMode) {
+        print('Error al registrar la partida: $e');
+      }
       if (mounted && currentUser != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1316,7 +1311,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                 'Ronda ${round.roundNumber}: $resultText (${round.playerPoints}-${round.computerPoints})',
                 style: TextStyle(color: resultColor, fontSize: 12),
               );
-            }).toList(),
+            }),
           ],
         ),
         actions: [
@@ -1394,7 +1389,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha:0.3),
             blurRadius: 6,
             offset: Offset(0, 2),
           ),
@@ -1460,7 +1455,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 6),
                   ),
@@ -1578,7 +1573,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                   border: Border.all(color: Colors.white38, width: 3),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -1648,7 +1643,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                 border: Border.all(color: Colors.white38, width: 3),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -1675,7 +1670,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         border: isActive ? Border.all(color: Colors.green, width: 3) : null,
         boxShadow: isActive ? [
           BoxShadow(
-            color: Colors.green.withOpacity(0.3),
+            color: Colors.green.withValues(alpha: 0.3),
             blurRadius: 8,
             spreadRadius: 2,
           ),
@@ -1828,7 +1823,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     if (isPlayable) {
       baseColor = const Color(0xFFE6FFE6); // Verde muy claro cuando es jugable
       borderColor = Colors.green[600]!;
-      shadowColor = Colors.green.withOpacity(0.5);
+      shadowColor = Colors.green.withValues(alpha: 0.5);
     }
 
     Widget tileWidget = Container(
@@ -1839,8 +1834,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         gradient: LinearGradient(
           colors: [
             baseColor,
-            baseColor.withOpacity(0.95),
-            baseColor.withOpacity(0.9),
+            baseColor.withValues(alpha: 0.95),
+            baseColor.withValues(alpha: 0.9),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1860,7 +1855,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           ),
           if (isPlayable)
             BoxShadow(
-              color: Colors.green.withOpacity(0.3),
+              color: Colors.green.withValues(alpha: 0.3),
               blurRadius: 12,
               spreadRadius: 2,
             ),
@@ -1979,7 +1974,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
             ),
             boxShadow: finalDotColor != Colors.transparent ? [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 1,
                 offset: Offset(0.5, 0.5),
               ),

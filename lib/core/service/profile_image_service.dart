@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
@@ -104,11 +105,11 @@ class ProfileImageService {
                 Navigator.of(context).pop();
                 openAppSettings();
               },
-              child: Text('Ir a Configuración'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Color(0xFFEC7A34),
                 foregroundColor: Colors.white,
               ),
+              child: Text('Ir a Configuración'),
             ),
           ],
         );
@@ -150,7 +151,9 @@ class ProfileImageService {
       );
       return image;
     } catch (e) {
-      print('Error picking image: $e');
+      if (kDebugMode) {
+        print('Error picking image: $e');
+      }
       return null;
     }
   }
@@ -168,7 +171,9 @@ class ProfileImageService {
 
       return downloadUrl;
     } catch (e) {
-      print('Error uploading image: $e');
+      if (kDebugMode) {
+        print('Error uploading image: $e');
+      }
       return null;
     }
   }
@@ -180,7 +185,9 @@ class ProfileImageService {
       await ref.delete();
       return true;
     } catch (e) {
-      print('Error deleting image: $e');
+      if (kDebugMode) {
+        print('Error deleting image: $e');
+      }
       return false;
     }
   }

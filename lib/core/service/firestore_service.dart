@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:tekoplay/core/models/technical_issue.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
@@ -60,7 +61,9 @@ class FirestoreService {
         return newUser;
       }
     } catch (e) {
-      print('Error creating/getting user: $e');
+      if (kDebugMode) {
+        print('Error creating/getting user: $e');
+      }
       return null;
     }
   }
@@ -100,7 +103,9 @@ class FirestoreService {
         return playerName;
       });
     } catch (e) {
-      print('Error generating incremental player name: $e');
+      if (kDebugMode) {
+        print('Error generating incremental player name: $e');
+      }
       return await _generateRandomPlayerName();
     }
   }
@@ -142,7 +147,9 @@ class FirestoreService {
 
       return playerName;
     } catch (e) {
-      print('Error generating random player name: $e');
+      if (kDebugMode) {
+        print('Error generating random player name: $e');
+      }
       // Último recurso: usar timestamp completo
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       return 'Player$timestamp';
@@ -158,7 +165,9 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Error releasing player name: $e');
+      if (kDebugMode) {
+        print('Error releasing player name: $e');
+      }
       return false;
     }
   }
@@ -168,7 +177,9 @@ class FirestoreService {
       final doc = await _firestore.collection(_anonymousUsersCollection).doc(playerName).get();
       return !doc.exists || !(doc.data()?['isActive'] ?? false);
     } catch (e) {
-      print('Error checking player name availability: $e');
+      if (kDebugMode) {
+        print('Error checking player name availability: $e');
+      }
       return false;
     }
   }
@@ -210,7 +221,9 @@ class FirestoreService {
         return newIssue;
       }
     } catch (e) {
-      print('Error creating/technical issue: $e');
+      if (kDebugMode) {
+        print('Error creating/technical issue: $e');
+      }
       return null;
     }
   }
@@ -225,7 +238,9 @@ class FirestoreService {
       }
       return null;
     } catch (e) {
-      print('Error getting user: $e');
+      if (kDebugMode) {
+        print('Error getting user: $e');
+      }
       return null;
     }
   }
@@ -269,7 +284,9 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Error updating game points: $e');
+      if (kDebugMode) {
+        print('Error updating game points: $e');
+      }
       return false;
     }
   }
@@ -285,7 +302,9 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Error updating game stats: $e');
+      if (kDebugMode) {
+        print('Error updating game stats: $e');
+      }
       return false;
     }
   }
@@ -321,7 +340,9 @@ class FirestoreService {
       }
       return true;
     } catch (e) {
-      print('Error updating user data: $e');
+      if (kDebugMode) {
+        print('Error updating user data: $e');
+      }
       return false;
     }
   }
@@ -369,7 +390,9 @@ class FirestoreService {
       final userDoc =
           await _firestore.collection(_usersCollection).doc(userId).get();
       if (!userDoc.exists) {
-        print('User not found: $userId');
+        if (kDebugMode) {
+          print('User not found: $userId');
+        }
         return false;
       }
 
@@ -381,7 +404,9 @@ class FirestoreService {
       await batch.commit();
       return true;
     } catch (e) {
-      print('Error recording game match: $e');
+      if (kDebugMode) {
+        print('Error recording game match: $e');
+      }
       return false;
     }
   }
@@ -404,7 +429,9 @@ class FirestoreService {
       final snapshot = await query.limit(limit).get();
       return snapshot.docs.map((doc) => GameMatch.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Error getting user game history: $e');
+      if (kDebugMode) {
+        print('Error getting user game history: $e');
+      }
       return [];
     }
   }
@@ -458,7 +485,9 @@ class FirestoreService {
 
       return summary;
     } catch (e) {
-      print('Error getting user summary stats: $e');
+      if (kDebugMode) {
+        print('Error getting user summary stats: $e');
+      }
       return null;
     }
   }
@@ -471,7 +500,9 @@ class FirestoreService {
       final user = await getUser(userId);
       return user?.getGameStats(gameType);
     } catch (e) {
-      print('Error getting user game stats: $e');
+      if (kDebugMode) {
+        print('Error getting user game stats: $e');
+      }
       return null;
     }
   }
@@ -492,7 +523,9 @@ class FirestoreService {
       final snapshot = await query.limit(limit).get();
       return snapshot.docs.map((doc) => GameMatch.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Error getting recent matches: $e');
+      if (kDebugMode) {
+        print('Error getting recent matches: $e');
+      }
       return [];
     }
   }
@@ -521,7 +554,9 @@ class FirestoreService {
         };
       }).toList();
     } catch (e) {
-      print('Error getting game leaderboard: $e');
+      if (kDebugMode) {
+        print('Error getting game leaderboard: $e');
+      }
       return [];
     }
   }
@@ -531,7 +566,9 @@ class FirestoreService {
       await _firestore.collection(_gameMatchesCollection).doc(matchId).delete();
       return true;
     } catch (e) {
-      print('Error deleting game match: $e');
+      if (kDebugMode) {
+        print('Error deleting game match: $e');
+      }
       return false;
     }
   }
@@ -553,7 +590,9 @@ class FirestoreService {
       }
       return null;
     } catch (e) {
-      print('Error finding user by email: $e');
+      if (kDebugMode) {
+        print('Error finding user by email: $e');
+      }
       return null;
     }
   }
@@ -564,13 +603,15 @@ class FirestoreService {
       final usersQuery = await _firestore
           .collection(_usersCollection)
           .where('name', isGreaterThanOrEqualTo: username)
-          .where('name', isLessThanOrEqualTo: username + '\uf8ff')
+          .where('name', isLessThanOrEqualTo: '$username\uf8ff')
           .limit(10)
           .get();
 
       return usersQuery.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Error searching users: $e');
+      if (kDebugMode) {
+        print('Error searching users: $e');
+      }
       return [];
     }
   }
@@ -621,7 +662,9 @@ class FirestoreService {
         'averageGameTime': averageGameTime,
       };
     } catch (e) {
-      print('Error getting multiplayer stats: $e');
+      if (kDebugMode) {
+        print('Error getting multiplayer stats: $e');
+      }
       return null;
     }
   }
@@ -634,7 +677,9 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Error updating profile photo: $e');
+      if (kDebugMode) {
+        print('Error updating profile photo: $e');
+      }
       return false;
     }
   }
@@ -652,7 +697,9 @@ class FirestoreService {
 
       return true;
     } catch (e) {
-      print('Error saving device token: $e');
+      if (kDebugMode) {
+        print('Error saving device token: $e');
+      }
       return false;
     }
   }
@@ -667,7 +714,9 @@ class FirestoreService {
 
       return true;
     } catch (e) {
-      print('Error removing device token: $e');
+      if (kDebugMode) {
+        print('Error removing device token: $e');
+      }
       return false;
     }
   }
@@ -713,7 +762,9 @@ class FirestoreService {
 
       return allInvitations;
     } catch (e) {
-      print('Error getting invitation history: $e');
+      if (kDebugMode) {
+        print('Error getting invitation history: $e');
+      }
       return [];
     }
   }
@@ -745,7 +796,9 @@ class FirestoreService {
 
       return true;
     } catch (e) {
-      print('Error updating user profile: $e');
+      if (kDebugMode) {
+        print('Error updating user profile: $e');
+      }
       return false;
     }
   }
@@ -787,7 +840,9 @@ class FirestoreService {
 
       return leaderboard;
     } catch (e) {
-      print('Error getting multiplayer leaderboard: $e');
+      if (kDebugMode) {
+        print('Error getting multiplayer leaderboard: $e');
+      }
       return [];
     }
   }
@@ -813,7 +868,9 @@ class FirestoreService {
 
       return true;
     } catch (e) {
-      print('Error reporting player: $e');
+      if (kDebugMode) {
+        print('Error reporting player: $e');
+      }
       return false;
     }
   }
@@ -854,7 +911,9 @@ class FirestoreService {
         'lastUpdated': DateTime.now().toIso8601String(),
       };
     } catch (e) {
-      print('Error getting server stats: $e');
+      if (kDebugMode) {
+        print('Error getting server stats: $e');
+      }
       return null;
     }
   }
@@ -895,7 +954,9 @@ class FirestoreService {
 
       return games;
     } catch (e) {
-      print('Error finding waiting online games: $e');
+      if (kDebugMode) {
+        print('Error finding waiting online games: $e');
+      }
       return [];
     }
   }
@@ -946,7 +1007,9 @@ class FirestoreService {
       await gameRef.set(gameData);
       return gameRef.id;
     } catch (e) {
-      print('Error creating online matchmaking game: $e');
+      if (kDebugMode) {
+        print('Error creating online matchmaking game: $e');
+      }
       return null;
     }
   }
@@ -1004,7 +1067,9 @@ class FirestoreService {
         };
       });
     } catch (e) {
-      print('Error joining online matchmaking game: $e');
+      if (kDebugMode) {
+        print('Error joining online matchmaking game: $e');
+      }
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -1031,7 +1096,9 @@ class FirestoreService {
 
       return true;
     } catch (e) {
-      print('Error canceling online matchmaking game: $e');
+      if (kDebugMode) {
+        print('Error canceling online matchmaking game: $e');
+      }
       return false;
     }
   }
@@ -1070,7 +1137,9 @@ class FirestoreService {
         'lastUpdated': now.toIso8601String(),
       };
     } catch (e) {
-      print('Error getting matchmaking stats: $e');
+      if (kDebugMode) {
+        print('Error getting matchmaking stats: $e');
+      }
       return null;
     }
   }
@@ -1104,7 +1173,9 @@ class FirestoreService {
 
       return deletedCount;
     } catch (e) {
-      print('Error cleaning up old matchmaking games: $e');
+      if (kDebugMode) {
+        print('Error cleaning up old matchmaking games: $e');
+      }
       return 0;
     }
   }
@@ -1118,7 +1189,9 @@ class FirestoreService {
       final gameStats = user.getGameStats(gameType);
       return gameStats.points;
     } catch (e) {
-      print('Error getting user game ranking: $e');
+      if (kDebugMode) {
+        print('Error getting user game ranking: $e');
+      }
       return 1000; // Ranking por defecto en caso de error
     }
   }
@@ -1161,7 +1234,9 @@ class FirestoreService {
         additionalData: extendedData,
       );
     } catch (e) {
-      print('Error recording timed game match: $e');
+      if (kDebugMode) {
+        print('Error recording timed game match: $e');
+      }
       return false;
     }
   }

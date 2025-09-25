@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
@@ -6,13 +7,13 @@ import '../../../core/models/game_stats.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/models/game_match.dart';
 import '../../../generated/l10n.dart';
-import '../../adds/BannerAdWidget.dart';
+import '../../adds/banner_ad_widget.dart';
 
 class GameHistoryScreen extends StatefulWidget {
   const GameHistoryScreen({super.key});
 
   @override
-  _GameHistoryScreenState createState() => _GameHistoryScreenState();
+   _GameHistoryScreenState createState() => _GameHistoryScreenState();
 }
 
 class _GameHistoryScreenState extends State<GameHistoryScreen>
@@ -62,7 +63,9 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
       );
       _gameHistory[GameTypeModel.chess] = allHistory;
     } catch (e) {
-      print('Error loading game history: $e');
+      if (kDebugMode) {
+        print('Error loading game history: $e');
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -358,7 +361,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
       margin: EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: resultColor.withOpacity(0.2),
+          backgroundColor: resultColor.withValues(alpha: 0.2),
           child: Icon(resultIcon, color: resultColor),
         ),
         title: Row(
@@ -370,7 +373,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
             Container(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: resultColor.withOpacity(0.2),
+                color: resultColor.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -499,7 +502,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
 
                       ),
                     );
-                  }).toList(),
+                  }),
 
                 ],
               ),

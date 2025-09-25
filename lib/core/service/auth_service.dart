@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
@@ -36,7 +37,9 @@ class AuthService {
       }
       return userCredential.user;
     } catch (e) {
-      print("Error en Google Sign-In: $e");
+      if (kDebugMode) {
+        print("Error en Google Sign-In: $e");
+      }
       return null;
     }
   }
@@ -56,11 +59,15 @@ class AuthService {
         }
         return userCredential.user;
       } else {
-        print("Facebook login cancelled o fallido: ${result.status}");
+        if (kDebugMode) {
+          print("Facebook login cancelled o fallido: ${result.status}");
+        }
         return null;
       }
     } catch (e) {
-      print("Error en Facebook Sign-In: $e");
+      if (kDebugMode) {
+        print("Error en Facebook Sign-In: $e");
+      }
       return null;
     }
   }
@@ -74,7 +81,9 @@ class AuthService {
       _isAnonymousMode = true;
       return _anonymousPlayerName;
     } catch (e) {
-      print('Error enabling anonymous mode: $e');
+      if (kDebugMode) {
+        print('Error enabling anonymous mode: $e');
+      }
       return null;
     }
   }
@@ -108,10 +117,14 @@ class AuthService {
       }
       return userCredential.user;
     } on FirebaseAuthException catch (e) {
-      print("Error en registro: ${e.code} - ${e.message}");
+      if (kDebugMode) {
+        print("Error en registro: ${e.code} - ${e.message}");
+      }
       return null;
     } catch (e) {
-      print("Error inesperado en registro: $e");
+      if (kDebugMode) {
+        print("Error inesperado en registro: $e");
+      }
       return null;
     }
   }
@@ -128,14 +141,20 @@ class AuthService {
         await _transferAnonymousWalletOnLogin(userCredential.user!.uid);
         return userCredential.user;
       } else {
-        print("El correo no ha sido verificado");
+        if (kDebugMode) {
+          print("El correo no ha sido verificado");
+        }
         return null;
       }
     } on FirebaseAuthException catch (e) {
-      print("Error en Email Sign-In: ${e.code} - ${e.message}");
+      if (kDebugMode) {
+        print("Error en Email Sign-In: ${e.code} - ${e.message}");
+      }
       return null;
     } catch (e) {
-      print("Error inesperado en Email Sign-In: $e");
+      if (kDebugMode) {
+        print("Error inesperado en Email Sign-In: $e");
+      }
       return null;
     }
   }
@@ -157,7 +176,9 @@ class AuthService {
 
       return false;
     } catch (e) {
-      print("Error verificando email: $e");
+      if (kDebugMode) {
+        print("Error verificando email: $e");
+      }
       return false;
     }
   }
@@ -171,7 +192,9 @@ class AuthService {
       }
       return false;
     } catch (e) {
-      print("Error al reenviar email de verificación: $e");
+      if (kDebugMode) {
+        print("Error al reenviar email de verificación: $e");
+      }
       return false;
     }
   }
@@ -196,7 +219,9 @@ class AuthService {
         await user.sendEmailVerification();
       }
     } catch (e) {
-      print("Error al enviar correo de verificación: $e");
+      if (kDebugMode) {
+        print("Error al enviar correo de verificación: $e");
+      }
     }
   }
 
@@ -205,7 +230,9 @@ class AuthService {
       await _googleSignIn.signOut();
       await FacebookAuth.instance.logOut();
     } catch (e) {
-      print("Error al cerrar sesión: $e");
+      if (kDebugMode) {
+        print("Error al cerrar sesión: $e");
+      }
     }
     await _auth.signOut();
   }
@@ -500,7 +527,9 @@ class AuthService {
       }
       return null;
     } catch (e) {
-      print('Error getting user rank: $e');
+      if (kDebugMode) {
+        print('Error getting user rank: $e');
+      }
       return null;
     }
   }
@@ -538,17 +567,22 @@ class AuthService {
       if (!walletStatus['hasTransferred'] &&
           (walletStatus['coins'] > 500 || walletStatus['diamonds'] > 0)) {
 
-        print('Transfiriendo wallet anónima al usuario autenticado...');
         final success = await _walletService.transferAnonymousWalletToUser(userId);
 
         if (success) {
-          print('Wallet anónima transferida exitosamente');
+          if (kDebugMode) {
+            print('Wallet anónima transferida exitosamente');
+          }
         } else {
-          print('Error transfiriendo wallet anónima');
+          if (kDebugMode) {
+            print('Error transfiriendo wallet anónima');
+          }
         }
       }
     } catch (e) {
-      print('Error en transferencia automática de wallet: $e');
+      if (kDebugMode) {
+        print('Error en transferencia automática de wallet: $e');
+      }
     }
   }
 

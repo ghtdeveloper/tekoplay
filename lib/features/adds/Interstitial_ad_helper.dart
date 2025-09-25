@@ -1,6 +1,6 @@
-import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'AdManager.dart';
+import 'ad_manager.dart';
 
 class InterstitialAdHelper {
   InterstitialAd? _interstitialAd;
@@ -24,7 +24,9 @@ class InterstitialAdHelper {
           ad.setImmersiveMode(true);
         },
         onAdFailedToLoad: (LoadAdError error) {
-          print('InterstitialAd failed to load: $error');
+          if (kDebugMode) {
+            print('InterstitialAd failed to load: $error');
+          }
           _isAdReady = false;
         },
       ),
@@ -55,16 +57,22 @@ class InterstitialAdHelper {
     if (_interstitialAd != null) {
       _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
         onAdShowedFullScreenContent: (InterstitialAd ad) {
-          print('Interstitial ad showed.');
+          if (kDebugMode) {
+            print('Interstitial ad showed.');
+          }
         },
         onAdDismissedFullScreenContent: (InterstitialAd ad) {
-          print('Interstitial ad dismissed.');
+          if (kDebugMode) {
+            print('Interstitial ad dismissed.');
+          }
           ad.dispose();
           _loadAd();
           onComplete?.call();
         },
         onAdFailedToShowFullScreenContent: (InterstitialAd ad, AdError error) {
-          print('Interstitial ad failed to show: $error');
+          if (kDebugMode) {
+            print('Interstitial ad failed to show: $error');
+          }
           ad.dispose();
           _loadAd();
           onComplete?.call();
