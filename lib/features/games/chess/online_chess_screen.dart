@@ -939,6 +939,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       }
       return null;
     }
+    return null;
   }
 
   void _showBetNegotiation(MultiplayerGameMatch game) {

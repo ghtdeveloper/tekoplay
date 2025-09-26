@@ -1042,17 +1042,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     return "Esta ficha (${tile.left}|${tile.right}) no conecta con los extremos disponibles: ${availableEnds.join(', ')}";
   }
 
-  // Método para sugerir fichas jugables
-  void _showPlayableHint() {
-    List<DominoTile> playableTiles = _controller.playerTiles.where((tile) => _controller.canPlayTile(tile)).toList();
-
-    if (playableTiles.isNotEmpty) {
-      String tilesList = playableTiles.map((tile) => "${tile.left}|${tile.right}").join(", ");
-      _showSnack("Fichas que puedes jugar: $tilesList", isSuccess: true);
-    } else {
-      _showSnack("No tienes fichas jugables. Usa el pool o pasa turno.", isSuccess: false);
-    }
-  }
 
   void _drawFromPool() {
     if (!_controller.canDrawFromPool()) {

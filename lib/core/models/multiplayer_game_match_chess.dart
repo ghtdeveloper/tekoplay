@@ -1,10 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tekoplay/core/models/user.dart';
-
 import '../service/multiplayer_game_service.dart';
 import '../utils/game_result.dart';
-import '../utils/game_type.dart';
 
 class MultiplayerGameMatch {
   final String id;

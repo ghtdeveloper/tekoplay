@@ -340,18 +340,22 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   Future<void> _validateUserFunds() async {
     if (currentUser == null) return;
+
+    final betString = S.of(context).bet;
+    final userDataLoadError = S.of(context).userDataLoadError;
+
     try {
       await _loadUserCurrency();
       final currentBalance = _getCurrentBalance() ?? 0;
       final betAmount = _selectedBetAmount ?? 0;
       bool hasInsufficientFunds = false;
-      String currencyName = _getCurrencyName();
 
-      if (widget.matchType == S.of(context).bet) {
+      if (widget.matchType == betString) {
         hasInsufficientFunds = currentBalance < betAmount || currentBalance <= 0;
       } else {
         hasInsufficientFunds = currentBalance < 100;
       }
+
       if (hasInsufficientFunds) {
         _showInsufficientFundsDialog();
         return;
@@ -360,7 +364,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       if (kDebugMode) {
         print('💥 Error validating user funds: $e');
       }
-      _showErrorAndExit(S.of(context).userDataLoadError);
+      _showErrorAndExit(userDataLoadError);
     }
   }
 
@@ -474,6 +478,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
+
+
     if (state == AppLifecycleState.paused) {
       _handleAppPause();
     } else if (state == AppLifecycleState.resumed) {
@@ -499,6 +505,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   void _initializeGame() {
+    final gameNotFoundString = S.of(context).gameNotFound;
     if (currentUser == null) {
       _showErrorAndExit(S.of(context).userNotFound);
       return;
@@ -509,10 +516,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         .listen(
           (game) {
         if (game == null) {
-          _showErrorAndExit(S.of(context).gameNotFound);
+          _showErrorAndExit(gameNotFoundString);
           return;
         }
-
         _handleGameUpdate(game);
       },
       onError: (error) {
@@ -1036,31 +1042,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         isApuesta: isApuesta,
       );
 
-      // Registrar la partida para el usuario actual
-      final success = await _firestoreService.recordGameMatch(
-        userId: currentUser!.uid,
-        gameType: GameTypeModel.chess,
-        result: result,
-        pointsEarned: pointsEarned,
-        durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName: _opponentName ?? 'Jugador desconocido',
-        additionalData: {
-          'gameMode': 'multiplayer',
-          'isRanked': _currentGame?.isRanked ?? false,
-          'betAmount': _selectedBetAmount,
-          'currencyChange': myCurrencyChange,
-          'currencyType': _getCurrencyType(),
-          'matchType': widget.matchType,
-          'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
-          'opponentId': opponentId,
-          'gameId': widget.gameId,
-          'finalFEN': controller.getFen(),
-          'totalMoves': _currentGame?.moves.length ?? 0,
-          'timeControl': '1 minuto por movimiento',
-          'hasTimeLimit': true,
-        },
-      );
-
       // También registrar la partida para el oponente
       await _recordOpponentGameResult(
         opponentId: opponentId,
@@ -1069,13 +1050,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         opponentCurrencyChange: opponentCurrencyChange,
       );
 
-      if (success) {
-        if (myCurrencyChange > 0) {
-          String currency = _getCurrencyName();
-        } else if (myCurrencyChange < 0) {
-          String currency = _getCurrencyName();
-        }
-      }
     } catch (e) {
       if (mounted && currentUser != null) {
         ScaffoldMessenger.of(context).showSnackBar(
