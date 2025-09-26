@@ -341,7 +341,13 @@
   "toParticipate": "to participate",
   "notEnoughCurrencyForMultiplayer": "You don't have enough coins or diamonds to join multiplayer games",
   "funGamesRequirement": "For fun games, you need at least 100 coins.",
-  "betGamesRequirement": "For betting games, you need at least 50 diamonds."
+  "betGamesRequirement": "For betting games, you need at least 50 diamonds.",
+  "toPlay": "to play",
+  "yourCurrentBalance": "Your current balance:",
+  "firstMove": "(First move:"
+
+
+
 
 
 

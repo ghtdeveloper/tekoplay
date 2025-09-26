@@ -339,7 +339,13 @@
   "toParticipate": "pour participer",
   "notEnoughCurrencyForMultiplayer": "Vous n'avez pas assez de pièces ou de diamants pour participer à des parties multijoueurs",
   "funGamesRequirement": "Pour les parties de divertissement, vous avez besoin d'au moins 100 pièces.",
-  "betGamesRequirement": "Pour les parties avec mise, vous avez besoin d'au moins 50 diamants."
+  "betGamesRequirement": "Pour les parties avec mise, vous avez besoin d'au moins 50 diamants.",
+  "toPlay": "pour jouer",
+  "yourCurrentBalance": "Votre solde actuel :",
+  "firstMove": "(Premier mouvement :"
+
+
+
 
 
 

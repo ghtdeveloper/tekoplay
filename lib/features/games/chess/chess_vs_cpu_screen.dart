@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -18,7 +19,11 @@ class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
   final String matchType;
 
-  const ChessVsComputerScreen(this.selectedDifficulty, {super.key, required this.matchType});
+  const ChessVsComputerScreen(
+    this.selectedDifficulty, {
+    super.key,
+    required this.matchType,
+  });
 
   @override
   State<ChessVsComputerScreen> createState() => _ChessVsComputerScreenState();
@@ -35,7 +40,14 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   bool _isStockfishReady = false;
   bool _gameEnded = false;
   bool _hasStartedGame = false;
-  bool _waitingForCpuMove = false; // Nueva variable para control interno
+  bool _waitingForCpuMove = false;
+
+  // Variables del sistema de tiempo
+  Timer? _playerTimer;
+  Timer? _initialMoveTimer;
+  int _playerTimeSeconds = 60; // 1 minuto fijo
+  bool _hasPlayerMovedOnce = false;
+  bool _isPlayerTurn = false;
 
   late int _cpuMoveTime;
   DateTime? _gameStartTime;
@@ -88,6 +100,16 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
               _applyUciMoveToBoard(best);
               _checkGameEnd();
               _waitingForCpuMove = false;
+
+              // Reiniciar el timer del jugador después del movimiento del CPU
+              if (!_gameEnded) {
+                setState(() {
+                  _isPlayerTurn = true;
+                  _playerTimeSeconds = 60; // Reset a 1 minuto
+                });
+                _startPlayerTimer();
+              }
+
               setState(() {});
             }
           });
@@ -101,7 +123,15 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         _isStockfishReady = true;
         await _initializeStockfish();
 
-        if (_playerColor == PlayerColor.black) _makeCpuMove();
+        if (_playerColor == PlayerColor.black) {
+          _makeCpuMove();
+        } else {
+          // Si el jugador es blanco, iniciar su turno
+          setState(() {
+            _isPlayerTurn = true;
+          });
+          _startInitialMoveTimer();
+        }
       }
     });
 
@@ -118,10 +148,11 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   Future<void> _loadUserCurrency() async {
     if (currentUser == null) return;
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.uid)
-          .get();
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser!.uid)
+              .get();
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
         setState(() {
@@ -149,7 +180,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   IconData _getCurrencyIcon() {
-    return widget.matchType == S.of(context).bet ? Icons.diamond : Icons.monetization_on;
+    return widget.matchType == S.of(context).bet
+        ? Icons.diamond
+        : Icons.monetization_on;
   }
 
   int? _getCurrentBalance() {
@@ -158,6 +191,196 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   int _getGameCost() {
     return widget.matchType == S.of(context).bet ? 5 : 100;
+  }
+
+  // Iniciar timer para el primer movimiento (14 segundos)
+  void _startInitialMoveTimer() {
+    if (_hasPlayerMovedOnce || _gameEnded) return;
+
+    _initialMoveTimer?.cancel();
+    _initialMoveTimer = Timer(const Duration(seconds: 14), () {
+      if (!_hasPlayerMovedOnce && !_gameEnded && mounted) {
+        _timeOut(isInitialTimeout: true);
+      }
+    });
+  }
+
+  // Iniciar timer del jugador (1 minuto por movimiento)
+  void _startPlayerTimer() {
+    if (_gameEnded) return;
+
+    _playerTimer?.cancel();
+    _playerTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_gameEnded) {
+        timer.cancel();
+        return;
+      }
+
+      if (_isPlayerTurn) {
+        setState(() {
+          _playerTimeSeconds--;
+        });
+
+        if (_playerTimeSeconds <= 0) {
+          timer.cancel();
+          _timeOut(isInitialTimeout: false);
+        }
+      }
+    });
+  }
+
+  // Manejar timeout
+  void _timeOut({required bool isInitialTimeout}) {
+    if (_gameEnded) return;
+
+    _gameEnded = true;
+    _playerTimer?.cancel();
+    _initialMoveTimer?.cancel();
+
+    cpuScore++;
+
+    String message =
+        isInitialTimeout
+            ? 'Tiempo agotado: No realizaste tu primer movimiento en 14 segundos'
+            : 'Tiempo agotado: No completaste tu movimiento en 1 minuto';
+
+    _showTimeoutDialog(message);
+    _recordGameResult(GameResultModel.loss);
+
+    setState(() {});
+  }
+
+  void _showTimeoutDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.timer_off, color: Colors.red, size: 28),
+                SizedBox(width: 12),
+                Text(
+                  'Tiempo Agotado',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red[200]!),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.timer_off, size: 48, color: Colors.red),
+                      SizedBox(height: 12),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16, color: Colors.red[800]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _restartGame();
+                },
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.orange[600],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Text(S.of(context).newGame),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.grey[600],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Text(S.of(context).exit),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Widget _buildTimer() {
+    if (_gameEnded || !_isPlayerTurn) return SizedBox.shrink();
+
+    final minutes = _playerTimeSeconds ~/ 60;
+    final seconds = _playerTimeSeconds % 60;
+    final timeString =
+        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+
+    final isRunningOut = _playerTimeSeconds <= 10;
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: isRunningOut ? Colors.red[700] : Colors.green[700],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: (isRunningOut ? Colors.red : Colors.green).withValues(
+              alpha: 0.3,
+            ),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.timer, color: Colors.white, size: 20),
+          SizedBox(width: 8),
+          Text(
+            timeString,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool> _checkAndDeductGameCost() async {
@@ -176,7 +399,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       if (userData != null) {
         if (widget.matchType == S.of(context).bet) {
           final newDiamonds = userData.diamonds - gameCost;
-          await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+          await _firestoreService.updateUserDiamonds(
+            currentUser!.uid,
+            newDiamonds,
+          );
           setState(() => _userDiamonds = newDiamonds);
         } else {
           final newCoins = userData.coins - gameCost;
@@ -202,39 +428,40 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(_getCurrencyIcon(), color: Colors.red),
-            SizedBox(width: 8),
-            Text('Fondos Insuficientes'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Necesitas $gameCost $currencyName para jugar.',
-              textAlign: TextAlign.center,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(_getCurrencyIcon(), color: Colors.red),
+                SizedBox(width: 8),
+                Text(S.of(context).insufficientFunds),
+              ],
             ),
-            SizedBox(height: 12),
-            Text(
-              'Tu balance actual: $currentBalance $currencyName',
-              style: TextStyle(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${S.of(context).youNeed} $gameCost $currencyName ${S.of(context).toPlay}.',
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  '${S.of(context).yourCurrentBalance} $currentBalance $currencyName',
+                  style: TextStyle(color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            child: Text('Volver'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
+                child: Text(S.of(context).back),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -277,6 +504,17 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       _gameStartTime = DateTime.now();
     }
 
+    if (!_hasPlayerMovedOnce) {
+      _hasPlayerMovedOnce = true;
+      _initialMoveTimer?.cancel();
+    }
+
+    _playerTimer?.cancel();
+
+    setState(() {
+      _isPlayerTurn = false;
+    });
+
     _checkGameEnd();
 
     if (!_gameEnded) {
@@ -292,43 +530,50 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
     if (isCheckMate) {
       _gameEnded = true;
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
 
       final isWhiteTurn = controller.getFen().split(' ')[1] == 'w';
-      final playerWon = (_playerColor == PlayerColor.white && !isWhiteTurn) ||
+      final playerWon =
+          (_playerColor == PlayerColor.white && !isWhiteTurn) ||
           (_playerColor == PlayerColor.black && isWhiteTurn);
 
       if (playerWon) {
         playerScore++;
-        _showGameEndDialog(
-            '${S.of(context).youWonCheckMate}\n¡Jaque Mate!'
-        );
+        _showGameEndDialog('${S.of(context).youWonCheckMate}\n¡Jaque Mate!');
         _recordGameResult(GameResultModel.win);
       } else {
         cpuScore++;
-        _showGameEndDialog(
-            '${S.of(context).cpuWonCheckMate}\n¡Jaque Mate!'
-        );
+        _showGameEndDialog('${S.of(context).cpuWonCheckMate}\n¡Jaque Mate!');
         _recordGameResult(GameResultModel.loss);
       }
 
       setState(() {});
     } else if (controller.isDraw()) {
       _gameEnded = true;
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
       _showGameEndDialog(S.of(context).drawMsg);
       _recordGameResult(GameResultModel.draw);
       setState(() {});
     } else if (controller.isStaleMate()) {
       _gameEnded = true;
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
       _showGameEndDialog(S.of(context).drawByStalemate);
       _recordGameResult(GameResultModel.draw);
       setState(() {});
     } else if (controller.isThreefoldRepetition()) {
       _gameEnded = true;
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
       _showGameEndDialog(S.of(context).tieByReply);
       _recordGameResult(GameResultModel.draw);
       setState(() {});
     } else if (controller.isInsufficientMaterial()) {
       _gameEnded = true;
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
       _showGameEndDialog(S.of(context).tieByInsufficient);
       _recordGameResult(GameResultModel.draw);
       setState(() {});
@@ -353,9 +598,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         backgroundColor: Colors.orange[700],
         duration: Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -395,7 +638,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         if (userData != null) {
           if (widget.matchType == S.of(context).bet) {
             final newDiamonds = userData.diamonds! + currencyChange;
-            await _firestoreService.updateUserDiamonds(currentUser!.uid, newDiamonds);
+            await _firestoreService.updateUserDiamonds(
+              currentUser!.uid,
+              newDiamonds,
+            );
             setState(() => _userDiamonds = newDiamonds);
           } else {
             final newCoins = userData.coins + currencyChange;
@@ -420,6 +666,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           'currencyChange': currencyChange,
           'currencyType': _getCurrencyType(),
           'matchType': widget.matchType,
+          'timeControl': '1 minuto por movimiento',
+          'hasTimeLimit': true,
         },
       );
 
@@ -458,10 +706,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         return AlertDialog(
           title: Text(
             S.of(context).gameOver,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           content: Text(
             message,
@@ -485,7 +730,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Text(S.of(context).newGame),
               ),
             ),
@@ -502,7 +750,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Text(S.of(context).exit),
               ),
             ),
@@ -533,7 +784,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   void _selectPlayerColor(PlayerColor color) async {
-    // Verificar fondos antes de permitir seleccionar color
     final currentBalance = _getCurrentBalance();
     final gameCost = _getGameCost();
 
@@ -546,28 +796,49 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
       _playerColor = color;
       if (_playerColor == PlayerColor.black && _isStockfishReady) {
         _makeCpuMove();
+      } else if (_playerColor == PlayerColor.white) {
+        // Si el jugador es blanco, iniciar su turno y el timer inicial
+        _isPlayerTurn = true;
+        _startInitialMoveTimer();
       }
     });
   }
 
   void _restartGame() {
-    _interstitialHelper.showAdIfReady(onComplete: () {
-      _gameEnded = false;
-      _waitingForCpuMove = false;
-      _hasStartedGame = false;
-      _gameStartTime = null;
-      controller.resetBoard();
+    _interstitialHelper.showAdIfReady(
+      onComplete: () {
+        // Limpiar todos los timers
+        _playerTimer?.cancel();
+        _initialMoveTimer?.cancel();
 
-      if (_isStockfishReady) {
-        final fen = controller.getFen();
-        _stockfish.stdin = "position fen $fen";
+        // Reset variables del juego
+        _gameEnded = false;
+        _waitingForCpuMove = false;
+        _hasStartedGame = false;
+        _gameStartTime = null;
+        _hasPlayerMovedOnce = false;
+        _isPlayerTurn = false;
+        _playerTimeSeconds = 60;
 
-        if (_playerColor == PlayerColor.black) {
-          _makeCpuMove();
+        controller.resetBoard();
+
+        if (_isStockfishReady) {
+          final fen = controller.getFen();
+          _stockfish.stdin = "position fen $fen";
+
+          if (_playerColor == PlayerColor.black) {
+            _makeCpuMove();
+          } else {
+            // Si el jugador es blanco, iniciar su turno
+            setState(() {
+              _isPlayerTurn = true;
+            });
+            _startInitialMoveTimer();
+          }
         }
-      }
-      setState(() {});
-    });
+        setState(() {});
+      },
+    );
   }
 
   Widget _buildPlayerAvatar() {
@@ -576,16 +847,17 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         radius: 30,
         backgroundColor: Colors.grey[300],
         backgroundImage: NetworkImage(currentUser!.photoURL!),
-        onBackgroundImageError: (exception, stackTrace) {
-        },
+        onBackgroundImageError: (exception, stackTrace) {},
       );
     } else {
       return CircleAvatar(
         radius: 30,
-        backgroundColor: _playerColor == PlayerColor.white ? Colors.white : Colors.black,
+        backgroundColor:
+            _playerColor == PlayerColor.white ? Colors.white : Colors.black,
         child: Icon(
           Icons.person,
-          color: _playerColor == PlayerColor.white ? Colors.black : Colors.white,
+          color:
+              _playerColor == PlayerColor.white ? Colors.black : Colors.white,
           size: 30,
         ),
       );
@@ -595,7 +867,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   Widget _buildCpuAvatar() {
     return CircleAvatar(
       radius: 30,
-      backgroundColor: _playerColor == PlayerColor.white ? Colors.black : Colors.white,
+      backgroundColor:
+          _playerColor == PlayerColor.white ? Colors.black : Colors.white,
       child: Icon(
         Icons.smart_toy,
         color: _playerColor == PlayerColor.white ? Colors.white : Colors.black,
@@ -621,7 +894,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
         children: [
           Icon(
             _getCurrencyIcon(),
-            color: widget.matchType == S.of(context).bet ? Colors.amber : Colors.blue,
+            color:
+                widget.matchType == S.of(context).bet
+                    ? Colors.amber
+                    : Colors.blue,
             size: 18,
           ),
           SizedBox(width: 6),
@@ -656,6 +932,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
 
   @override
   void dispose() {
+    _playerTimer?.cancel();
+    _initialMoveTimer?.cancel();
     if (_isStockfishReady) _stockfish.stdin = "quit";
     _stockfish.dispose();
     _interstitialHelper.dispose();
@@ -730,9 +1008,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
           style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          Center(child: _buildCurrencyDisplay()),
-        ],
+        actions: [Center(child: _buildCurrencyDisplay())],
       ),
       body: SafeArea(
         child: Column(
@@ -790,6 +1066,24 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                 ],
               ),
             ),
+
+            // Timer del jugador
+            _buildTimer(),
+
+            // Indicador de turno
+            if (!_gameEnded)
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  _isPlayerTurn ? 'Tu turno' : 'Turno del CPU',
+                  style: TextStyle(
+                    color: _isPlayerTurn ? Colors.green[300] : Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -797,7 +1091,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
                   controller: controller,
                   boardColor: BoardColor.brown,
                   boardOrientation: _playerColor!,
-                  enableUserMoves: !_gameEnded,
+                  enableUserMoves: !_gameEnded && _isPlayerTurn,
                   onMove: playerMoved,
                 ),
               ),

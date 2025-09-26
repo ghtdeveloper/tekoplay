@@ -1811,7 +1811,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  _startNewGame();
+                  Navigator.of(context).pop();
                 },
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.green,
@@ -2456,7 +2456,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  _startNewGame();
+                  Navigator.of(context).pop();
                 },
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.green,
@@ -2469,27 +2469,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     );
   }
 
-  void _startNewGame() {
-    setState(() {
-      _gameState = OnlineGameState.timeSelection;
-      _selectedTimeMinutes = null;
-      _currentGame = null;
-      _gameEnded = false;
-      _gameStartTime = null;
-      _isPlayingAgainstBot = false;
-      _isMyTurn = false;
-      _myColor = null;
-      _opponentName = null;
-      _opponentPhotoUrl = null;
-      _myRanking = null;
-      _opponentRanking = null;
-      _lastMoveFromSquare = null;
-      _lastMoveToSquare = null;
-      _showLastMove = false;
-      controller.resetBoard();
-      _cleanupTimers();
-    });
-  }
 
   bool _onWillPop() {
     if (_gameState == OnlineGameState.playing && !_gameEnded) {
