@@ -344,7 +344,9 @@
   "betGamesRequirement": "Para partidas de apuesta necesitas al menos 50 diamantes.",
   "toPlay": "para jugar",
   "yourCurrentBalance": "Tu balance actual:",
-  "firstMove": "(Primer movimiento:"
+  "firstMove": "(Primer movimiento:",
+  "waiting": "Esperando"
+
 
 
 

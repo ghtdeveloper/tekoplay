@@ -344,7 +344,9 @@
   "betGamesRequirement": "For betting games, you need at least 50 diamonds.",
   "toPlay": "to play",
   "yourCurrentBalance": "Your current balance:",
-  "firstMove": "(First move:"
+  "firstMove": "(First move:",
+  "waiting": "Waiting"
+
 
 
 

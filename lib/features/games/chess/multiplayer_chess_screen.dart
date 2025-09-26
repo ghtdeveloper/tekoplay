@@ -46,6 +46,13 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   bool _waitingForMoveResponse = false;
   DateTime? _gameStartTime;
 
+  // Variables del sistema de tiempo
+  Timer? _playerTimer;
+  Timer? _initialMoveTimer;
+  int _playerTimeSeconds = 60; // 1 minuto fijo
+  bool _hasPlayerMovedOnce = false;
+  bool _gameStarted = false;
+
   int? _userCoins;
   int? _userDiamonds;
   int? _selectedBetAmount;
@@ -76,6 +83,204 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
 
+  // Iniciar timer para el primer movimiento (14 segundos)
+  void _startInitialMoveTimer() {
+    if (_hasPlayerMovedOnce || _gameEnded || !_isMyTurn) return;
+
+    _initialMoveTimer?.cancel();
+    _initialMoveTimer = Timer(const Duration(seconds: 14), () {
+      if (!_hasPlayerMovedOnce && !_gameEnded && mounted && _isMyTurn) {
+        _timeOut(isInitialTimeout: true);
+      }
+    });
+  }
+
+  // Iniciar timer del jugador (1 minuto por movimiento)
+  void _startPlayerTimer() {
+    if (_gameEnded || !_isMyTurn) return;
+
+    _playerTimer?.cancel();
+    _playerTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_gameEnded) {
+        timer.cancel();
+        return;
+      }
+
+      if (_isMyTurn) {
+        setState(() {
+          _playerTimeSeconds--;
+        });
+
+        if (_playerTimeSeconds <= 0) {
+          timer.cancel();
+          _timeOut(isInitialTimeout: false);
+        }
+      }
+    });
+  }
+
+  // Manejar timeout
+  void _timeOut({required bool isInitialTimeout}) {
+    if (_gameEnded) return;
+
+    _gameEnded = true;
+    _playerTimer?.cancel();
+    _initialMoveTimer?.cancel();
+
+    String message = isInitialTimeout
+        ? 'Tiempo agotado: No realizaste tu primer movimiento en 14 segundos'
+        : 'Tiempo agotado: No completaste tu movimiento en 1 minuto';
+
+    // Abandonar la partida automáticamente
+    _abandonGameDueToTimeout();
+
+    _showTimeoutDialog(message);
+  }
+
+  Future<void> _abandonGameDueToTimeout() async {
+    try {
+      _hasUserExitedGame = true;
+
+      await _gameService.abandonGame(
+        gameId: widget.gameId,
+        playerId: currentUser!.uid,
+      );
+
+      _recordGameResult(GameResultModel.loss);
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error al abandonar por timeout: $e');
+      }
+    }
+  }
+
+  void _showTimeoutDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.timer_off, color: Colors.red, size: 28),
+            SizedBox(width: 12),
+            Text(
+              'Tiempo Agotado',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red[200]!),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.timer_off, size: 48, color: Colors.red),
+                  SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.red[800],
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Has perdido la partida por tiempo',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red[600],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(S.of(context).exit),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget para mostrar el timer
+  Widget _buildTimer() {
+    if (_gameEnded || !_isMyTurn || !_gameStarted) return SizedBox.shrink();
+
+    final minutes = _playerTimeSeconds ~/ 60;
+    final seconds = _playerTimeSeconds % 60;
+    final timeString = '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+
+    final isRunningOut = _playerTimeSeconds <= 10;
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: isRunningOut ? Colors.red[700] : Colors.green[700],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: (isRunningOut ? Colors.red : Colors.green).withValues(alpha: 0.3),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.timer, color: Colors.white, size: 20),
+          SizedBox(width: 8),
+          Text(
+            timeString,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (!_hasPlayerMovedOnce)
+            Text(
+              ' (Primer movimiento)',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadPlayerRankings() async {
     if (currentUser == null) return;
     try {
@@ -86,9 +291,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
       if (_currentGame != null) {
         final opponentId =
-            _currentGame!.hostId == currentUser!.uid
-                ? _currentGame!.guestId
-                : _currentGame!.hostId;
+        _currentGame!.hostId == currentUser!.uid
+            ? _currentGame!.guestId
+            : _currentGame!.hostId;
 
         if (opponentId != null) {
           final opponentDoc = await _firestoreService.getUser(opponentId);
@@ -303,21 +508,21 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         .getGameStream(widget.gameId)
         .listen(
           (game) {
-            if (game == null) {
-              _showErrorAndExit(S.of(context).gameNotFound);
-              return;
-            }
+        if (game == null) {
+          _showErrorAndExit(S.of(context).gameNotFound);
+          return;
+        }
 
-            _handleGameUpdate(game);
-          },
-          onError: (error) {
-            if (kDebugMode) {
-              print('Error in game stream: $error');
-            }
-            setState(() => _isConnected = false);
-            _startReconnectTimer();
-          },
-        );
+        _handleGameUpdate(game);
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          print('Error in game stream: $error');
+        }
+        setState(() => _isConnected = false);
+        _startReconnectTimer();
+      },
+    );
   }
 
   void _startReconnectTimer() {
@@ -336,6 +541,21 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _loadPlayerRankings();
     }
 
+    // Verificar si el juego comenzó (ambos jugadores presentes)
+    if (!_gameStarted && game.status == 'active' && game.guestId != null) {
+      _gameStarted = true;
+
+      // Si es mi turno al inicio del juego, iniciar timer
+      if (game.isPlayerTurn(currentUser!.uid)) {
+        setState(() {
+          _isMyTurn = true;
+          _playerTimeSeconds = 60;
+        });
+        _startInitialMoveTimer();
+      }
+    }
+
+    final wasMyTurn = _isMyTurn;
     _isMyTurn = game.isPlayerTurn(currentUser!.uid);
 
     bool shouldSync = false;
@@ -353,6 +573,24 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     if (shouldSync) {
       _syncGameState();
+    }
+
+    // Manejar cambio de turno
+    if (_gameStarted && wasMyTurn != _isMyTurn) {
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
+
+      if (_isMyTurn) {
+        // Es mi turno ahora
+        setState(() {
+          _playerTimeSeconds = 60; // Reset a 1 minuto
+        });
+        if (!_hasPlayerMovedOnce) {
+          _startInitialMoveTimer();
+        } else {
+          _startPlayerTimer();
+        }
+      }
     }
 
     if (game.isAbandoned && !_gameEnded) {
@@ -377,6 +615,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       return;
     }
     _gameEnded = true;
+    _playerTimer?.cancel();
+    _initialMoveTimer?.cancel();
 
     final opponentName =
         game.getOpponentName(currentUser!.uid) ?? S.of(context).rivals;
@@ -493,59 +733,59 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   Future<bool> _showAbandonDialog() async {
     return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder:
-              (context) => AlertDialog(
-                title: Text(
-                  '¿${S.of(context).abandonGame}?',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.warning, size: 48, color: Colors.orange),
-                    SizedBox(height: 16),
-                    Text(
-                      S.of(context).abandonGameWarning,
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      S.of(context).areYouSure,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(S.of(context).continueGame),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: TextButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Text(S.of(context).abandonGame),
-                    ),
-                  ),
-                ],
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+        title: Text(
+          '¿${S.of(context).abandonGame}?',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.warning, size: 48, color: Colors.orange),
+            SizedBox(height: 16),
+            Text(
+              S.of(context).abandonGameWarning,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            Text(
+              S.of(context).areYouSure,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.of(context).continueGame),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
-        ) ??
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              child: Text(S.of(context).abandonGame),
+            ),
+          ),
+        ],
+      ),
+    ) ??
         false;
   }
 
@@ -556,6 +796,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     try {
       _hasUserExitedGame = true;
       _gameEnded = true;
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
 
       final success = await _gameService.abandonGame(
         gameId: widget.gameId,
@@ -613,6 +855,15 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       return;
     }
     _waitingForMoveResponse = true;
+
+    // Marcar que el jugador ha movido al menos una vez
+    if (!_hasPlayerMovedOnce) {
+      _hasPlayerMovedOnce = true;
+      _initialMoveTimer?.cancel();
+    }
+
+    // Cancelar el timer del jugador ya que hizo su movimiento
+    _playerTimer?.cancel();
 
     try {
       final newFen = controller.getFen();
@@ -674,6 +925,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   Future<void> _finishGame(GameResultModel result, String? winnerId) async {
     if (_gameEnded) return;
     _gameEnded = true;
+    _playerTimer?.cancel();
+    _initialMoveTimer?.cancel();
     try {
       await _gameService.finishGame(
         gameId: widget.gameId,
@@ -688,6 +941,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   void _handleGameEnd(MultiplayerGameMatch game) {
+    _playerTimer?.cancel();
+    _initialMoveTimer?.cancel();
+
     String message;
     GameResultModel gameResult;
 
@@ -800,6 +1056,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           'gameId': widget.gameId,
           'finalFEN': controller.getFen(),
           'totalMoves': _currentGame?.moves.length ?? 0,
+          'timeControl': '1 minuto por movimiento',
+          'hasTimeLimit': true,
         },
       );
 
@@ -931,6 +1189,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           'gameId': widget.gameId,
           'finalFEN': controller.getFen(),
           'totalMoves': _currentGame?.moves.length ?? 0,
+          'timeControl': '1 minuto por movimiento',
+          'hasTimeLimit': true,
         },
       );
 
@@ -976,7 +1236,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                       Icon(_getCurrencyIcon(), color: Colors.blue),
                       SizedBox(width: 8),
                       Text(
-                        'Apuesta: $_selectedBetAmount ${_getCurrencyName()}',
+                        '${S.of(context).bet}: $_selectedBetAmount ${_getCurrencyName()}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.blue[800],
@@ -1050,18 +1310,18 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       barrierDismissible: false,
       builder:
           (context) => AlertDialog(
-            title: Text('Error'),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                child: Text('OK'),
-              ),
-            ],
+        title: Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
+            },
+            child: Text('OK'),
           ),
+        ],
+      ),
     );
   }
 
@@ -1069,9 +1329,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     if (_currentGame == null) return SizedBox();
 
     final name =
-        isMe
-            ? (currentUser?.displayName ?? S.of(context).you)
-            : (_opponentName ?? S.of(context).rivals);
+    isMe
+        ? (currentUser?.displayName ?? S.of(context).you)
+        : (_opponentName ?? S.of(context).rivals);
 
     final photoUrl = isMe ? currentUser?.photoURL : _opponentPhotoUrl;
     final isPlayerTurn = isMe ? _isMyTurn : !_isMyTurn;
@@ -1082,14 +1342,14 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color:
-            isPlayerTurn
-                ? Colors.green.withValues(alpha: 0.2)
-                : Colors.black.withValues(alpha: 0.1),
+        isPlayerTurn
+            ? Colors.green.withValues(alpha: 0.2)
+            : Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border:
-            isPlayerTurn
-                ? Border.all(color: Colors.green, width: 2)
-                : Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        isPlayerTurn
+            ? Border.all(color: Colors.green, width: 2)
+            : Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -1100,7 +1360,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 radius: 25,
                 backgroundColor: Colors.grey[300],
                 backgroundImage:
-                    photoUrl != null ? NetworkImage(photoUrl) : null,
+                photoUrl != null ? NetworkImage(photoUrl) : null,
                 child: photoUrl == null ? Icon(Icons.person, size: 25) : null,
               ),
               if (isPlayerTurn && !isWaitingForResponse)
@@ -1122,7 +1382,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
           SizedBox(width: 12),
 
-          // Información del jugador
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1198,7 +1458,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                       ),
                       SizedBox(width: 6),
                       Text(
-                        'Enviando...',
+                        S.of(context).sending,
                         style: TextStyle(color: Colors.orange, fontSize: 12),
                       ),
                     ] else ...[
@@ -1209,26 +1469,25 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                       ),
                       SizedBox(width: 4),
                       Text(
-                        'Esperando',
+                        S.of(context).waiting,
                         style: TextStyle(color: Colors.white60, fontSize: 12),
                       ),
                     ],
 
                     Spacer(),
 
-                    // Mostrar color de piezas
                     Container(
                       width: 20,
                       height: 20,
                       decoration: BoxDecoration(
                         color:
-                            isMe
-                                ? (_myColor == PlayerColor.white
-                                    ? Colors.white
-                                    : Colors.black)
-                                : (_myColor == PlayerColor.white
-                                    ? Colors.black
-                                    : Colors.white),
+                        isMe
+                            ? (_myColor == PlayerColor.white
+                            ? Colors.white
+                            : Colors.black)
+                            : (_myColor == PlayerColor.white
+                            ? Colors.black
+                            : Colors.white),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                       ),
@@ -1306,9 +1565,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 Icon(
                   _getCurrencyIcon(),
                   color:
-                      widget.matchType == S.of(context).bet
-                          ? Colors.amber
-                          : Colors.blue,
+                  widget.matchType == S.of(context).bet
+                      ? Colors.amber
+                      : Colors.blue,
                   size: 16,
                 ),
                 SizedBox(width: 4),
@@ -1316,9 +1575,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                   '$_selectedBetAmount ${_getCurrencyName()}',
                   style: TextStyle(
                     color:
-                        widget.matchType == S.of(context).bet
-                            ? Colors.amber
-                            : Colors.blue,
+                    widget.matchType == S.of(context).bet
+                        ? Colors.amber
+                        : Colors.blue,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1346,9 +1605,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           Icon(
             _getCurrencyIcon(),
             color:
-                widget.matchType == S.of(context).bet
-                    ? Colors.amber
-                    : Colors.blue,
+            widget.matchType == S.of(context).bet
+                ? Colors.amber
+                : Colors.blue,
             size: 16,
           ),
           SizedBox(width: 6),
@@ -1367,6 +1626,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   @override
   void dispose() {
+    // Limpiar timers
+    _playerTimer?.cancel();
+    _initialMoveTimer?.cancel();
+
     if (!_gameEnded &&
         !_hasUserExitedGame &&
         _currentGame != null &&
@@ -1374,10 +1637,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _gameService
           .abandonGame(gameId: widget.gameId, playerId: currentUser!.uid)
           .catchError((e){
-            if (kDebugMode) {
-              print('Error en abandono desde dispose: $e');
-            }
-          });
+        if (kDebugMode) {
+          print('Error en abandono desde dispose: $e');
+        }
+      });
     }
     WidgetsBinding.instance.removeObserver(this);
     _gameSubscription?.cancel();
@@ -1535,6 +1798,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
             _buildGameInfo(),
 
+            // Timer del jugador
+            _buildTimer(),
+
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -1542,7 +1808,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                   controller: controller,
                   boardColor: BoardColor.brown,
                   boardOrientation: _myColor ?? PlayerColor.white,
-                  enableUserMoves: _isMyTurn && !_gameEnded,
+                  enableUserMoves: _isMyTurn && !_gameEnded && _gameStarted,
                   onMove: _playerMoved,
                 ),
               ),
@@ -1553,7 +1819,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
               child: _buildPlayerInfo(true),
             ),
 
-            if (!_gameEnded)
+            if (!_gameEnded && _gameStarted)
               Container(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
