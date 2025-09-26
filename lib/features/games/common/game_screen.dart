@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
 import 'package:tekoplay/features/games/common/ranking_screen.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/anonymous_wallet_service.dart';
@@ -30,7 +31,7 @@ import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
 import 'game_history_screen.dart';
 
-class GameScreen extends StatefulWidget {
+class GameScreen extends StatefulWidget  {
   final String gameType;
   final String matchType;
 
@@ -44,7 +45,7 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   late String gameType;
   late String matchType;
   User? _currentUser;
@@ -61,6 +62,7 @@ class _GameScreenState extends State<GameScreen> {
   StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
   StreamSubscription<DocumentSnapshot>? _diamondsSubscription;
   final AnonymousWalletService _walletService = AnonymousWalletService();
+  bool _isScreenKeepOnActive = false;
 
   bool get isChess => gameType == S.of(context).chess;
 
@@ -71,10 +73,12 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     gameType = widget.gameType;
     matchType = widget.matchType;
     _initializeAsync();
   }
+
 
   @override
   void didChangeDependencies() {
@@ -89,6 +93,70 @@ class _GameScreenState extends State<GameScreen> {
       _setupFirestoreWalletListener();
     }
   }
+
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+      // App came to foreground
+        if (_isScreenKeepOnActive) {
+          _enableWakeLock();
+        }
+        break;
+      case AppLifecycleState.paused:
+      // App went to background - disable wakelock to save battery
+        _disableWakeLock();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _isScreenKeepOnActive = true;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock enabled - screen will stay on');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error enabling WakeLock: $e');
+      }
+    }
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _isScreenKeepOnActive = false;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock disabled - screen can turn off normally');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error disabling WakeLock: $e');
+      }
+    }
+  }
+
 
   void _setupAnonymousWalletListener() {
     _updateAnonymousWalletUI();
@@ -292,6 +360,7 @@ class _GameScreenState extends State<GameScreen> {
       if (_isDisposed) return;
       _setupStreams();
       if (_isDisposed) return;
+      await _enableWakeLock();
       if (AuthService().getCurrentUser() == null) {
         _enableAnonymousMode();
       }
@@ -595,6 +664,8 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _disableWakeLock();
     _isDisposed = true;
     _invitationsSubscription?.cancel();
     _activeGamesSubscription?.cancel();
@@ -610,7 +681,6 @@ class _GameScreenState extends State<GameScreen> {
         }
       }
     }
-
     super.dispose();
   }
 
