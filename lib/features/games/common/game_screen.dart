@@ -1185,188 +1185,202 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showNotificationsDialog(
-    BuildContext context,
-    List<Map<String, dynamic>> invitations,
-  ) {
+      BuildContext context,
+      List<Map<String, dynamic>> invitations,
+      ) {
     showDialog(
       context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              width: double.infinity,
-              height: 400,
-              padding: EdgeInsets.all(20),
-              child: Column(
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Container(
+          width: double.infinity,
+          height: 400,
+          padding: EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        S.of(context).invitations,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
+                  Text(
+                    S.of(context).invitations,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  SizedBox(height: 16),
-                  Expanded(
-                    child:
-                        invitations.isEmpty
-                            ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.notifications_none,
-                                    size: 48,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(height: 16),
-                                  Text(
-                                    S.of(context).noInvitation,
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                            )
-                            : ListView.builder(
-                              itemCount: invitations.length,
-                              itemBuilder: (context, index) {
-                                final invitation = invitations[index];
-                                return Card(
-                                  child: ListTile(
-                                    leading: Icon(
-                                      Icons.sports_esports,
-                                      color: Color(0xFFEC7A34),
-                                    ),
-                                    title: Text(
-                                      '${invitation['fromUserName']} ${S.of(context).invitesYou}',
-                                    ),
-                                    subtitle: Text('${invitation['gameType']}'),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        TextButton(
-                                          onPressed: () async {
-                                            final result =
-                                                await GameInvitationService()
-                                                    .respondToInvitation(
-                                                      invitation['id'],
-                                                      false,
-                                                    );
-                                            if (result != null &&
-                                                result['success'] == true) {
-                                              Navigator.of(context).pop();
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    S
-                                                        .of(context)
-                                                        .invitationRejected,
-                                                  ),
-                                                  backgroundColor:
-                                                      Colors.orange,
-                                                ),
-                                              );
-                                            }
-                                          },
-                                          child: Text(
-                                            S.of(context).reject,
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () async {
-                                            if (_currentUser == null) return;
-
-                                            final hasEnoughFunds = await _validateUserFundsForInvitation();
-                                            if (!hasEnoughFunds) {
-                                              Navigator.of(context).pop();
-                                              return;
-                                            }
-
-                                            showDialog(
-                                              context: context,
-                                              barrierDismissible: false,
-                                              builder:
-                                                  (context) => Center(
-                                                    child:
-                                                        CircularProgressIndicator(),
-                                                  ),
-                                            );
-
-                                            final result =
-                                                await GameInvitationService()
-                                                    .respondToInvitation(
-                                                      invitation['id'],
-                                                      true,
-                                                    );
-
-                                            Navigator.of(context).pop();
-
-                                            if (result != null &&
-                                                result['success'] == true &&
-                                                result['gameId'] != null) {
-                                              Navigator.of(context).pop();
-
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder:
-                                                      (context) =>
-                                                          MultiplayerChessScreen(
-                                                            gameId:
-                                                                result['gameId'],
-                                                            isHost: false,
-                                                            matchType:
-                                                                widget
-                                                                    .matchType,
-                                                          ),
-                                                ),
-                                              );
-                                            } else {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    S
-                                                        .of(context)
-                                                        .errorAcceptedInvitation,
-                                                  ),
-                                                  backgroundColor: Colors.red,
-                                                ),
-                                              );
-                                            }
-                                          },
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Color(0xFFEC7A34),
-                                            foregroundColor: Colors.white,
-                                          ),
-                                          child: Text(S.of(context).accept),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                  IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
-            ),
+              SizedBox(height: 16),
+              Expanded(
+                child: invitations.isEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.notifications_none,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        S.of(context).noInvitation,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+                    : ListView.builder(
+                  itemCount: invitations.length,
+                  itemBuilder: (context, index) {
+                    final invitation = invitations[index];
+                    return Card(
+                      margin: EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.sports_esports,
+                                  color: Color(0xFFEC7A34),
+                                  size: 24,
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${invitation['fromUserName']} ${S.of(context).invitesYou}',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 2,
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        '${invitation['gameType']}',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton(
+                                  onPressed: () async {
+                                    final result = await GameInvitationService()
+                                        .respondToInvitation(
+                                      invitation['id'],
+                                      false,
+                                    );
+                                    if (result != null && result['success'] == true) {
+                                      Navigator.of(context).pop();
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            S.of(context).invitationRejected,
+                                          ),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: Text(
+                                    S.of(context).reject,
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    if (_currentUser == null) return;
+
+                                    final hasEnoughFunds = await _validateUserFundsForInvitation();
+                                    if (!hasEnoughFunds) {
+                                      Navigator.of(context).pop();
+                                      return;
+                                    }
+
+                                    showDialog(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (context) => Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+
+                                    final result = await GameInvitationService()
+                                        .respondToInvitation(
+                                      invitation['id'],
+                                      true,
+                                    );
+
+                                    Navigator.of(context).pop();
+
+                                    if (result != null &&
+                                        result['success'] == true &&
+                                        result['gameId'] != null) {
+                                      Navigator.of(context).pop();
+
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => MultiplayerChessScreen(
+                                            gameId: result['gameId'],
+                                            isHost: false,
+                                            matchType: widget.matchType,
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            S.of(context).errorAcceptedInvitation,
+                                          ),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Color(0xFFEC7A34),
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: Text(S.of(context).accept),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
+        ),
+      ),
     );
   }
 

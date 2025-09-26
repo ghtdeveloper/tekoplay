@@ -388,85 +388,106 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.person_off, color: Colors.orange, size: 24),
-                SizedBox(width: 8),
-                Text(
-                  S.of(context).gameOver,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ],
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.person_off, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Expanded( // Previene overflow del título
+              child: Text(
+                S.of(context).gameOver,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(Icons.person_off, size: 48, color: Colors.orange),
-                      SizedBox(height: 12),
-                      Text(
-                        '$opponentName ${S.of(context).hasLeftTheGame}',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16),
-                      ),
-                    ],
-                  ),
+          ],
+        ),
+        content: SingleChildScrollView( // Permite scroll si el contenido es muy largo
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.emoji_events, color: Colors.green, size: 24),
-                      SizedBox(width: 8),
-                      Text(
-                        S.of(context).opponentAbandonedMessage,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                child: Column(
+                  children: [
+                    Icon(Icons.person_off, size: 48, color: Colors.orange),
+                    SizedBox(height: 12),
+                    // Texto que se ajusta automáticamente
+                    Text(
+                      '$opponentName ${S.of(context).hasLeftTheGame}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                      softWrap: true, // Permite salto de línea
+                      overflow: TextOverflow.visible, // Muestra texto completo
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column( // Cambié Row por Column para evitar overflow horizontal
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.emoji_events, color: Colors.green, size: 24),
+                        SizedBox(width: 8),
+                        Flexible( // Permite que el texto se ajuste
+                          child: Text(
+                            S.of(context).opponentAbandonedMessage,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                            textAlign: TextAlign.center,
+                            softWrap: true,
+                            overflow: TextOverflow.visible,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            actions: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                icon: Icon(Icons.check_circle),
-                label: Text(S.of(context).exit),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+              icon: Icon(Icons.check_circle),
+              label: Text(S.of(context).exit),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
