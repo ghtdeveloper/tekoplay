@@ -119,7 +119,32 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadUserCurrency();
+    _setupStockfishSettings();
   }
+
+  void _setupStockfishSettings() {
+    if (!_isStockfishReady) return;
+
+    if (widget.matchType == S.of(context).bet) {
+      _cpuMoveTime = 150;
+      _stockfish!.stdin = "setoption name Threads value 2";
+      _stockfish!.stdin = "setoption name Hash value 64";
+      _stockfish!.stdin = "setoption name Skill Level value 20";
+    } else if (widget.matchType == S.of(context).fun) {
+      _cpuMoveTime = 75;
+      _stockfish!.stdin = "setoption name Threads value 1";
+      _stockfish!.stdin = "setoption name Hash value 32";
+      _stockfish!.stdin = "setoption name Skill Level value 10";
+    } else {
+      // Normal
+      _cpuMoveTime = 100;
+      _stockfish!.stdin = "setoption name Threads value 1";
+      _stockfish!.stdin = "setoption name Hash value 32";
+      _stockfish!.stdin = "setoption name Skill Level value 12";
+    }
+  }
+
+
 
   void _initializeStockfish() {
     _stockfish = Stockfish();
@@ -152,8 +177,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     });
 
     _stockfish!.state.addListener(() async {
-      if (_stockfish!.state.value == StockfishState.ready &&
-          !_isStockfishReady) {
+      if (_stockfish!.state.value == StockfishState.ready && !_isStockfishReady) {
         _isStockfishReady = true;
         await _setupStockfish();
       }
@@ -192,23 +216,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _stockfish!.stdin = "isready";
     await Future.delayed(const Duration(milliseconds: 300));
 
-    if (widget.matchType == S.of(context).bet) {
-      _cpuMoveTime = 150;
-      _stockfish!.stdin = "setoption name Threads value 2";
-      _stockfish!.stdin = "setoption name Hash value 64";
-      _stockfish!.stdin = "setoption name Skill Level value 20";
-    } else if (widget.matchType == S.of(context).fun) {
-      _cpuMoveTime = 75;
-      _stockfish!.stdin = "setoption name Threads value 1";
-      _stockfish!.stdin = "setoption name Hash value 32";
-      _stockfish!.stdin = "setoption name Skill Level value 10";
-    } else {
-      // Normal
-      _cpuMoveTime = 100;
-      _stockfish!.stdin = "setoption name Threads value 1";
-      _stockfish!.stdin = "setoption name Hash value 32";
-      _stockfish!.stdin = "setoption name Skill Level value 12";
-    }
+    // Llama a la configuración que depende del contexto
+    _setupStockfishSettings();
   }
 
   bool _shouldBotMakeMove() {
@@ -700,6 +709,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _makeBotMove();
       }
     });
+
 
     if (widget.matchType == S.of(context).bet && _selectedBetAmount != null) {
       _showRivalFoundDialog();
@@ -1641,12 +1651,16 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     _loadPlayerRankings(game);
 
+
     if (_selectedTimeMinutes != null) {
       _myTimeSeconds = _selectedTimeMinutes! * 60;
       _opponentTimeSeconds = _selectedTimeMinutes! * 60;
       _startPlayerTimer();
     }
   }
+
+
+
 
   Future<void> _loadPlayerRankings(MultiplayerGameMatch game) async {
     try {
@@ -2092,14 +2106,39 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
-      bool isApuesta = widget.matchType == S.of(context).bet;
-      bool useDiamonds = isApuesta;
-      int currencyChange = GameCalculator.calculate(
-        result: result,
-        isBetMode: isApuesta,
-        betAmount: _selectedBetAmount,
+
+      // Determinar el tipo de juego
+      bool isBetMode = widget.matchType == S.of(context).bet;
+      bool isFunMode = widget.matchType == S.of(context).fun;
+
+      // IMPORTANTE: La cantidad apostada debe existir en ambos modos
+      if (_selectedBetAmount == null) {
+        throw Exception('No hay cantidad apostada definida');
+      }
+
+      // Calcular el cambio de moneda
+      final calculations = GameCalculator.calculateForBothPlayers(
+        playerResult: result,
+        isBetMode: isBetMode,
+        playerBetAmount: _selectedBetAmount!,
+        opponentBetAmount: _opponentBetAmount ?? _selectedBetAmount!,
       );
 
+      int currencyChange = calculations['player'] ?? 0;
+
+      // Debug logging
+      if (kDebugMode) {
+        print('=== DEBUG APUESTA ===');
+        print('Modo: ${widget.matchType}');
+        print('isBetMode: $isBetMode');
+        print('isFunMode: $isFunMode');
+        print('Cantidad apostada: $_selectedBetAmount');
+        print('Resultado: $result');
+        print('Cambio de moneda: $currencyChange');
+        print('Moneda: ${isBetMode ? "diamantes" : "monedas"}');
+      }
+
+      // Asignar puntos de ranking
       switch (result) {
         case GameResultModel.win:
           pointsEarned = 15;
@@ -2115,7 +2154,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       if (currencyChange != 0) {
         final userData = await _firestoreService.getUser(currentUser!.uid);
         if (userData != null) {
-          if (useDiamonds) {
+          if (isBetMode) {
             final currentDiamonds = userData.diamonds;
             final newDiamonds = currentDiamonds + currencyChange;
             await _firestoreService.updateUserDiamonds(
@@ -2128,8 +2167,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           } else {
             final currentCoins = userData.coins;
             final newCoins = currentCoins + currencyChange;
-            await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
-
+            await _firestoreService.updateUserCoins(
+                currentUser!.uid,
+                newCoins
+            );
             setState(() {
               _userCoins = newCoins;
             });
@@ -2137,79 +2178,61 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         }
       }
 
+      // Registrar la partida
       final success = await _firestoreService.recordGameMatch(
         userId: currentUser!.uid,
         gameType: GameTypeModel.chess,
         result: result,
         pointsEarned: pointsEarned,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName:
-            _opponentName ??
+        opponentName: _opponentName ??
             (_isPlayingAgainstBot ? 'Bot Player' : 'Jugador en línea'),
         additionalData: {
-          'gameMode':
-              _isPlayingAgainstBot ? 'online_bot' : 'online_matchmaking',
+          'gameMode': _isPlayingAgainstBot ? 'online_bot' : 'online_matchmaking',
           'matchType': widget.matchType,
-          'timeControl':
-              _selectedTimeMinutes != null
-                  ? '${_selectedTimeMinutes!} minutos'
-                  : 'Sin límite',
+          'timeControl': _selectedTimeMinutes != null
+              ? '${_selectedTimeMinutes!} minutos'
+              : 'Sin límite',
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
           'finalFEN': controller.getFen(),
           'betAmount': _selectedBetAmount,
           'currencyChange': currencyChange,
-          'currencyType': _getCurrencyType(),
+          'currencyType': isBetMode ? 'diamonds' : 'coins',
           'isPlayingAgainstBot': _isPlayingAgainstBot,
-          'botAcceptedBet': _isPlayingAgainstBot && _selectedBetAmount != null,
         },
       );
 
-      if (success) {
-        if (currencyChange > 0) {
-          String currency = _getCurrencyName();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '${S.of(context).youWonShort} $currencyChange $currency!',
-                ),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        } else if (currencyChange < 0) {
-          String currency = _getCurrencyName();
-          if (kDebugMode) {
-            print('Perdiste ${currencyChange.abs()} $currency');
-          }
+      // Mostrar notificaciones
+      if (success && mounted) {
+        String currency = isBetMode ? 'diamantes' : 'monedas';
 
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '${S.of(context).youLost} ${currencyChange.abs()} $currency',
-                ),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        } else if (result == GameResultModel.draw &&
-            _selectedBetAmount != null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '${S.of(context).drawBetReturned} $_selectedBetAmount ${_getCurrencyName()}',
-                ),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
+        if (currencyChange > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('¡Ganaste $currencyChange $currency!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else if (currencyChange < 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Perdiste ${currencyChange.abs()} $currency'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else if (result == GameResultModel.draw) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Empate - Recuperaste ${((_selectedBetAmount! * 0.15).round())} $currency'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
         }
       }
+
     } catch (e) {
       if (kDebugMode) {
         print('Error al registrar la partida: $e');
@@ -2217,7 +2240,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al procesar el resultado de la apuesta'),
+            content: Text('Error al procesar el resultado'),
             backgroundColor: Colors.red,
           ),
         );
@@ -3013,9 +3036,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
   }
 
-  String _getCurrencyType() {
-    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
-  }
+
 
   String _getCurrencyName() {
     return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';

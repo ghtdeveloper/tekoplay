@@ -64,9 +64,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   final AnonymousWalletService _walletService = AnonymousWalletService();
   bool _isScreenKeepOnActive = false;
 
-  bool get isChess => gameType == S.of(context).chess;
-
-  bool get isDomino => gameType == S.of(context).domino;
+  String? _localizedChess;
+  String? _localizedDomino;
+  String? _localizedBet;
+  String? _localizedFun;
 
   List<MultiplayerGameMatch> _previousActiveGames = [];
 
@@ -84,7 +85,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _setupWalletInfoUser();
+    _localizedChess = S.of(context).chess;
+    _localizedDomino = S.of(context).domino;
+    _localizedBet = S.of(context).bet;
+    _localizedFun = S.of(context).fun;
   }
+
+  bool get isChess => gameType == _localizedChess;
+  bool get isDomino => gameType == _localizedDomino;
 
   void _setupWalletInfoUser() {
     if (_currentUser == null) {
@@ -312,9 +320,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
   }
 
-  String _getCurrencyType() {
-    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
-  }
 
   String _getCurrencyName() {
     return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';

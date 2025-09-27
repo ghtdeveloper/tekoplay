@@ -72,6 +72,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   String? _opponentName;
   String? _opponentPhotoUrl;
 
+  bool _localizationsReady = false;
+
   @override
   void initState() {
     super.initState();
@@ -79,9 +81,22 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _gameStartTime = DateTime.now();
     _loadUserCurrency();
     _loadPlayerRankings();
-    _initializeGame();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!_localizationsReady) {
+      _loadUserCurrency();
+      _loadPlayerRankings();
+      _initializeGame();
+      _localizationsReady = true;
+    }
+  }
+
+
 
   // Iniciar timer para el primer movimiento (14 segundos)
   void _startInitialMoveTimer() {
@@ -310,13 +325,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       }
     }
   }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadUserCurrency();
-  }
-
   Future<void> _loadUserCurrency({bool forceRefresh = false}) async {
     if (currentUser == null) return;
     try {
