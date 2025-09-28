@@ -345,7 +345,25 @@
   "toPlay": "to play",
   "yourCurrentBalance": "Your current balance:",
   "firstMove": "(First move:",
-  "waiting": "Waiting"
+  "waiting": "Waiting",
+  "invalidAmountToWithdraw": "Invalid amount to withdraw",
+  "withdrawProcessError": "Error processing the withdrawal",
+  "withdrawDiamonds": "Withdraw Diamonds",
+  "availableToWithdraw": "Available to withdraw",
+  "quickAmounts": "Quick amounts:",
+  "customAmount": "Custom amount",
+  "enterAmountToWithdraw": "Enter the amount to withdraw",
+  "processing": "Processing...",
+  "requestWithdrawal": "Request Withdrawal",
+  "withdrawalsProcessedIn": "Withdrawals are processed within 24-48 business hours"
+
+
+
+
+
+
+
+
 
 
 

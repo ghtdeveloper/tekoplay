@@ -345,7 +345,25 @@
   "toPlay": "para jugar",
   "yourCurrentBalance": "Tu balance actual:",
   "firstMove": "(Primer movimiento:",
-  "waiting": "Esperando"
+  "waiting": "Esperando",
+  "invalidAmountToWithdraw": "Cantidad inválida para retirar",
+  "withdrawProcessError": "Error al procesar el retiro",
+  "withdrawDiamonds": "Retirar Diamantes",
+  "availableToWithdraw": "Disponible para retirar",
+  "quickAmounts": "Cantidades rápidas:",
+  "customAmount": "Cantidad personalizada",
+  "enterAmountToWithdraw": "Ingresa la cantidad a retirar",
+  "processing": "Procesando...",
+  "requestWithdrawal": "Solicitar Retiro",
+  "withdrawalsProcessedIn": "Los retiros se procesan en 24-48 horas hábiles"
+
+
+
+
+
+
+
+
 
 
 

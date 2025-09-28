@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
 import 'package:tekoplay/features/games/common/ranking_screen.dart';
+import 'package:tekoplay/features/games/common/withdraw_dialog.dart';
+import 'package:tekoplay/features/games/common/withdrawal_widget.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../core/models/multiplayer_game_match_chess.dart';
@@ -31,7 +33,7 @@ import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
 import 'game_history_screen.dart';
 
-class GameScreen extends StatefulWidget  {
+class GameScreen extends StatefulWidget {
   final String gameType;
   final String matchType;
 
@@ -68,7 +70,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   String? _localizedDomino;
   String? _localizedBet;
   String? _localizedFun;
-
+  int? _withdrawableDiamonds;
   List<MultiplayerGameMatch> _previousActiveGames = [];
 
   @override
@@ -79,7 +81,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     matchType = widget.matchType;
     _initializeAsync();
   }
-
 
   @override
   void didChangeDependencies() {
@@ -92,6 +93,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   bool get isChess => gameType == _localizedChess;
+
   bool get isDomino => gameType == _localizedDomino;
 
   void _setupWalletInfoUser() {
@@ -102,6 +104,89 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _setupFirestoreWalletListener() {
+    _diamondsSubscription?.cancel();
+
+    _diamondsSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser!.uid)
+        .snapshots()
+        .listen(
+          (DocumentSnapshot document) {
+        if (document.exists && mounted && !_isDisposed) {
+          final userData = document.data() as Map<String, dynamic>;
+          final gameStats = userData['gameStats'] as Map<String, dynamic>? ?? {};
+          final chessStats = gameStats['chess'] as Map<String, dynamic>? ?? {};
+          setState(() {
+            _userDiamonds = userData['diamonds'] ?? 0;
+            _userCoins = userData['coins'] ?? 0;
+            _withdrawableDiamonds = chessStats['diamondsEarned'] ?? 0;
+          });
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          print('Error listening to diamonds: $error');
+        }
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _userDiamonds = 0;
+            _userCoins = 0;
+            _withdrawableDiamonds = 0;
+          });
+        }
+      },
+    );
+  }
+
+  void _showWithdrawalDialog() {
+    if (_currentUser == null ||
+        _withdrawableDiamonds == null ||
+        _withdrawableDiamonds! <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No tienes diamantes disponibles para retirar'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return WithdrawalDialog(
+          withdrawableAmount: _withdrawableDiamonds!,
+          onWithdraw: (amount) => _processWithdrawal(amount),
+        );
+      },
+    );
+  }
+
+  Future<void> _processWithdrawal(int amount) async {
+    try {
+      // Aquí implementarías la lógica de retiro a través de tu servicio
+      // Por ejemplo: await AuthService().withdrawDiamonds(amount);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Solicitud de retiro procesada: $amount diamantes'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error en retiro: $e');
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al procesar el retiro'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -109,13 +194,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-      // App came to foreground
+        // App came to foreground
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
         break;
       case AppLifecycleState.paused:
-      // App went to background - disable wakelock to save battery
+        // App went to background - disable wakelock to save battery
         _disableWakeLock();
         break;
       case AppLifecycleState.detached:
@@ -165,42 +250,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
   }
 
-
   void _setupAnonymousWalletListener() {
     _updateAnonymousWalletUI();
   }
 
-  void _setupFirestoreWalletListener() {
-    _diamondsSubscription?.cancel();
 
-    _diamondsSubscription = FirebaseFirestore.instance
-        .collection('users')
-        .doc(_currentUser!.uid)
-        .snapshots()
-        .listen(
-          (DocumentSnapshot document) {
-            if (document.exists && mounted && !_isDisposed) {
-              final userData = document.data() as Map<String, dynamic>;
-
-              setState(() {
-                _userDiamonds = userData['diamonds'] ?? 0;
-                _userCoins = userData['coins'] ?? 0;
-              });
-            }
-          },
-          onError: (error) {
-            if (kDebugMode) {
-              print('Error listening to diamonds: $error');
-            }
-            if (mounted && !_isDisposed) {
-              setState(() {
-                _userDiamonds = 0;
-                _userCoins = 0;
-              });
-            }
-          },
-        );
-  }
 
   Future<bool> _validateUserFundsForInvitation() async {
     if (_currentUser == null) return false;
@@ -319,7 +373,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           ),
     );
   }
-
 
   String _getCurrencyName() {
     return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
@@ -1133,6 +1186,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                 _showDiamondPurchaseDialog(),
                             },
                       ),
+                      // AGREGAR ESTO: Widget de retiro solo para modo bet
+                      if (matchType == S.of(context).bet) ...[
+                        SizedBox(width: 8),
+                        WithdrawalCounterWidget(
+                          withdrawableAmount: _withdrawableDiamonds ?? 0,
+                          onWithdraw: _showWithdrawalDialog,
+                        ),
+                      ],
                     ],
                   ),
                   _buildNotificationsIcon(),
@@ -1261,202 +1322,236 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _showNotificationsDialog(
-      BuildContext context,
-      List<Map<String, dynamic>> invitations,
-      ) {
+    BuildContext context,
+    List<Map<String, dynamic>> invitations,
+  ) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Container(
-          width: double.infinity,
-          height: 400,
-          padding: EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              width: double.infinity,
+              height: 400,
+              padding: EdgeInsets.all(20),
+              child: Column(
                 children: [
-                  Text(
-                    S.of(context).invitations,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              SizedBox(height: 16),
-              Expanded(
-                child: invitations.isEmpty
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(
-                        Icons.notifications_none,
-                        size: 48,
-                        color: Colors.grey,
-                      ),
-                      SizedBox(height: 16),
                       Text(
-                        S.of(context).noInvitation,
-                        style: TextStyle(color: Colors.grey),
+                        S.of(context).invitations,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
                       ),
                     ],
                   ),
-                )
-                    : ListView.builder(
-                  itemCount: invitations.length,
-                  itemBuilder: (context, index) {
-                    final invitation = invitations[index];
-                    return Card(
-                      margin: EdgeInsets.only(bottom: 8),
-                      child: Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.sports_esports,
-                                  color: Color(0xFFEC7A34),
-                                  size: 24,
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${invitation['fromUserName']} ${S.of(context).invitesYou}',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 2,
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        '${invitation['gameType']}',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
+                  SizedBox(height: 16),
+                  Expanded(
+                    child:
+                        invitations.isEmpty
+                            ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.notifications_none,
+                                    size: 48,
+                                    color: Colors.grey,
                                   ),
-                                ),
-                              ],
+                                  SizedBox(height: 16),
+                                  Text(
+                                    S.of(context).noInvitation,
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            )
+                            : ListView.builder(
+                              itemCount: invitations.length,
+                              itemBuilder: (context, index) {
+                                final invitation = invitations[index];
+                                return Card(
+                                  margin: EdgeInsets.only(bottom: 8),
+                                  child: Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.sports_esports,
+                                              color: Color(0xFFEC7A34),
+                                              size: 24,
+                                            ),
+                                            SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    '${invitation['fromUserName']} ${S.of(context).invitesYou}',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    maxLines: 2,
+                                                  ),
+                                                  SizedBox(height: 4),
+                                                  Text(
+                                                    '${invitation['gameType']}',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(height: 12),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
+                                            TextButton(
+                                              onPressed: () async {
+                                                final result =
+                                                    await GameInvitationService()
+                                                        .respondToInvitation(
+                                                          invitation['id'],
+                                                          false,
+                                                        );
+                                                if (result != null &&
+                                                    result['success'] == true) {
+                                                  Navigator.of(context).pop();
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        S
+                                                            .of(context)
+                                                            .invitationRejected,
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.orange,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              child: Text(
+                                                S.of(context).reject,
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(width: 8),
+                                            ElevatedButton(
+                                              onPressed: () async {
+                                                if (_currentUser == null)
+                                                  return;
+
+                                                final hasEnoughFunds =
+                                                    await _validateUserFundsForInvitation();
+                                                if (!hasEnoughFunds) {
+                                                  Navigator.of(context).pop();
+                                                  return;
+                                                }
+
+                                                showDialog(
+                                                  context: context,
+                                                  barrierDismissible: false,
+                                                  builder:
+                                                      (context) => Center(
+                                                        child:
+                                                            CircularProgressIndicator(),
+                                                      ),
+                                                );
+
+                                                final result =
+                                                    await GameInvitationService()
+                                                        .respondToInvitation(
+                                                          invitation['id'],
+                                                          true,
+                                                        );
+
+                                                Navigator.of(context).pop();
+
+                                                if (result != null &&
+                                                    result['success'] == true &&
+                                                    result['gameId'] != null) {
+                                                  Navigator.of(context).pop();
+
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder:
+                                                          (
+                                                            context,
+                                                          ) => MultiplayerChessScreen(
+                                                            gameId:
+                                                                result['gameId'],
+                                                            isHost: false,
+                                                            matchType:
+                                                                widget
+                                                                    .matchType,
+                                                          ),
+                                                    ),
+                                                  );
+                                                } else {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        S
+                                                            .of(context)
+                                                            .errorAcceptedInvitation,
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Color(
+                                                  0xFFEC7A34,
+                                                ),
+                                                foregroundColor: Colors.white,
+                                              ),
+                                              child: Text(S.of(context).accept),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                            SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton(
-                                  onPressed: () async {
-                                    final result = await GameInvitationService()
-                                        .respondToInvitation(
-                                      invitation['id'],
-                                      false,
-                                    );
-                                    if (result != null && result['success'] == true) {
-                                      Navigator.of(context).pop();
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            S.of(context).invitationRejected,
-                                          ),
-                                          backgroundColor: Colors.orange,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: Text(
-                                    S.of(context).reject,
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    if (_currentUser == null) return;
-
-                                    final hasEnoughFunds = await _validateUserFundsForInvitation();
-                                    if (!hasEnoughFunds) {
-                                      Navigator.of(context).pop();
-                                      return;
-                                    }
-
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (context) => Center(
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    );
-
-                                    final result = await GameInvitationService()
-                                        .respondToInvitation(
-                                      invitation['id'],
-                                      true,
-                                    );
-
-                                    Navigator.of(context).pop();
-
-                                    if (result != null &&
-                                        result['success'] == true &&
-                                        result['gameId'] != null) {
-                                      Navigator.of(context).pop();
-
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => MultiplayerChessScreen(
-                                            gameId: result['gameId'],
-                                            isHost: false,
-                                            matchType: widget.matchType,
-                                          ),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            S.of(context).errorAcceptedInvitation,
-                                          ),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Color(0xFFEC7A34),
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: Text(S.of(context).accept),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
