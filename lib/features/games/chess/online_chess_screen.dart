@@ -2152,11 +2152,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         if (userData != null) {
           if (isBetMode) {
             final currentDiamonds = userData.diamonds;
+            final currentDiamondsEarned = userData.diamondsEarned;
             final newDiamonds = currentDiamonds + currencyChange;
+            final newDiamondsEarned = currentDiamondsEarned + newDiamonds;
             await _firestoreService.updateUserDiamonds(
               currentUser!.uid,
               newDiamonds,
             );
+            await _firestoreService.updateUserDiamondsEarned( currentUser!.uid,
+                newDiamondsEarned);
             setState(() {
               _userDiamonds = newDiamonds;
             });
@@ -2174,7 +2178,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         }
       }
 
-      // Registrar la partida
       final success = await _firestoreService.recordGameMatch(
         userId: currentUser!.uid,
         gameType: GameTypeModel.chess,
@@ -2198,7 +2201,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         },
       );
 
-      // Mostrar notificaciones
       if (success && mounted) {
         String currency = isBetMode ? 'diamantes' : 'monedas';
 

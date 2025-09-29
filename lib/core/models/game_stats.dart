@@ -9,8 +9,6 @@ class GameStats {
   final int losses;
   final int draws;
   final int totalPlayTimeMinutes;
-  final int coinsEarned;
-  final int diamondsEarned;
   final DateTime lastPlayed;
 
   GameStats({
@@ -21,8 +19,6 @@ class GameStats {
     this.losses = 0,
     this.draws = 0,
     this.totalPlayTimeMinutes = 0,
-    this.coinsEarned = 0,
-    this.diamondsEarned = 0,
     DateTime? lastPlayed,
   }) : lastPlayed = lastPlayed ?? DateTime.now();
 
@@ -54,8 +50,6 @@ class GameStats {
       wins: data['wins'] ?? 0,
       losses: data['losses'] ?? 0,
       draws: data['draws'] ?? 0,
-      coinsEarned: data['coinsEarned'] ?? 0,
-      diamondsEarned: data['diamondsEarned'] ?? 0,
       totalPlayTimeMinutes: data['totalPlayTimeMinutes'] ?? 0,
       lastPlayed:
           data['lastPlayed'] != null
@@ -71,8 +65,6 @@ class GameStats {
       'wins': wins,
       'losses': losses,
       'draws': draws,
-      'coinsEarned': coinsEarned,
-      'diamondsEarned': diamondsEarned,
       'totalPlayTimeMinutes': totalPlayTimeMinutes,
       'lastPlayed': Timestamp.fromDate(lastPlayed),
     };
@@ -96,8 +88,6 @@ class GameStats {
       wins: wins ?? this.wins,
       losses: losses ?? this.losses,
       draws: draws ?? this.draws,
-      coinsEarned: coinsEarned ?? this.coinsEarned,
-      diamondsEarned: diamondsEarned ?? this.diamondsEarned,
       totalPlayTimeMinutes: totalPlayTimeMinutes ?? this.totalPlayTimeMinutes,
       lastPlayed: lastPlayed ?? this.lastPlayed,
     );

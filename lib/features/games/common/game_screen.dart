@@ -115,12 +115,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           (DocumentSnapshot document) {
         if (document.exists && mounted && !_isDisposed) {
           final userData = document.data() as Map<String, dynamic>;
-          final gameStats = userData['gameStats'] as Map<String, dynamic>? ?? {};
-          final chessStats = gameStats['chess'] as Map<String, dynamic>? ?? {};
           setState(() {
             _userDiamonds = userData['diamonds'] ?? 0;
             _userCoins = userData['coins'] ?? 0;
-            _withdrawableDiamonds = chessStats['diamondsEarned'] ?? 0;
+            _withdrawableDiamonds = userData['diamondsEarned'] ?? 0;
           });
         }
       },
@@ -194,7 +192,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-        // App came to foreground
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }

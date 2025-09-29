@@ -273,6 +273,17 @@ class FirestoreService {
     }
   }
 
+  Future<bool> updateUserDiamondsEarned(String userId, int newDiamonds) async {
+    try {
+      await _firestore.collection(_usersCollection).doc(userId).update({
+        'diamondsEarned': newDiamonds,
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> updateGamePoints(
     String userId,
     GameTypeModel gameType,
@@ -286,42 +297,6 @@ class FirestoreService {
     } catch (e) {
       if (kDebugMode) {
         print('Error updating game points: $e');
-      }
-      return false;
-    }
-  }
-
-  Future<bool> updateCoinsEarned(
-      String userId,
-      GameTypeModel gameType,
-      int newCoins,
-      ) async {
-    try {
-      await _firestore.collection(_usersCollection).doc(userId).update({
-        'gameStats.${gameType.id}.coinsEarned': newCoins,
-      });
-      return true;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error updating new coins earned$e');
-      }
-      return false;
-    }
-  }
-
-  Future<bool> updateDiamondEarned(
-      String userId,
-      GameTypeModel gameType,
-      int newCoins,
-      ) async {
-    try {
-      await _firestore.collection(_usersCollection).doc(userId).update({
-        'gameStats.${gameType.id}.diamondsEarned': newCoins,
-      });
-      return true;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error updating new coins earned$e');
       }
       return false;
     }

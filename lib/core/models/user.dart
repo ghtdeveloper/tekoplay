@@ -13,6 +13,7 @@ class UserModel {
   final DateTime createdAt;
   final int coins;
   final int diamonds;
+  final int diamondsEarned;
   final Map<GameTypeModel, GameStats> gameStats;
 
   UserModel({
@@ -23,6 +24,7 @@ class UserModel {
     required this.createdAt,
     this.coins = 500,
     this.diamonds = 0,
+    this.diamondsEarned = 0,
     Map<GameTypeModel, GameStats>? gameStats,
   }) : gameStats = gameStats ?? _initializeGameStats();
 
@@ -59,6 +61,7 @@ class UserModel {
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       coins: data['coins'] ?? 500,
       diamonds: data['diamonds'] ?? 25,
+      diamondsEarned: data['diamondsEarned'] ?? 25,
       gameStats: gameStats,
     );
   }
@@ -76,6 +79,7 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'coins': coins,
       'diamonds': diamonds,
+      'diamondsEarned': diamondsEarned,
       'gameStats': gameStatsData,
     };
   }
@@ -88,6 +92,7 @@ class UserModel {
     DateTime? createdAt,
     int? coins,
     int? diamonds,
+    int? diamondsEarned,
     Map<GameTypeModel, GameStats>? gameStats,
   }) {
     return UserModel(
@@ -98,6 +103,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       coins: coins ?? this.coins,
       diamonds: diamonds ?? this.diamonds,
+      diamondsEarned: diamondsEarned ?? this.diamondsEarned,
       gameStats: gameStats ?? this.gameStats,
     );
   }

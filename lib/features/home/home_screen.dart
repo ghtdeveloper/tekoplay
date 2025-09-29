@@ -1054,7 +1054,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
               );
               _loadCurrentUser();
-              await _loadAndApplyVolume();
             },
           ),
         ],
