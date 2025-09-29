@@ -313,6 +313,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _playerTimer = null;
     _botMoveTimer?.cancel();
     _botMoveTimer = null;
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
   }
 
   Widget _buildTimeSelectionScreen() {
@@ -1746,96 +1748,95 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     );
   }
 
+
   void _showTimeoutDialog({required bool isMyTimeout}) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(
-                  Icons.timer_off,
-                  color: isMyTimeout ? Colors.red : Colors.green,
-                  size: 28,
-                ),
-                SizedBox(width: 12),
-                Text(
-                  isMyTimeout ? S.of(context).timeOut : S.of(context).youWon,
-                  style: TextStyle(
-                    color: isMyTimeout ? Colors.red : Colors.green,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.timer_off,
+              color: isMyTimeout ? Colors.red : Colors.green,
+              size: 28,
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isMyTimeout ? Colors.red[50] : Colors.green[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color:
-                          isMyTimeout ? Colors.red[200]! : Colors.green[200]!,
+            SizedBox(width: 12),
+            Text(
+              isMyTimeout ? S.of(context).timeOut : S.of(context).youWon,
+              style: TextStyle(
+                color: isMyTimeout ? Colors.red : Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isMyTimeout ? Colors.red[50] : Colors.green[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isMyTimeout ? Colors.red[200]! : Colors.green[200]!,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    isMyTimeout ? Icons.timer_off : Icons.emoji_events,
+                    size: 48,
+                    color: isMyTimeout ? Colors.red : Colors.green,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    isMyTimeout
+                        ? S.of(context).youLostByTimeout
+                        : S.of(context).opponentLostByTimeout,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isMyTimeout ? Colors.red[800] : Colors.green[800],
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        isMyTimeout ? Icons.timer_off : Icons.emoji_events,
-                        size: 48,
-                        color: isMyTimeout ? Colors.red : Colors.green,
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        isMyTimeout
-                            ? S.of(context).youLostByTimeout
-                            : S.of(context).opponentLostByTimeout,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color:
-                              isMyTimeout ? Colors.red[800] : Colors.green[800],
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        isMyTimeout
-                            ? S.of(context).timeRunOutMessage
-                            : S.of(context).opponentTimeRunOutMessage,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                      ),
-                    ],
+                  SizedBox(height: 8),
+                  Text(
+                    isMyTimeout
+                        ? S.of(context).timeRunOutMessage
+                        : S.of(context).opponentTimeRunOutMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                child: Text(S.of(context).exit),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.green,
-                  backgroundColor: Colors.green[50],
-                ),
-                child: Text(S.of(context).playAgain),
-              ),
-            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _resetGameState();
+              Navigator.of(context).pop();
+            },
+            child: Text(S.of(context).exit),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _resetGameState();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.green,
+              backgroundColor: Colors.green[50],
+            ),
+            child: Text(S.of(context).playAgain),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2107,16 +2108,13 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
 
-      // Determinar el tipo de juego
       bool isBetMode = widget.matchType == S.of(context).bet;
       bool isFunMode = widget.matchType == S.of(context).fun;
 
-      // IMPORTANTE: La cantidad apostada debe existir en ambos modos
       if (_selectedBetAmount == null) {
         throw Exception('No hay cantidad apostada definida');
       }
 
-      // Calcular el cambio de moneda
       final calculations = GameCalculator.calculateForBothPlayers(
         playerResult: result,
         isBetMode: isBetMode,
@@ -2126,7 +2124,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       int currencyChange = calculations['player'] ?? 0;
 
-      // Debug logging
       if (kDebugMode) {
         print('=== DEBUG APUESTA ===');
         print('Modo: ${widget.matchType}');
@@ -2138,7 +2135,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         print('Moneda: ${isBetMode ? "diamantes" : "monedas"}');
       }
 
-      // Asignar puntos de ranking
       switch (result) {
         case GameResultModel.win:
           pointsEarned = 15;
@@ -2258,6 +2254,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _cancelMatchmaking(String reason) {
+    _resetGameState();
     _matchmakingTimer?.cancel();
     _matchmakingTimer = null;
     if (mounted) {
@@ -2297,43 +2294,30 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: Text(S.of(context).gameOver),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [Text(message, textAlign: TextAlign.center)],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                child: Text(S.of(context).exit),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  setState(() {
-                    _gameState = OnlineGameState.timeSelection;
-                    _selectedTimeMinutes = null;
-                    _currentGame = null;
-                    _gameEnded = false;
-                    _gameStartTime = null;
-                    _isPlayingAgainstBot = false;
-                    _isMyTurn = false;
-                    _myColor = null;
-                    _opponentName = null;
-                    _opponentPhotoUrl = null;
-                    controller.resetBoard();
-                    _cleanupTimers();
-                  });
-                },
-                child: Text(S.of(context).playAgain),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Text(S.of(context).gameOver),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [Text(message, textAlign: TextAlign.center)],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _resetGameState();
+              Navigator.of(context).pop();
+            },
+            child: Text(S.of(context).exit),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _resetGameState();
+            },
+            child: Text(S.of(context).playAgain),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2390,6 +2374,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       _interstitialHelper.forceShowAd(
         onComplete: () {
+          _resetGameState();
           Navigator.of(context).pop();
         },
       );
@@ -2417,79 +2402,132 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     _interstitialHelper.forceShowAd(
       onComplete: () {
+        _resetGameState();
         Navigator.of(context).pop();
       },
     );
   }
 
+  void _resetGameState() {
+    _matchmakingTimer?.cancel();
+    _matchmakingTimer = null;
+    _gameTimer?.cancel();
+    _gameTimer = null;
+    _playerTimer?.cancel();
+    _playerTimer = null;
+    _botMoveTimer?.cancel();
+    _botMoveTimer = null;
+    _gameSubscription?.cancel();
+    _gameSubscription = null;
+    _betNegotiationSubscription?.cancel();
+    _betNegotiationSubscription = null;
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _activeGameId = null;
+
+    setState(() {
+      _gameState = OnlineGameState.timeSelection;
+      _selectedTimeMinutes = null;
+      _selectedBetAmount = null;
+      _currentGame = null;
+      _gameEnded = false;
+      _gameStartTime = null;
+      _isPlayingAgainstBot = false;
+      _isMyTurn = false;
+      _myColor = null;
+      _opponentName = null;
+      _opponentPhotoUrl = null;
+      _myRanking = null;
+      _opponentRanking = null;
+      _showLastMove = false;
+      _lastMoveFromSquare = null;
+      _lastMoveToSquare = null;
+      _lastMoveWasMine = false;
+      _myTimeSeconds = 0;
+      _opponentTimeSeconds = 0;
+      _waitingForMoveResponse = false;
+      _matchmakingSeconds = 0;
+
+      _isBetNegotiating = false;
+      _betAccepted = false;
+      _betState = BetNegotiationState.selecting;
+      _pendingGameId = null;
+      _opponentBetAmount = null;
+    });
+
+    // TERCERO: Resetear el tablero
+    controller.resetBoard();
+  }
+
+
   void _showOpponentAbandonedDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.blue, size: 28),
-                SizedBox(width: 12),
-                Text(S.of(context).opponentLeft),
-              ],
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.blue, size: 28),
+            SizedBox(width: 12),
+            Text(S.of(context).opponentLeft),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              S.of(context).opponentAbandonedMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  S.of(context).opponentAbandonedMessage,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16),
-                ),
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green[200]!),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green[200]!),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.emoji_events, color: Colors.green, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    S.of(context).youWon,
+                    style: TextStyle(
+                      color: Colors.green[800],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.emoji_events, color: Colors.green, size: 24),
-                      SizedBox(width: 8),
-                      Text(
-                        S.of(context).youWon,
-                        style: TextStyle(
-                          color: Colors.green[800],
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                child: Text(S.of(context).exit),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.green,
-                  backgroundColor: Colors.green[50],
-                ),
-                child: Text(S.of(context).findNewOpponent),
-              ),
-            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _resetGameState();
+              Navigator.of(context).pop();
+            },
+            child: Text(S.of(context).exit),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _resetGameState();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.green,
+              backgroundColor: Colors.green[50],
+            ),
+            child: Text(S.of(context).findNewOpponent),
+          ),
+        ],
+      ),
     );
   }
 
