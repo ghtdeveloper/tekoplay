@@ -35,6 +35,14 @@ class MultiplayerGameMatch {
   final DateTime? endTime;
   final String? drawOffer;
   final DateTime? drawOfferTime;
+  final int? hostQuota;
+  final int? guestQuota;
+  final int? totalPot;
+  final bool quotasCollected;
+  final bool rewardsDistributed;
+  final String currencyType;
+  final int? hostBalanceSnapshot;
+  final int? guestBalanceSnapshot;
 
   MultiplayerGameMatch({
     required this.id,
@@ -67,6 +75,14 @@ class MultiplayerGameMatch {
     this.endTime,
     this.drawOffer,
     this.drawOfferTime,
+    this.hostQuota,
+    this.guestQuota,
+    this.totalPot,
+    this.quotasCollected = false,
+    this.rewardsDistributed = false,
+    this.currencyType = 'coins',
+    this.hostBalanceSnapshot,
+    this.guestBalanceSnapshot,
   });
 
   factory MultiplayerGameMatch.fromFirestore(DocumentSnapshot doc) {
@@ -127,6 +143,14 @@ class MultiplayerGameMatch {
           data['drawOfferTime'] != null
               ? (data['drawOfferTime'] as Timestamp).toDate()
               : null,
+      hostQuota: data['hostQuota'],
+      guestQuota: data['guestQuota'],
+      totalPot: data['totalPot'],
+      quotasCollected: data['quotasCollected'] ?? false,
+      rewardsDistributed: data['rewardsDistributed'] ?? false,
+      currencyType: data['currencyType'] ?? 'coins',
+      hostBalanceSnapshot: data['hostBalanceSnapshot'],
+      guestBalanceSnapshot: data['guestBalanceSnapshot'],
     );
   }
 
@@ -168,6 +192,14 @@ class MultiplayerGameMatch {
       'drawOffer': drawOffer,
       'drawOfferTime':
           drawOfferTime != null ? Timestamp.fromDate(drawOfferTime!) : null,
+      'hostQuota': hostQuota,
+      'guestQuota': guestQuota,
+      'totalPot': totalPot,
+      'quotasCollected': quotasCollected,
+      'rewardsDistributed': rewardsDistributed,
+      'currencyType': currencyType,
+      'hostBalanceSnapshot': hostBalanceSnapshot,
+      'guestBalanceSnapshot': guestBalanceSnapshot,
     };
   }
 

@@ -7,6 +7,7 @@ import '../models/multiplayer_game_match_chess.dart';
 import '../utils/game_result.dart';
 import '../utils/game_type.dart';
 import 'firestore_service.dart';
+import 'game_quota_service.dart';
 
 class MultiplayerGameService {
   static final MultiplayerGameService _instance =
@@ -29,9 +30,18 @@ class MultiplayerGameService {
     int? betAmount,
     String? hostPhotoUrl,
     String? guestPhotoUrl,
+    String currencyType = 'coins',
   }) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc();
+
+      int quotaAmount;
+      if (betAmount != null) {
+        quotaAmount = betAmount;
+        currencyType = 'diamonds';
+      } else {
+        quotaAmount = currencyType == 'diamonds' ? 25 : 100;
+      }
 
       final game = MultiplayerGameMatch(
         id: gameRef.id,
@@ -50,12 +60,31 @@ class MultiplayerGameService {
         startedAt: guestId != null ? DateTime.now() : null,
         isRanked: isRanked,
         betAmount: betAmount,
+        currencyType: currencyType,
+        hostQuota: quotaAmount,
+        guestQuota: guestId != null ? quotaAmount : null,
+        quotasCollected: false,
+        rewardsDistributed: false,
       );
 
       await gameRef.set(game.toFirestore());
 
+      if (guestId != null) {
+        final quotaService = GameQuotaService();
+        await quotaService.collectQuotas(
+          gameId: gameRef.id,
+          hostId: hostId,
+          guestId: guestId,
+          quotaAmount: quotaAmount,
+          currencyType: currencyType,
+        );
+      }
+
       return gameRef.id;
     } catch (e) {
+      if (kDebugMode) {
+        print('💥 Error creando juego: $e');
+      }
       return null;
     }
   }
@@ -82,10 +111,36 @@ class MultiplayerGameService {
         'guestPhotoUrl': playerPhotoUrl,
         'status': 'active',
         'startedAt': FieldValue.serverTimestamp(),
+        'guestQuota': game.hostQuota,
       });
+
+      if (game.hostQuota != null) {
+        final quotaService = GameQuotaService();
+        final result = await quotaService.collectQuotas(
+          gameId: gameId,
+          hostId: game.hostId,
+          guestId: playerId,
+          quotaAmount: game.hostQuota!,
+          currencyType: game.currencyType,
+        );
+
+        if (result['success'] != true) {
+          await gameRef.update({
+            'guestId': null,
+            'guestName': null,
+            'guestPhotoUrl': null,
+            'status': 'waiting',
+            'startedAt': null,
+          });
+          return false;
+        }
+      }
 
       return true;
     } catch (e) {
+      if (kDebugMode) {
+        print('💥 Error uniéndose al juego: $e');
+      }
       return false;
     }
   }
@@ -212,15 +267,31 @@ class MultiplayerGameService {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
 
+      // ✅ PRIMERO: Verificar si quotasCollected está en true
+      final gameDoc = await gameRef.get();
+      if (!gameDoc.exists) return false;
+
+      final gameData = gameDoc.data() as Map<String, dynamic>;
+      final quotasCollected = gameData['quotasCollected'] ?? false;
+
+
+      if (!quotasCollected) {
+        if (kDebugMode) {
+          print('⚠️ ADVERTENCIA: Finalizando juego sin cuotas cobradas');
+          print('   gameId: $gameId');
+          print('   quotasCollected: $quotasCollected');
+        }
+      }
+
       await gameRef.update({
         'status': 'finished',
         'result': result.toString().split('.').last,
         'winnerId': winnerId,
         'finishedAt': FieldValue.serverTimestamp(),
         'reason': reason,
+        'quotasCollected': true,
       });
 
-      final gameDoc = await gameRef.get();
       if (gameDoc.exists) {
         final game = MultiplayerGameMatch.fromFirestore(gameDoc);
         await _updatePlayerStats(game, result);
@@ -229,7 +300,7 @@ class MultiplayerGameService {
       return true;
     } catch (e) {
       if (kDebugMode) {
-        print('Error finishing game: $e');
+        print('💥 Error finishing game: $e');
       }
       return false;
     }

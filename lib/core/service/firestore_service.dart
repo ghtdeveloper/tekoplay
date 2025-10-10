@@ -411,7 +411,15 @@ class FirestoreService {
       final user = UserModel.fromFirestore(userDoc);
       final updatedUser = user.updateAfterMatch(match);
 
-      batch.update(userDoc.reference, updatedUser.toFirestore());
+      final Map<String, dynamic> updates = {
+        'gameStats': updatedUser.gameStats.map(
+              (gameType, stats) => MapEntry(gameType.id, stats.toFirestore()),
+        ),
+        'totalPoints': updatedUser.totalPoints,
+      };
+
+
+      batch.update(userDoc.reference, updates);
 
       await batch.commit();
       return true;
@@ -584,9 +592,6 @@ class FirestoreService {
       return false;
     }
   }
-
-  // Extensión para tu FirestoreService existente
-// Agregar estos métodos a tu clase FirestoreService
 
   // Buscar usuario por email
   Future<UserModel?> findUserByEmail(String email) async {

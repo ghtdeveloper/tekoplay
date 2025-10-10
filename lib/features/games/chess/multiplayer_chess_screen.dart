@@ -9,7 +9,6 @@ import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/multiplayer_game_service.dart';
-import '../../../core/utils/game_earnings_calculator.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../../core/utils/game_result.dart';
@@ -346,128 +345,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     }
   }
 
-  Future<void> _validateUserFunds() async {
-    if (currentUser == null) return;
-
-    final betString = S.of(context).bet;
-    final userDataLoadError = S.of(context).userDataLoadError;
-
-    try {
-      await _loadUserCurrency();
-      final currentBalance = _getCurrentBalance() ?? 0;
-      final betAmount = _selectedBetAmount ?? 0;
-      bool hasInsufficientFunds = false;
-
-      if (widget.matchType == betString) {
-        hasInsufficientFunds = currentBalance < betAmount || currentBalance <= 0;
-      } else {
-        hasInsufficientFunds = currentBalance < 100;
-      }
-
-      if (hasInsufficientFunds) {
-        _showInsufficientFundsDialog();
-        return;
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('💥 Error validating user funds: $e');
-      }
-      _showErrorAndExit(userDataLoadError);
-    }
-  }
-
-  void _showInsufficientFundsDialog() {
-    if (!mounted) return;
-
-    final currencyName = _getCurrencyName();
-    final currencyIcon = _getCurrencyIcon();
-    final betAmount = _selectedBetAmount ?? 0;
-    final currentBalance = _getCurrentBalance() ?? 0;
-
-    String title = S.of(context).insufficientFunds;
-    String message;
-
-    if (widget.matchType == S.of(context).bet) {
-      message = '${S.of(context).insufficientFunds} $currencyName ${S.of(context).toJoinThisGame}\n\n'
-          '${S.of(context).youNeed}: $betAmount $currencyName\n'
-          '${S.of(context).youHave}: $currentBalance $currencyName\n\n'
-          '${S.of(context).buyMore} $currencyName ${S.of(context).inOurStore}';
-    } else {
-      message = '${S.of(context).youDontHave}$currencyName ${S.of(context).enoughToPlay}.\n\n'
-          '${S.of(context).needAtLeast100} $currencyName${S.of(context).toParticipate}.\n'
-          '${S.of(context).youHave}: $currentBalance $currencyName\n\n'
-          '${S.of(context).buyMore} $currencyName ${S.of(context).inOurStore}';
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning, color: Colors.orange, size: 24),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                title,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Icon(currencyIcon, size: 48, color: Colors.red),
-                  SizedBox(height: 12),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 16),
-          ],
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        actions: [
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            icon: Icon(Icons.arrow_back),
-            label: Text(S.of(context).back ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  String _getCurrencyType() {
-    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
-  }
-
   String _getCurrencyName() {
     return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
   }
@@ -518,7 +395,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _showErrorAndExit(S.of(context).userNotFound);
       return;
     }
-    _validateUserFunds();
     _gameSubscription = _gameService
         .getGameStream(widget.gameId)
         .listen(
@@ -550,14 +426,56 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     final previousGame = _currentGame;
     _currentGame = game;
 
+    // Configuración inicial del juego
     if (previousGame == null) {
       _setupGameInfo(game);
       _loadPlayerRankings();
     }
 
-    // Verificar si el juego comenzó (ambos jugadores presentes)
+    // Detectar cuando se cobran las cuotas por primera vez
+    if (previousGame != null &&
+        !previousGame.quotasCollected &&
+        game.quotasCollected) {
+      if (kDebugMode) {
+        print('✅ Cuotas cobradas exitosamente');
+        print('   Total Pot: ${game.totalPot}');
+        print('   Currency Type: ${game.currencyType}');
+      }
+
+      // Recargar el balance actualizado después del cobro
+      _loadUserCurrency(forceRefresh: true);
+
+      // Opcional: Mostrar mensaje al usuario
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Cuotas cobradas. ¡El juego está listo!',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[700],
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+
+    // Verificar si el juego comenzó (ambos jugadores presentes y activo)
     if (!_gameStarted && game.status == 'active' && game.guestId != null) {
       _gameStarted = true;
+
+      if (kDebugMode) {
+        print('🎮 Juego iniciado - Guest: ${game.guestName}');
+      }
 
       // Si es mi turno al inicio del juego, iniciar timer
       if (game.isPlayerTurn(currentUser!.uid)) {
@@ -566,22 +484,40 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           _playerTimeSeconds = 60;
         });
         _startInitialMoveTimer();
+
+        if (kDebugMode) {
+          print('⏰ Timer iniciado - Es tu turno');
+        }
       }
     }
 
+    // Verificar cambio de turno
     final wasMyTurn = _isMyTurn;
     _isMyTurn = game.isPlayerTurn(currentUser!.uid);
 
+    // Determinar si necesitamos sincronizar el tablero
     bool shouldSync = false;
 
     if (previousGame == null) {
       shouldSync = true;
     } else {
+      // Sincronizar si cambió el número de movimientos
       if (previousGame.moves.length != game.moves.length) {
         shouldSync = true;
         _waitingForMoveResponse = false;
-      } else if (previousGame.currentFen != game.currentFen) {
+
+        if (kDebugMode) {
+          print('🔄 Sincronizando - Nuevo movimiento detectado');
+          print('   Movimientos: ${previousGame.moves.length} -> ${game.moves.length}');
+        }
+      }
+      // Sincronizar si cambió el FEN
+      else if (previousGame.currentFen != game.currentFen) {
         shouldSync = true;
+
+        if (kDebugMode) {
+          print('🔄 Sincronizando - FEN actualizado');
+        }
       }
     }
 
@@ -591,34 +527,95 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     // Manejar cambio de turno
     if (_gameStarted && wasMyTurn != _isMyTurn) {
+      // Cancelar timers existentes
       _playerTimer?.cancel();
       _initialMoveTimer?.cancel();
 
       if (_isMyTurn) {
-        // Es mi turno ahora
+        // Ahora es mi turno
         setState(() {
           _playerTimeSeconds = 60; // Reset a 1 minuto
         });
+
         if (!_hasPlayerMovedOnce) {
           _startInitialMoveTimer();
+          if (kDebugMode) {
+            print('⏰ Timer inicial de 14 segundos iniciado');
+          }
         } else {
           _startPlayerTimer();
+          if (kDebugMode) {
+            print('⏰ Timer de 60 segundos iniciado');
+          }
+        }
+      } else {
+        // Ya no es mi turno
+        if (kDebugMode) {
+          print('⏸️ No es tu turno - Esperando movimiento del oponente');
         }
       }
     }
 
+    // Manejar juego abandonado
     if (game.isAbandoned && !_gameEnded) {
+      if (kDebugMode) {
+        print('🚪 Juego abandonado detectado');
+        print('   Abandonado por: ${game.abandonedBy}');
+        print('   Ganador: ${game.winnerId}');
+      }
 
       if (game.didOpponentAbandon(currentUser!.uid)) {
+        // El oponente abandonó - Yo gané
         _handleOpponentAbandoned(game);
       } else if (game.didIAbandon(currentUser!.uid) && !_hasUserExitedGame) {
+        // Yo abandoné
         _gameEnded = true;
+
+        if (kDebugMode) {
+          print('🚪 Tú abandonaste el juego');
+        }
       }
-    } else if (!_gameEnded && game.isFinished) {
+    }
+    // Manejar juego finalizado normalmente
+    else if (!_gameEnded && game.isFinished) {
       _gameEnded = true;
+
+      if (kDebugMode) {
+        print('🏁 Juego finalizado');
+        print('   Resultado: ${game.result}');
+        print('   Ganador: ${game.winnerId}');
+      }
+
       _handleGameEnd(game);
-    } else if (game.status == 'waiting' && previousGame?.status == 'active') {
+    }
+    // Manejar desconexión del oponente
+    else if (game.status == 'waiting' && previousGame?.status == 'active') {
+      if (kDebugMode) {
+        print('📡 Oponente desconectado temporalmente');
+      }
       _showOpponentDisconnected();
+    }
+
+    // Detectar distribución de recompensas
+    if (previousGame != null &&
+        !previousGame.rewardsDistributed &&
+        game.rewardsDistributed) {
+      if (kDebugMode) {
+        print('💰 Recompensas distribuidas por Cloud Function');
+        if (game.toFirestore()['distribution'] != null) {
+          final distribution = game.toFirestore()['distribution'];
+          print('   Host reward: ${distribution['hostReward']}');
+          print('   Guest reward: ${distribution['guestReward']}');
+          print('   House commission: ${distribution['houseCommission']}');
+        }
+      }
+
+      // Recargar balance después de la distribución
+      Future.delayed(Duration(seconds: 1), () {
+        if (mounted) {
+          _loadUserCurrency(forceRefresh: true);
+        }
+      });
     }
 
     setState(() {});
@@ -647,7 +644,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           children: [
             Icon(Icons.person_off, color: Colors.orange, size: 24),
             SizedBox(width: 8),
-            Expanded( // Previene overflow del título
+            Expanded(
               child: Text(
                 S.of(context).gameOver,
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -656,7 +653,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
             ),
           ],
         ),
-        content: SingleChildScrollView( // Permite scroll si el contenido es muy largo
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -838,9 +835,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     _selectedBetAmount = game.betAmount;
 
-    Future.delayed(Duration.zero, () {
-      _validateUserFunds();
-    });
   }
 
   void _syncGameState() {
@@ -982,49 +976,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   Future<void> _recordGameResult(GameResultModel result) async {
     if (currentUser == null || _gameStartTime == null || _currentGame == null) return;
-
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
       int pointsEarned = 0;
-      bool isApuesta = widget.matchType == S.of(context).bet;
 
-      final myUserId = currentUser!.uid;
-      final opponentId = _currentGame!.hostId == myUserId
-          ? _currentGame!.guestId
-          : _currentGame!.hostId;
-
-      if (opponentId == null) {
-        return;
-      }
-
-      // Calcular cambios de moneda para cada jugador
-      int myCurrencyChange = GameCalculator.calculate(
-        result: result,
-        isBetMode: isApuesta,
-        betAmount: _selectedBetAmount,
-      );
-
-      // El oponente tiene el resultado opuesto
-      GameResultModel opponentResult;
-      switch (result) {
-        case GameResultModel.win:
-          opponentResult = GameResultModel.loss;
-          break;
-        case GameResultModel.loss:
-          opponentResult = GameResultModel.win;
-          break;
-        case GameResultModel.draw:
-          opponentResult = GameResultModel.draw;
-          break;
-      }
-
-      int opponentCurrencyChange = GameCalculator.calculate(
-        result: opponentResult,
-        isBetMode: isApuesta,
-        betAmount: _selectedBetAmount,
-      );
-
-      // Calcular puntos
       switch (result) {
         case GameResultModel.win:
           pointsEarned = 15;
@@ -1041,149 +996,29 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         pointsEarned = (pointsEarned * 1.5).round();
       }
 
-      // Actualizar monedas de ambos jugadores
-      await _updateBothPlayersBalance(
-        myUserId: myUserId,
-        opponentId: opponentId,
-        myCurrencyChange: myCurrencyChange,
-        opponentCurrencyChange: opponentCurrencyChange,
-        isApuesta: isApuesta,
-      );
-
-      // También registrar la partida para el oponente
-      await _recordOpponentGameResult(
-        opponentId: opponentId,
-        result: opponentResult,
-        gameDuration: gameDuration,
-        opponentCurrencyChange: opponentCurrencyChange,
-      );
-
-    } catch (e) {
-      if (mounted && currentUser != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al guardar el resultado de la partida'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _updateBothPlayersBalance({
-    required String myUserId,
-    required String opponentId,
-    required int myCurrencyChange,
-    required int opponentCurrencyChange,
-    required bool isApuesta,
-  }) async {
-    try {
-      // Obtener datos actuales de ambos usuarios
-      final futures = await Future.wait([
-        _firestoreService.getUser(myUserId),
-        _firestoreService.getUser(opponentId),
-      ]);
-
-      final myUserData = futures[0];
-      final opponentUserData = futures[1];
-
-      if (myUserData == null || opponentUserData == null) {
-        return;
-      }
-
-      // Actualizar mi balance
-      if (myCurrencyChange != 0) {
-        if (isApuesta) {
-          final myCurrentDiamonds = myUserData.diamonds;
-          final myNewDiamonds = (myCurrentDiamonds + myCurrencyChange).clamp(0, double.infinity).toInt();
-          await _firestoreService.updateUserDiamonds(myUserId, myNewDiamonds);
-          setState(() => _userDiamonds = myNewDiamonds);
-        } else {
-          final myCurrentCoins = myUserData.coins;
-          final myNewCoins = (myCurrentCoins + myCurrencyChange).clamp(0, double.infinity).toInt();
-          await _firestoreService.updateUserCoins(myUserId, myNewCoins);
-          setState(() => _userCoins = myNewCoins);
-        }
-      }
-
-      // Actualizar balance del oponente
-      if (opponentCurrencyChange != 0) {
-        if (isApuesta) {
-          final opponentCurrentDiamonds = opponentUserData.diamonds;
-          final opponentNewDiamonds = (opponentCurrentDiamonds + opponentCurrencyChange).clamp(0, double.infinity).toInt();
-          await _firestoreService.updateUserDiamonds(opponentId, opponentNewDiamonds);
-        } else {
-          final opponentCurrentCoins = opponentUserData.coins;
-          final opponentNewCoins = (opponentCurrentCoins + opponentCurrencyChange).clamp(0, double.infinity).toInt();
-          await _firestoreService.updateUserCoins(opponentId, opponentNewCoins);
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('💥 Error actualizando balance de jugadores: $e');
-      }
-    }
-  }
-
-
-  Future<void> _recordOpponentGameResult({
-    required String opponentId,
-    required GameResultModel result,
-    required int gameDuration,
-    required int opponentCurrencyChange,
-  }) async {
-    try {
-      int opponentPointsEarned = 0;
-
-      switch (result) {
-        case GameResultModel.win:
-          opponentPointsEarned = 15;
-          break;
-        case GameResultModel.loss:
-          opponentPointsEarned = -5;
-          break;
-        case GameResultModel.draw:
-          opponentPointsEarned = 5;
-          break;
-      }
-
-      if (_currentGame?.isRanked == true) {
-        opponentPointsEarned = (opponentPointsEarned * 1.5).round();
-      }
-
       await _firestoreService.recordGameMatch(
-        userId: opponentId,
+        userId: currentUser!.uid,
         gameType: GameTypeModel.chess,
         result: result,
-        pointsEarned: opponentPointsEarned,
+        pointsEarned: pointsEarned,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName: currentUser?.displayName ?? 'Jugador desconocido',
+        opponentName: _opponentName ?? 'Jugador desconocido',
         additionalData: {
           'gameMode': 'multiplayer',
           'isRanked': _currentGame?.isRanked ?? false,
           'betAmount': _selectedBetAmount,
-          'currencyChange': opponentCurrencyChange,
-          'currencyType': _getCurrencyType(),
-          'matchType': widget.matchType,
-          'playerColor': _myColor == PlayerColor.white ? 'black' : 'white',
-          'opponentId': currentUser!.uid,
           'gameId': widget.gameId,
-          'finalFEN': controller.getFen(),
-          'totalMoves': _currentGame?.moves.length ?? 0,
-          'timeControl': '1 minuto por movimiento',
-          'hasTimeLimit': true,
+          'matchType': widget.matchType,
+          'quotasPaid': _currentGame?.quotasCollected ?? false,
         },
       );
 
     } catch (e) {
       if (kDebugMode) {
-        print('💥 Error registrando resultado del oponente: $e');
+        print('💥 Error registrando resultado: $e');
       }
     }
   }
-
-
 
   void _showGameEndDialog(String message) {
     showDialog(
