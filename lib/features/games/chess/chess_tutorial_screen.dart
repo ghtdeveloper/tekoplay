@@ -1,7 +1,9 @@
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import '../../../generated/l10n.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class ChessImmersiveTutorialScreen extends StatefulWidget {
   const ChessImmersiveTutorialScreen({super.key});
@@ -12,7 +14,7 @@ class ChessImmersiveTutorialScreen extends StatefulWidget {
 }
 
 class _ChessImmersiveTutorialScreenState
-    extends State<ChessImmersiveTutorialScreen> {
+    extends State<ChessImmersiveTutorialScreen> with WidgetsBindingObserver {
   late ChessBoardController _controller;
 
   bool _showPieceSelector = true;
@@ -20,6 +22,7 @@ class _ChessImmersiveTutorialScreenState
   int _currentStep = 0;
   String _previousFen = '';
   bool _waitingForMove = false;
+  bool _isScreenKeepOnActive = false;
 
 
   final Map<String, Map<String, dynamic>> _piecesTutorials = {
@@ -223,13 +226,75 @@ class _ChessImmersiveTutorialScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = ChessBoardController();
+    _enableWakeLock();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _disableWakeLock();
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_isScreenKeepOnActive) {
+          _enableWakeLock();
+        }
+        break;
+      case AppLifecycleState.paused:
+        _disableWakeLock();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = true;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock enabled - screen will stay on');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error enabling WakeLock: $e');
+      }
+    }
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = false;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock disabled - screen can turn off normally');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error disabling WakeLock: $e');
+      }
+    }
   }
 
   void _selectPiece(String piece) {

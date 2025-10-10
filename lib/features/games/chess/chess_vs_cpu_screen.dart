@@ -14,6 +14,7 @@ import '../../../core/utils/game_type.dart';
 import '../../../core/utils/game_result.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/Interstitial_ad_helper.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
@@ -29,7 +30,8 @@ class ChessVsComputerScreen extends StatefulWidget {
   State<ChessVsComputerScreen> createState() => _ChessVsComputerScreenState();
 }
 
-class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
+class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
+    with WidgetsBindingObserver {
   late Stockfish _stockfish;
   ChessBoardController controller = ChessBoardController();
   late InterstitialAdHelper _interstitialHelper;
@@ -55,6 +57,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   int? _userDiamonds;
   PlayerColor? _playerColor;
 
+  bool _isScreenKeepOnActive = false;
+
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   final FirestoreService _firestoreService = FirestoreService();
@@ -62,7 +66,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addObserver(this);
+    _enableWakeLock();
     // Reducir significativamente los tiempos de movimiento del CPU
     switch (widget.selectedDifficulty.toLowerCase()) {
       case 'muy fácil':
@@ -931,7 +936,69 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_isScreenKeepOnActive) {
+          _enableWakeLock();
+        }
+        break;
+      case AppLifecycleState.paused:
+        _disableWakeLock();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = true;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock enabled - screen will stay on');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error enabling WakeLock: $e');
+      }
+    }
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = false;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock disabled - screen can turn off normally');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error disabling WakeLock: $e');
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _disableWakeLock();
     _playerTimer?.cancel();
     _initialMoveTimer?.cancel();
     if (_isStockfishReady) _stockfish.stdin = "quit";

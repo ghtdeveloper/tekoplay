@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,6 +11,7 @@ import '../adds/Interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -25,6 +27,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   bool _isEmailVerified = true;
   Timer? _emailVerificationTimer;
   bool _isEmailVerificationDialogOpen = false;
+  bool _isScreenKeepOnActive = false;
   late InterstitialAdHelper _interstitialHelper;
 
   @override
@@ -35,11 +38,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _loadCurrentUser();
     _startEmailVerificationCheck();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
+    _enableWakeLock();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _disableWakeLock();
     _audioPlayer.dispose();
     _emailVerificationTimer?.cancel();
     _interstitialHelper.dispose();
@@ -121,9 +126,61 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      _loadAndApplyVolume();
-      _checkEmailVerification();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_isScreenKeepOnActive) {
+          _enableWakeLock();
+        }
+        _loadAndApplyVolume();
+        _checkEmailVerification();
+        break;
+      case AppLifecycleState.paused:
+        _disableWakeLock();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = true;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock enabled - screen will stay on');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error enabling WakeLock: $e');
+      }
+    }
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = false;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock disabled - screen can turn off normally');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error disabling WakeLock: $e');
+      }
     }
   }
 

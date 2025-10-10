@@ -245,9 +245,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     );
   }
 
-  // Widget para mostrar el timer
   Widget _buildTimer() {
-    if (_gameEnded || !_isMyTurn || !_gameStarted) return SizedBox.shrink();
+    final shouldShow = !_gameEnded && _isMyTurn && _gameStarted;
 
     final minutes = _playerTimeSeconds ~/ 60;
     final seconds = _playerTimeSeconds % 60;
@@ -255,42 +254,40 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     final isRunningOut = _playerTimeSeconds <= 10;
 
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isRunningOut ? Colors.red[700] : Colors.green[700],
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: (isRunningOut ? Colors.red : Colors.green).withValues(alpha: 0.3),
-            blurRadius: 8,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text(
-            timeString,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+    return Visibility(
+      visible: shouldShow,
+      maintainSize: true,
+      maintainAnimation: true,
+      maintainState: true,
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isRunningOut ? Colors.red[700] : Colors.green[700],
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: (isRunningOut ? Colors.red : Colors.green).withValues(alpha: 0.3),
+              blurRadius: 8,
+              spreadRadius: 2,
             ),
-          ),
-          if (!_hasPlayerMovedOnce)
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.timer, color: Colors.white, size: 20),
+            SizedBox(width: 8),
             Text(
-              ' (Primer movimiento)',
+              timeString,
               style: TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -426,13 +423,11 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     final previousGame = _currentGame;
     _currentGame = game;
 
-    // Configuración inicial del juego
     if (previousGame == null) {
       _setupGameInfo(game);
       _loadPlayerRankings();
     }
 
-    // Detectar cuando se cobran las cuotas por primera vez
     if (previousGame != null &&
         !previousGame.quotasCollected &&
         game.quotasCollected) {
@@ -442,10 +437,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         print('   Currency Type: ${game.currencyType}');
       }
 
-      // Recargar el balance actualizado después del cobro
       _loadUserCurrency(forceRefresh: true);
 
-      // Opcional: Mostrar mensaje al usuario
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -469,7 +462,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       }
     }
 
-    // Verificar si el juego comenzó (ambos jugadores presentes y activo)
     if (!_gameStarted && game.status == 'active' && game.guestId != null) {
       _gameStarted = true;
 
@@ -477,7 +469,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         print('🎮 Juego iniciado - Guest: ${game.guestName}');
       }
 
-      // Si es mi turno al inicio del juego, iniciar timer
       if (game.isPlayerTurn(currentUser!.uid)) {
         setState(() {
           _isMyTurn = true;
@@ -491,17 +482,14 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       }
     }
 
-    // Verificar cambio de turno
     final wasMyTurn = _isMyTurn;
     _isMyTurn = game.isPlayerTurn(currentUser!.uid);
 
-    // Determinar si necesitamos sincronizar el tablero
     bool shouldSync = false;
 
     if (previousGame == null) {
       shouldSync = true;
     } else {
-      // Sincronizar si cambió el número de movimientos
       if (previousGame.moves.length != game.moves.length) {
         shouldSync = true;
         _waitingForMoveResponse = false;
@@ -511,7 +499,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           print('   Movimientos: ${previousGame.moves.length} -> ${game.moves.length}');
         }
       }
-      // Sincronizar si cambió el FEN
       else if (previousGame.currentFen != game.currentFen) {
         shouldSync = true;
 
@@ -525,16 +512,13 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _syncGameState();
     }
 
-    // Manejar cambio de turno
     if (_gameStarted && wasMyTurn != _isMyTurn) {
-      // Cancelar timers existentes
       _playerTimer?.cancel();
       _initialMoveTimer?.cancel();
 
       if (_isMyTurn) {
-        // Ahora es mi turno
         setState(() {
-          _playerTimeSeconds = 60; // Reset a 1 minuto
+          _playerTimeSeconds = 60;
         });
 
         if (!_hasPlayerMovedOnce) {
@@ -556,7 +540,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       }
     }
 
-    // Manejar juego abandonado
     if (game.isAbandoned && !_gameEnded) {
       if (kDebugMode) {
         print('🚪 Juego abandonado detectado');
@@ -565,7 +548,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       }
 
       if (game.didOpponentAbandon(currentUser!.uid)) {
-        // El oponente abandonó - Yo gané
         _handleOpponentAbandoned(game);
       } else if (game.didIAbandon(currentUser!.uid) && !_hasUserExitedGame) {
         // Yo abandoné
@@ -576,7 +558,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         }
       }
     }
-    // Manejar juego finalizado normalmente
+
     else if (!_gameEnded && game.isFinished) {
       _gameEnded = true;
 
@@ -588,7 +570,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
       _handleGameEnd(game);
     }
-    // Manejar desconexión del oponente
+
     else if (game.status == 'waiting' && previousGame?.status == 'active') {
       if (kDebugMode) {
         print('📡 Oponente desconectado temporalmente');
@@ -596,7 +578,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _showOpponentDisconnected();
     }
 
-    // Detectar distribución de recompensas
     if (previousGame != null &&
         !previousGame.rewardsDistributed &&
         game.rewardsDistributed) {
@@ -610,7 +591,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         }
       }
 
-      // Recargar balance después de la distribución
       Future.delayed(Duration(seconds: 1), () {
         if (mounted) {
           _loadUserCurrency(forceRefresh: true);
@@ -667,13 +647,12 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                   children: [
                     Icon(Icons.person_off, size: 48, color: Colors.orange),
                     SizedBox(height: 12),
-                    // Texto que se ajusta automáticamente
                     Text(
                       '$opponentName ${S.of(context).hasLeftTheGame}',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 16),
-                      softWrap: true, // Permite salto de línea
-                      overflow: TextOverflow.visible, // Muestra texto completo
+                      softWrap: true,
+                      overflow: TextOverflow.visible,
                     ),
                   ],
                 ),
@@ -685,7 +664,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                   color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Column( // Cambié Row por Column para evitar overflow horizontal
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Row(
@@ -694,7 +673,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                       children: [
                         Icon(Icons.emoji_events, color: Colors.green, size: 24),
                         SizedBox(width: 8),
-                        Flexible( // Permite que el texto se ajuste
+                        Flexible(
                           child: Text(
                             S.of(context).opponentAbandonedMessage,
                             style: TextStyle(
@@ -864,13 +843,11 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     }
     _waitingForMoveResponse = true;
 
-    // Marcar que el jugador ha movido al menos una vez
     if (!_hasPlayerMovedOnce) {
       _hasPlayerMovedOnce = true;
       _initialMoveTimer?.cancel();
     }
 
-    // Cancelar el timer del jugador ya que hizo su movimiento
     _playerTimer?.cancel();
 
     try {
@@ -1170,7 +1147,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       ),
       child: Row(
         children: [
-          // Avatar del jugador
           Stack(
             children: [
               CircleAvatar(
@@ -1361,10 +1337,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            '${S.of(context).movement}: ${_currentGame!.moves.length}',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
           if (_currentGame!.isRanked)
             Row(
               children: [
@@ -1443,7 +1415,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   @override
   void dispose() {
-    // Limpiar timers
     _playerTimer?.cancel();
     _initialMoveTimer?.cancel();
 
@@ -1615,7 +1586,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
             _buildGameInfo(),
 
-            // Timer del jugador
             _buildTimer(),
 
             Expanded(

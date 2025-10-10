@@ -8,6 +8,7 @@ import '../../../core/service/auth_service.dart';
 import '../../../core/models/game_match.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class GameHistoryScreen extends StatefulWidget {
   const GameHistoryScreen({super.key});
@@ -17,10 +18,10 @@ class GameHistoryScreen extends StatefulWidget {
 }
 
 class _GameHistoryScreenState extends State<GameHistoryScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin,WidgetsBindingObserver {
   late TabController _tabController;
   final AuthService _authService = AuthService();
-
+  bool _isScreenKeepOnActive = false;
   final Map<GameTypeModel, List<GameMatch>> _gameHistory = {};
   final Map<GameTypeModel, GameStats> _gameStats = {};
   bool _isLoading = true;
@@ -28,18 +29,82 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(
       length: GameTypeModel.values.length + 1,
       vsync: this,
     );
     _loadGameHistory();
+    _enableWakeLock();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _disableWakeLock();
     super.dispose();
   }
+
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  super.didChangeAppLifecycleState(state);
+
+  switch (state) {
+    case AppLifecycleState.resumed:
+      if (_isScreenKeepOnActive) {
+        _enableWakeLock();
+      }
+      break;
+    case AppLifecycleState.paused:
+      _disableWakeLock();
+      break;
+    case AppLifecycleState.detached:
+    case AppLifecycleState.hidden:
+    case AppLifecycleState.inactive:
+      break;
+  }
+}
+
+Future<void> _enableWakeLock() async {
+  try {
+    if (!await WakelockPlus.enabled) {
+      await WakelockPlus.enable();
+      if (mounted) {
+        setState(() {
+          _isScreenKeepOnActive = true;
+        });
+      }
+      if (kDebugMode) {
+        print('WakeLock enabled - screen will stay on');
+      }
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error enabling WakeLock: $e');
+    }
+  }
+}
+
+Future<void> _disableWakeLock() async {
+  try {
+    if (await WakelockPlus.enabled) {
+      await WakelockPlus.disable();
+      if (mounted) {
+        setState(() {
+          _isScreenKeepOnActive = false;
+        });
+      }
+      if (kDebugMode) {
+        print('WakeLock disabled - screen can turn off normally');
+      }
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error disabling WakeLock: $e');
+    }
+  }
+}
 
   Future<void> _loadGameHistory() async {
     setState(() {

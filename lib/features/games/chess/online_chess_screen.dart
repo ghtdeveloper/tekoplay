@@ -8,7 +8,7 @@ import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
@@ -95,6 +95,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   int _cpuMoveTime = 200;
   Timer? _botMoveTimer;
   final Random _random = Random();
+  bool _isScreenKeepOnActive = false;
 
   final List<Map<String, String>> _botProfiles = [
     {'name': 'Player1923', 'avatar': '🤖'},
@@ -111,6 +112,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _enableWakeLock();
     _initializeStockfish();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
@@ -239,6 +241,67 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     });
   }
 
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_isScreenKeepOnActive) {
+          _enableWakeLock();
+        }
+        break;
+      case AppLifecycleState.paused:
+        _disableWakeLock();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = true;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock enabled - screen will stay on');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error enabling WakeLock: $e');
+      }
+    }
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = false;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock disabled - screen can turn off normally');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error disabling WakeLock: $e');
+      }
+    }
+  }
+
   @override
   void dispose() {
     _keepAliveTimer?.cancel();
@@ -251,6 +314,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     if (_isStockfishReady && _stockfish != null) {
       _stockfish!.stdin = "quit";
     }
+    _disableWakeLock();
     _stockfish?.dispose();
     _interstitialHelper.dispose();
     super.dispose();

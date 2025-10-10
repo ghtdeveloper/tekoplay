@@ -5,6 +5,7 @@ import 'package:tekoplay/core/utils/game_type.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
@@ -14,7 +15,7 @@ class RankingScreen extends StatefulWidget {
 }
 
 class _RankingScreenState extends State<RankingScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
@@ -22,21 +23,86 @@ class _RankingScreenState extends State<RankingScreen>
   final Map<GameTypeModel, List<Map<String, dynamic>>> _leaderboards = {};
   final Map<GameTypeModel, int?> _userRanks = {};
   bool _isLoading = true;
+  bool _isScreenKeepOnActive = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(
       length: GameTypeModel.values.length,
       vsync: this,
     );
     _loadRankingData();
+    _enableWakeLock();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.dispose();
+    _disableWakeLock();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_isScreenKeepOnActive) {
+          _enableWakeLock();
+        }
+        break;
+      case AppLifecycleState.paused:
+        _disableWakeLock();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = true;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock enabled - screen will stay on');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error enabling WakeLock: $e');
+      }
+    }
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted) {
+          setState(() {
+            _isScreenKeepOnActive = false;
+          });
+        }
+        if (kDebugMode) {
+          print('WakeLock disabled - screen can turn off normally');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error disabling WakeLock: $e');
+      }
+    }
   }
 
   Future<void> _loadRankingData() async {
@@ -208,7 +274,8 @@ class _RankingScreenState extends State<RankingScreen>
 
         return Card(
           margin: EdgeInsets.symmetric(vertical: 4),
-          color: isCurrentUser ? Colors.black.withValues(alpha: 0.1) : cardColor,
+          color:
+              isCurrentUser ? Colors.black.withValues(alpha: 0.1) : cardColor,
           child: ListTile(
             leading: leadingWidget,
             title: Row(
