@@ -80,7 +80,7 @@ class MultiplayerGameMatch {
     this.totalPot,
     this.quotasCollected = false,
     this.rewardsDistributed = false,
-    this.currencyType = 'coins',
+    required this.currencyType,
     this.hostBalanceSnapshot,
     this.guestBalanceSnapshot,
   });
@@ -204,6 +204,7 @@ class MultiplayerGameMatch {
   }
 
   MultiplayerGameMatch copyWith({
+    String? currencyType,
     String? status,
     String? guestId,
     String? guestName,
@@ -225,6 +226,7 @@ class MultiplayerGameMatch {
       id: id,
       gameType: gameType,
       hostId: hostId,
+      currencyType: currencyType ?? this.currencyType,
       guestId: guestId ?? this.guestId,
       hostName: hostName,
       guestName: guestName ?? this.guestName,
@@ -303,6 +305,7 @@ class GameInvitationService {
     required String gameType,
     bool isRanked = false,
     int? betAmount,
+    required String currencyType
   }) async {
     try {
       final usersQuery =
@@ -336,6 +339,7 @@ class GameInvitationService {
         'createdAt': FieldValue.serverTimestamp(),
         'isRanked': isRanked,
         'betAmount': betAmount,
+        'currencyType': currencyType,
       });
 
       await _sendInvitationNotification(
@@ -416,6 +420,7 @@ class GameInvitationService {
           gameType: invitationData['gameType'],
           isRanked: invitationData['isRanked'] ?? false,
           betAmount: invitationData['betAmount'],
+          currencyType: invitationData['currencyType']
         );
 
         await invitationRef.update({

@@ -997,6 +997,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       } else {
         final newGameId = await OnlineMatchmakingChessService()
             .createOnlineGame(
+              currencyType: _getCurrencyName(),
               hostId: currentUser!.uid,
               hostName: currentUser!.displayName ?? 'Usuario',
               hostPhotoUrl: currentUser!.photoURL,
@@ -3143,7 +3144,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
 
   String _getCurrencyName() {
-    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
+    return widget.matchType == S.of(context).bet ? 'coins' : 'diamonds';
   }
 
   int? _getCurrentBalance() {

@@ -180,9 +180,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
   }
 
-  String _getCurrencyName() {
-    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
-  }
 
   IconData _getCurrencyIcon() {
     return widget.matchType == S.of(context).bet
@@ -427,7 +424,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
   void _showInsufficientFundsDialog() {
     final gameCost = _getGameCost();
-    final currencyName = _getCurrencyName();
+    final currencyName = _getCurrencyType();
     final currentBalance = _getCurrentBalance() ?? 0;
 
     showDialog(
@@ -679,7 +676,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
       if (success) {
         if (currencyChange > 0) {
           if (kDebugMode) {
-            print('Recompensa: $currencyChange ${_getCurrencyName()}');
+            print('Recompensa: $currencyChange ${_getCurrencyType()}');
           }
         }
       } else {
@@ -907,7 +904,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
           ),
           SizedBox(width: 6),
           Text(
-            '$currentBalance ${_getCurrencyName()}',
+            '$currentBalance ${_getCurrencyType()}',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,

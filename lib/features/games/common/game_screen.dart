@@ -372,7 +372,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   String _getCurrencyName() {
-    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
+    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
   }
 
   IconData _getCurrencyIcon() {
@@ -1183,7 +1183,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                 _showDiamondPurchaseDialog(),
                             },
                       ),
-                      // AGREGAR ESTO: Widget de retiro solo para modo bet
                       if (matchType == S.of(context).bet) ...[
                         SizedBox(width: 8),
                         WithdrawalCounterWidget(
@@ -1564,7 +1563,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       }
 
       final TextEditingController emailController = TextEditingController();
+      final TextEditingController betAmountController = TextEditingController();
       bool isLoading = false;
+      String? betAmountError;
 
       showDialog(
         context: context,
@@ -1572,173 +1573,261 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         builder: (context) {
           return StatefulBuilder(
             builder: (context, setState) {
+              // Validar monto de apuesta
+              void validateBetAmount(String value) {
+                if (matchType != S.of(context).bet) return;
+
+                setState(() {
+                  if (value.isEmpty) {
+                    betAmountError = 'Por favor ingresa un monto';
+                  } else {
+                    final amount = int.tryParse(value);
+                    if (amount == null) {
+                      betAmountError = 'Por favor ingresa un número válido';
+                    } else if (amount < 1) {
+                      betAmountError = 'El monto debe ser mayor a 0';
+                    } else if (amount > (_userDiamonds ?? 0)) {
+                      betAmountError = '${S.of(context).insufficientFunds}. ${S.of(context).youHave}: ${_userDiamonds ?? 0}';
+                    } else {
+                      betAmountError = null;
+                    }
+                  }
+                });
+              }
+
+              bool isFormValid = emailController.text.trim().isNotEmpty &&
+                  (matchType != S.of(context).bet ||
+                      (betAmountController.text.isNotEmpty && betAmountError == null));
+
               return Dialog(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
                 backgroundColor: Colors.white,
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            S.of(context).playWithFriend,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.close),
-                            onPressed:
-                                isLoading
-                                    ? null
-                                    : () => Navigator.of(context).pop(),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-
-                      Container(
-                        padding: EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(
-                              matchType == S.of(context).bet
-                                  ? Icons.diamond
-                                  : Icons.monetization_on,
-                              color:
-                                  matchType == S.of(context).bet
-                                      ? Colors.amber
-                                      : Colors.blue,
-                              size: 16,
-                            ),
-                            SizedBox(width: 4),
                             Text(
-                              '${S.of(context).youHave}: ${matchType == S.of(context).bet ? (_userDiamonds ?? 0) : (_userCoins ?? 0)} ${matchType == S.of(context).bet ? 'diamantes' : 'monedas'}',
+                              S.of(context).playWithFriend,
                               style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.green[800],
                                 fontWeight: FontWeight.bold,
+                                fontSize: 18,
                               ),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.close),
+                              onPressed: isLoading
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
                             ),
                           ],
                         ),
-                      ),
+                        SizedBox(height: 8),
 
-                      SizedBox(height: 20),
-
-                      TextField(
-                        controller: emailController,
-                        enabled: !isLoading,
-                        keyboardType: TextInputType.emailAddress,
-                        onChanged: (value) {
-                          setState(() {});
-                        },
-                        decoration: InputDecoration(
-                          labelText: S.of(context).opponentEmail,
-                          hintText: 'ejemplo@email.com',
-                          prefixIcon: Icon(Icons.email),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                        // Balance actual
+                        Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                matchType == S.of(context).bet
+                                    ? Icons.diamond
+                                    : Icons.monetization_on,
+                                color: matchType == S.of(context).bet
+                                    ? Colors.amber
+                                    : Colors.blue,
+                                size: 16,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                '${S.of(context).youHave}: ${matchType == S.of(context).bet ? (_userDiamonds ?? 0) : (_userCoins ?? 0)} ${matchType == S.of(context).bet ? 'diamantes' : 'monedas'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green[800],
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      SizedBox(height: 20),
 
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              (isLoading || emailController.text.trim().isEmpty)
-                                  ? null
-                                  : () async {
-                                    // Revalidar fondos antes de enviar invitación
-                                    final stillHasEnoughFunds =
-                                        await _validateUserFundsForInvitation();
-                                    if (!stillHasEnoughFunds) {
-                                      Navigator.of(
-                                        context,
-                                      ).pop(); // Cerrar el diálogo actual
-                                      return;
-                                    }
+                        SizedBox(height: 20),
 
-                                    setState(() => isLoading = true);
-
-                                    final error = await GameInvitationService()
-                                        .createInvitation(
-                                          fromUserId: _currentUser!.uid,
-                                          fromUserName:
-                                              _currentUser!.displayName ??
-                                              'Usuario',
-                                          toUserEmail:
-                                              emailController.text.trim(),
-                                          gameType: gameType,
-                                        );
-
-                                    setState(() => isLoading = false);
-
-                                    if (error == null) {
-                                      Navigator.of(context).pop();
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            S
-                                                .of(context)
-                                                .successfulSentInvitation,
-                                          ),
-                                          backgroundColor: Colors.green,
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(error),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  },
-                          icon:
-                              isLoading
-                                  ? SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                  : Icon(Icons.send),
-                          label: Text(
-                            isLoading
-                                ? S.of(context).sending
-                                : S.of(context).sentInvitation,
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFEC7A34),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
+                        // Campo de email
+                        TextField(
+                          controller: emailController,
+                          enabled: !isLoading,
+                          keyboardType: TextInputType.emailAddress,
+                          onChanged: (value) {
+                            setState(() {});
+                          },
+                          decoration: InputDecoration(
+                            labelText: S.of(context).opponentEmail,
+                            hintText: 'ejemplo@email.com',
+                            prefixIcon: Icon(Icons.email),
+                            border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            padding: EdgeInsets.symmetric(vertical: 14),
                           ),
                         ),
-                      ),
-                    ],
+
+                        // Campo de monto de apuesta (solo para modo bet)
+                        if (matchType == S.of(context).bet) ...[
+                          SizedBox(height: 16),
+                          TextField(
+                            controller: betAmountController,
+                            enabled: !isLoading,
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) {
+                              validateBetAmount(value);
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Monto a apostar (diamantes)',
+                              hintText: 'Ingresa el monto',
+                              prefixIcon: Icon(Icons.diamond, color: Colors.amber),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              errorText: betAmountError,
+                              helperText: 'Disponible: ${_userDiamonds ?? 0} diamantes',
+                              helperStyle: TextStyle(fontSize: 11),
+                            ),
+                          ),
+
+                          // Botones de monto rápido
+                          SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            children: [10, 50, 100, 250, 500].map((amount) {
+                              final canSelect = amount <= (_userDiamonds ?? 0);
+                              return ActionChip(
+                                label: Text('$amount'),
+                                onPressed: !isLoading && canSelect
+                                    ? () {
+                                  betAmountController.text = amount.toString();
+                                  validateBetAmount(amount.toString());
+                                }
+                                    : null,
+                                backgroundColor: canSelect
+                                    ? Colors.amber.withValues(alpha: 0.2)
+                                    : Colors.grey.withValues(alpha: 0.2),
+                                labelStyle: TextStyle(
+                                  color: canSelect ? Colors.amber[800] : Colors.grey,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+
+                        SizedBox(height: 20),
+
+                        // Botón de enviar
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: (isLoading || !isFormValid)
+                                ? null
+                                : () async {
+                              // Revalidar fondos antes de enviar invitación
+                              final stillHasEnoughFunds =
+                              await _validateUserFundsForInvitation();
+                              if (!stillHasEnoughFunds) {
+                                Navigator.of(context).pop();
+                                return;
+                              }
+
+                              // Validar monto de apuesta si es modo bet
+                              if (matchType == S.of(context).bet) {
+                                final betAmount = int.tryParse(
+                                  betAmountController.text.trim(),
+                                );
+                                if (betAmount == null ||
+                                    betAmount < 1 ||
+                                    betAmount > (_userDiamonds ?? 0)) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Monto de apuesta inválido'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+                              }
+
+                              setState(() => isLoading = true);
+
+                              final error = await GameInvitationService()
+                                  .createInvitation(
+                                fromUserId: _currentUser!.uid,
+                                fromUserName: _currentUser!.displayName ?? 'Usuario',
+                                toUserEmail: emailController.text.trim(),
+                                gameType: gameType,
+                                betAmount: matchType == S.of(context).bet
+                                    ? int.parse(betAmountController.text.trim())
+                                    : null,
+                                currencyType: _getCurrencyName()
+                              );
+
+                              setState(() => isLoading = false);
+
+                              if (error == null) {
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      S.of(context).successfulSentInvitation,
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(error),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                            icon: isLoading
+                                ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                                : Icon(Icons.send),
+                            label: Text(
+                              isLoading
+                                  ? S.of(context).sending
+                                  : S.of(context).sentInvitation,
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFEC7A34),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );

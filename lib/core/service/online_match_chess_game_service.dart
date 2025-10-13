@@ -183,6 +183,7 @@ class OnlineMatchmakingChessService {
   }
 
   Future<String?> createOnlineGame({
+    required String currencyType,
     required String hostId,
     required String hostName,
     String? hostPhotoUrl,
@@ -195,6 +196,7 @@ class OnlineMatchmakingChessService {
       final gameRef = _firestore.collection('multiplayer_games').doc();
 
       final game = MultiplayerGameMatch(
+        currencyType: currencyType,
         id: gameRef.id,
         gameType: gameType,
         hostId: hostId,

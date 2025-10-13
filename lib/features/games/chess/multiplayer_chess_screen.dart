@@ -343,7 +343,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   String _getCurrencyName() {
-    return widget.matchType == S.of(context).bet ? 'diamantes' : 'monedas';
+    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
   }
 
   IconData _getCurrencyIcon() {

@@ -30,7 +30,7 @@ class MultiplayerGameService {
     int? betAmount,
     String? hostPhotoUrl,
     String? guestPhotoUrl,
-    String currencyType = 'coins',
+    required String currencyType,
   }) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc();
