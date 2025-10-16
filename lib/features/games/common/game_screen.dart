@@ -113,28 +113,28 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         .snapshots()
         .listen(
           (DocumentSnapshot document) {
-        if (document.exists && mounted && !_isDisposed) {
-          final userData = document.data() as Map<String, dynamic>;
-          setState(() {
-            _userDiamonds = userData['diamonds'] ?? 0;
-            _userCoins = userData['coins'] ?? 0;
-            _withdrawableDiamonds = userData['diamondsEarned'] ?? 0;
-          });
-        }
-      },
-      onError: (error) {
-        if (kDebugMode) {
-          print('Error listening to diamonds: $error');
-        }
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _userDiamonds = 0;
-            _userCoins = 0;
-            _withdrawableDiamonds = 0;
-          });
-        }
-      },
-    );
+            if (document.exists && mounted && !_isDisposed) {
+              final userData = document.data() as Map<String, dynamic>;
+              setState(() {
+                _userDiamonds = userData['diamonds'] ?? 0;
+                _userCoins = userData['coins'] ?? 0;
+                _withdrawableDiamonds = userData['diamondsEarned'] ?? 0;
+              });
+            }
+          },
+          onError: (error) {
+            if (kDebugMode) {
+              print('Error listening to diamonds: $error');
+            }
+            if (mounted && !_isDisposed) {
+              setState(() {
+                _userDiamonds = 0;
+                _userCoins = 0;
+                _withdrawableDiamonds = 0;
+              });
+            }
+          },
+        );
   }
 
   void _showWithdrawalDialog() {
@@ -250,8 +250,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void _setupAnonymousWalletListener() {
     _updateAnonymousWalletUI();
   }
-
-
 
   Future<bool> _validateUserFundsForInvitation() async {
     if (_currentUser == null) return false;
@@ -1141,58 +1139,69 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () {
-                      if (!_isDisposed) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => MainScreen()),
-                        );
-                      }
-                    },
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        if (!_isDisposed) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => MainScreen()),
+                          );
+                        }
+                      },
+                    ),
                   ),
-                  Row(
-                    children: [
-                      Text(
-                        matchType == S.of(context).bet
-                            ? '${(_userDiamonds ?? 0.0).toInt()}'
-                            : matchType == S.of(context).fun
-                            ? '${(_userCoins ?? 0.0).toInt()}'
-                            : '0',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      SizedBox(width: 5),
-                      if (matchType == S.of(context).fun)
-                        Image.asset('assets/images/coin.png', height: 30.0)
-                      else if (matchType == S.of(context).bet)
-                        Image.asset('assets/images/diamond.png', height: 30.0)
-                      else
-                        SizedBox(width: 30.0),
-                      IconButton(
-                        icon: Icon(Icons.add_circle, color: Colors.white),
-                        onPressed:
-                            () => {
-                              if (matchType == S.of(context).fun)
-                                _showCoinPurchaseDialog()
-                              else if (matchType == S.of(context).bet)
-                                _showDiamondPurchaseDialog(),
-                            },
-                      ),
-                      if (matchType == S.of(context).bet) ...[
-                        SizedBox(width: 8),
-                        WithdrawalCounterWidget(
-                          withdrawableAmount: _withdrawableDiamonds ?? 0,
-                          onWithdraw: _showWithdrawalDialog,
-                        ),
-                      ],
-                    ],
+                  SizedBox(width: 4),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Si hay poco espacio y es modo bet, usar diseño vertical
+                        final shouldStack = constraints.maxWidth < 200 &&
+                            matchType == S.of(context).bet &&
+                            (_withdrawableDiamonds ?? 0) > 0;
+
+                        if (shouldStack) {
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildBalanceRow(),
+                              SizedBox(height: 4),
+                              WithdrawalCounterWidget(
+                                withdrawableAmount: _withdrawableDiamonds ?? 0,
+                                onWithdraw: _showWithdrawalDialog,
+                              ),
+                            ],
+                          );
+                        } else {
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(child: _buildBalanceRow()),
+                              if (matchType == S.of(context).bet &&
+                                  (_withdrawableDiamonds ?? 0) > 0) ...[
+                                SizedBox(width: 4),
+                                WithdrawalCounterWidget(
+                                  withdrawableAmount: _withdrawableDiamonds ?? 0,
+                                  onWithdraw: _showWithdrawalDialog,
+                                ),
+                              ],
+                            ],
+                          );
+                        }
+                      },
+                    ),
                   ),
-                  _buildNotificationsIcon(),
+                  SizedBox(width: 4),
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: _buildNotificationsIcon(),
+                  ),
                 ],
               ),
             ),
@@ -1263,6 +1272,68 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       ),
     );
   }
+
+  Widget _buildBalanceRow() {
+    final isBet = matchType == S.of(context).bet;
+    final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Balance número
+        Flexible(
+          child: Text(
+            '$balance',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
+
+        SizedBox(width: 4),
+
+        if (matchType == S.of(context).fun)
+          Image.asset(
+            'assets/images/coin.png',
+            height: 24,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.monetization_on, color: Colors.blue, size: 24);
+            },
+          )
+        else if (matchType == S.of(context).bet)
+          Image.asset(
+            'assets/images/diamond.png',
+            height: 24,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.diamond, color: Colors.amber, size: 24);
+            },
+          ),
+
+        SizedBox(width: 2),
+
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: IconButton(
+            icon: Icon(Icons.add_circle, color: Colors.white, size: 20),
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              if (matchType == S.of(context).fun) {
+                _showCoinPurchaseDialog();
+              } else if (matchType == S.of(context).bet) {
+                _showDiamondPurchaseDialog();
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
 
   Widget _buildNotificationsIcon() {
     if (_currentUser == null || !_isInitialized) {
@@ -1398,6 +1469,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                 children: [
                                                   Text(
                                                     '${invitation['fromUserName']} ${S.of(context).invitesYou}',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    maxLines: 2,
+                                                  ),
+                                                  Text(
+                                                    '${invitation['betAmount']}  ${invitation['currencyType']}',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       fontWeight:
@@ -1587,7 +1669,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     } else if (amount < 1) {
                       betAmountError = 'El monto debe ser mayor a 0';
                     } else if (amount > (_userDiamonds ?? 0)) {
-                      betAmountError = '${S.of(context).insufficientFunds}. ${S.of(context).youHave}: ${_userDiamonds ?? 0}';
+                      betAmountError =
+                          '${S.of(context).insufficientFunds}. ${S.of(context).youHave}: ${_userDiamonds ?? 0}';
                     } else {
                       betAmountError = null;
                     }
@@ -1595,9 +1678,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 });
               }
 
-              bool isFormValid = emailController.text.trim().isNotEmpty &&
+              bool isFormValid =
+                  emailController.text.trim().isNotEmpty &&
                   (matchType != S.of(context).bet ||
-                      (betAmountController.text.isNotEmpty && betAmountError == null));
+                      (betAmountController.text.isNotEmpty &&
+                          betAmountError == null));
 
               return Dialog(
                 shape: RoundedRectangleBorder(
@@ -1622,9 +1707,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             ),
                             IconButton(
                               icon: Icon(Icons.close),
-                              onPressed: isLoading
-                                  ? null
-                                  : () => Navigator.of(context).pop(),
+                              onPressed:
+                                  isLoading
+                                      ? null
+                                      : () => Navigator.of(context).pop(),
                             ),
                           ],
                         ),
@@ -1644,9 +1730,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                 matchType == S.of(context).bet
                                     ? Icons.diamond
                                     : Icons.monetization_on,
-                                color: matchType == S.of(context).bet
-                                    ? Colors.amber
-                                    : Colors.blue,
+                                color:
+                                    matchType == S.of(context).bet
+                                        ? Colors.amber
+                                        : Colors.blue,
                                 size: 16,
                               ),
                               SizedBox(width: 4),
@@ -1695,12 +1782,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             decoration: InputDecoration(
                               labelText: 'Monto a apostar (diamantes)',
                               hintText: 'Ingresa el monto',
-                              prefixIcon: Icon(Icons.diamond, color: Colors.amber),
+                              prefixIcon: Icon(
+                                Icons.diamond,
+                                color: Colors.amber,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               errorText: betAmountError,
-                              helperText: 'Disponible: ${_userDiamonds ?? 0} diamantes',
+                              helperText:
+                                  'Disponible: ${_userDiamonds ?? 0} diamantes',
                               helperStyle: TextStyle(fontSize: 11),
                             ),
                           ),
@@ -1709,25 +1800,39 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                           SizedBox(height: 8),
                           Wrap(
                             spacing: 8,
-                            children: [10, 50, 100, 250, 500].map((amount) {
-                              final canSelect = amount <= (_userDiamonds ?? 0);
-                              return ActionChip(
-                                label: Text('$amount'),
-                                onPressed: !isLoading && canSelect
-                                    ? () {
-                                  betAmountController.text = amount.toString();
-                                  validateBetAmount(amount.toString());
-                                }
-                                    : null,
-                                backgroundColor: canSelect
-                                    ? Colors.amber.withValues(alpha: 0.2)
-                                    : Colors.grey.withValues(alpha: 0.2),
-                                labelStyle: TextStyle(
-                                  color: canSelect ? Colors.amber[800] : Colors.grey,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              );
-                            }).toList(),
+                            children:
+                                [10, 50, 100, 250, 500].map((amount) {
+                                  final canSelect =
+                                      amount <= (_userDiamonds ?? 0);
+                                  return ActionChip(
+                                    label: Text('$amount'),
+                                    onPressed:
+                                        !isLoading && canSelect
+                                            ? () {
+                                              betAmountController.text =
+                                                  amount.toString();
+                                              validateBetAmount(
+                                                amount.toString(),
+                                              );
+                                            }
+                                            : null,
+                                    backgroundColor:
+                                        canSelect
+                                            ? Colors.amber.withValues(
+                                              alpha: 0.2,
+                                            )
+                                            : Colors.grey.withValues(
+                                              alpha: 0.2,
+                                            ),
+                                    labelStyle: TextStyle(
+                                      color:
+                                          canSelect
+                                              ? Colors.amber[800]
+                                              : Colors.grey,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                }).toList(),
                           ),
                         ],
 
@@ -1737,80 +1842,103 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: (isLoading || !isFormValid)
-                                ? null
-                                : () async {
-                              // Revalidar fondos antes de enviar invitación
-                              final stillHasEnoughFunds =
-                              await _validateUserFundsForInvitation();
-                              if (!stillHasEnoughFunds) {
-                                Navigator.of(context).pop();
-                                return;
-                              }
+                            onPressed:
+                                (isLoading || !isFormValid)
+                                    ? null
+                                    : () async {
+                                      // Revalidar fondos antes de enviar invitación
+                                      final stillHasEnoughFunds =
+                                          await _validateUserFundsForInvitation();
+                                      if (!stillHasEnoughFunds) {
+                                        Navigator.of(context).pop();
+                                        return;
+                                      }
 
-                              // Validar monto de apuesta si es modo bet
-                              if (matchType == S.of(context).bet) {
-                                final betAmount = int.tryParse(
-                                  betAmountController.text.trim(),
-                                );
-                                if (betAmount == null ||
-                                    betAmount < 1 ||
-                                    betAmount > (_userDiamonds ?? 0)) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Monto de apuesta inválido'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                  return;
-                                }
-                              }
+                                      // Validar monto de apuesta si es modo bet
+                                      if (matchType == S.of(context).bet) {
+                                        final betAmount = int.tryParse(
+                                          betAmountController.text.trim(),
+                                        );
+                                        if (betAmount == null ||
+                                            betAmount < 1 ||
+                                            betAmount > (_userDiamonds ?? 0)) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Monto de apuesta inválido',
+                                              ),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                      }
 
-                              setState(() => isLoading = true);
+                                      setState(() => isLoading = true);
 
-                              final error = await GameInvitationService()
-                                  .createInvitation(
-                                fromUserId: _currentUser!.uid,
-                                fromUserName: _currentUser!.displayName ?? 'Usuario',
-                                toUserEmail: emailController.text.trim(),
-                                gameType: gameType,
-                                betAmount: matchType == S.of(context).bet
-                                    ? int.parse(betAmountController.text.trim())
-                                    : null,
-                                currencyType: _getCurrencyName()
-                              );
+                                      final error =
+                                          await GameInvitationService()
+                                              .createInvitation(
+                                                fromUserId: _currentUser!.uid,
+                                                fromUserName:
+                                                    _currentUser!.displayName ??
+                                                    'Usuario',
+                                                toUserEmail:
+                                                    emailController.text.trim(),
+                                                gameType: gameType,
+                                                betAmount:
+                                                    matchType ==
+                                                            S.of(context).bet
+                                                        ? int.parse(
+                                                          betAmountController
+                                                              .text
+                                                              .trim(),
+                                                        )
+                                                        : null,
+                                                currencyType:
+                                                    _getCurrencyName(),
+                                              );
 
-                              setState(() => isLoading = false);
+                                      setState(() => isLoading = false);
 
-                              if (error == null) {
-                                Navigator.of(context).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      S.of(context).successfulSentInvitation,
-                                    ),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(error),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            },
-                            icon: isLoading
-                                ? SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                                : Icon(Icons.send),
+                                      if (error == null) {
+                                        Navigator.of(context).pop();
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              S
+                                                  .of(context)
+                                                  .successfulSentInvitation,
+                                            ),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(error),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    },
+                            icon:
+                                isLoading
+                                    ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                    : Icon(Icons.send),
                             label: Text(
                               isLoading
                                   ? S.of(context).sending
