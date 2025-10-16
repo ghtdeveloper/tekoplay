@@ -393,10 +393,13 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   }
 
 
-
   Widget _buildTimer() {
-    if (_gameEnded || !_isPlayerTurn) return SizedBox.shrink();
-
+    if (_gameEnded || !_isPlayerTurn) {
+      return Container(
+        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        height: 40,
+      );
+    }
     final minutes = _playerTimeSeconds ~/ 60;
     final seconds = _playerTimeSeconds % 60;
     final timeString =
@@ -406,6 +409,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      height: 40,
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: isRunningOut ? Colors.red[700] : Colors.green[700],
