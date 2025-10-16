@@ -44,10 +44,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   bool _hasStartedGame = false;
   bool _waitingForCpuMove = false;
 
-  // Variables del sistema de tiempo
   Timer? _playerTimer;
   Timer? _initialMoveTimer;
-  int _playerTimeSeconds = 60; // 1 minuto fijo
+  int _playerTimeSeconds = 60;
   bool _hasPlayerMovedOnce = false;
   bool _isPlayerTurn = false;
 
@@ -61,6 +60,10 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
+  List<Map<String, String>> _moveHistory = [];
+  String? _lastMoveFrom;
+  String? _lastMoveTo;
+
   final FirestoreService _firestoreService = FirestoreService();
 
   @override
@@ -68,19 +71,18 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _enableWakeLock();
-    // Reducir significativamente los tiempos de movimiento del CPU
     switch (widget.selectedDifficulty.toLowerCase()) {
       case 'muy fácil':
-        _cpuMoveTime = 50; // Reducido de 100
+        _cpuMoveTime = 50;
         break;
       case 'fácil':
-        _cpuMoveTime = 75; // Reducido de 150
+        _cpuMoveTime = 75;
         break;
       case 'normal':
-        _cpuMoveTime = 100; // Reducido de 250
+        _cpuMoveTime = 100;
         break;
       case 'difícil':
-        _cpuMoveTime = 150; // Reducido de 350
+        _cpuMoveTime = 150;
         break;
       default:
         _cpuMoveTime = 100;
@@ -99,22 +101,19 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
             return;
           }
 
-          // Delay mínimo para hacer el movimiento más natural (opcional)
           Future.delayed(const Duration(milliseconds: 200), () {
             if (mounted) {
               _applyUciMoveToBoard(best);
               _checkGameEnd();
               _waitingForCpuMove = false;
 
-              // Reiniciar el timer del jugador después del movimiento del CPU
               if (!_gameEnded) {
                 setState(() {
                   _isPlayerTurn = true;
-                  _playerTimeSeconds = 60; // Reset a 1 minuto
+                  _playerTimeSeconds = 60;
                 });
                 _startPlayerTimer();
               }
-
               setState(() {});
             }
           });
@@ -131,7 +130,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
         if (_playerColor == PlayerColor.black) {
           _makeCpuMove();
         } else {
-          // Si el jugador es blanco, iniciar su turno
           setState(() {
             _isPlayerTurn = true;
           });
@@ -195,7 +193,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     return widget.matchType == S.of(context).bet ? 5 : 100;
   }
 
-  // Iniciar timer para el primer movimiento (14 segundos)
   void _startInitialMoveTimer() {
     if (_hasPlayerMovedOnce || _gameEnded) return;
 
@@ -207,7 +204,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     });
   }
 
-  // Iniciar timer del jugador (1 minuto por movimiento)
   void _startPlayerTimer() {
     if (_gameEnded) return;
 
@@ -231,7 +227,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     });
   }
 
-  // Manejar timeout
   void _timeOut({required bool isInitialTimeout}) {
     if (_gameEnded) return;
 
@@ -340,6 +335,64 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
           ),
     );
   }
+
+  Future<bool> _showAbandonDialog() async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(
+          '¿${S.of(context).abandonGame}?',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.warning, size: 48, color: Colors.orange),
+            SizedBox(height: 16),
+            Text(
+              S.of(context).abandonGameWarning,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            Text(
+              S.of(context).areYouSure,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.of(context).continueGame),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              child: Text(S.of(context).abandonGame),
+            ),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+
 
   Widget _buildTimer() {
     if (_gameEnded || !_isPlayerTurn) return SizedBox.shrink();
@@ -482,6 +535,21 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
     _stockfish.stdin = "setoption name Threads value 1";
     _stockfish.stdin = "setoption name Hash value 32";
+
+    switch (widget.selectedDifficulty.toLowerCase()) {
+      case 'muy fácil':
+        _stockfish.stdin = "setoption name Skill Level value 0";
+        break;
+      case 'fácil':
+        _stockfish.stdin = "setoption name Skill Level value 5";
+        break;
+      case 'normal':
+        _stockfish.stdin = "setoption name Skill Level value 10";
+        break;
+      case 'difícil':
+        _stockfish.stdin = "setoption name Skill Level value 15";
+        break;
+    }
   }
 
   void _makeCpuMove() {
@@ -491,7 +559,14 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
     final fen = controller.getFen();
     _stockfish.stdin = "position fen $fen";
-    _stockfish.stdin = "go movetime $_cpuMoveTime";
+
+    if (widget.selectedDifficulty.toLowerCase() == 'muy fácil') {
+      _stockfish.stdin = "go depth 1";
+    } else if (widget.selectedDifficulty.toLowerCase() == 'fácil') {
+      _stockfish.stdin = "go depth 3";
+    } else {
+      _stockfish.stdin = "go movetime $_cpuMoveTime";
+    }
   }
 
   void playerMoved() async {
@@ -766,16 +841,18 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   }
 
   void _applyUciMoveToBoard(String uci) {
+    String from = '';
+    String to = '';
+
     if (uci.length == 4) {
-      final from = uci.substring(0, 2);
-      final to = uci.substring(2, 4);
+      from = uci.substring(0, 2);
+      to = uci.substring(2, 4);
       controller.makeMove(from: from, to: to);
-      return;
     }
 
     if (uci.length == 5) {
-      final from = uci.substring(0, 2);
-      final to = uci.substring(2, 4);
+      from = uci.substring(0, 2);
+      to = uci.substring(2, 4);
       final promo = uci.substring(4).toUpperCase();
       controller.makeMoveWithPromotion(
         from: from,
@@ -783,6 +860,12 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
         pieceToPromoteTo: promo,
       );
     }
+
+    setState(() {
+      _lastMoveFrom = from;
+      _lastMoveTo = to;
+      _moveHistory.add({'from': from, 'to': to, 'player': 'CPU'});
+    });
   }
 
   void _selectPlayerColor(PlayerColor color) async {
@@ -809,11 +892,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   void _restartGame() {
     _interstitialHelper.showAdIfReady(
       onComplete: () {
-        // Limpiar todos los timers
         _playerTimer?.cancel();
         _initialMoveTimer?.cancel();
-
-        // Reset variables del juego
         _gameEnded = false;
         _waitingForCpuMove = false;
         _hasStartedGame = false;
@@ -831,7 +911,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
           if (_playerColor == PlayerColor.black) {
             _makeCpuMove();
           } else {
-            // Si el jugador es blanco, iniciar su turno
             setState(() {
               _isPlayerTurn = true;
             });
@@ -1062,7 +1141,23 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
       );
     }
 
-    return Scaffold(
+    return WillPopScope(
+      onWillPop: () async {
+        if (_gameEnded) {
+          return true;
+        }
+        final shouldAbandon = await _showAbandonDialog();
+        if (shouldAbandon) {
+          _interstitialHelper.forceShowAd(
+            onComplete: () async {
+              await _recordGameResult(GameResultModel.loss);
+            },
+          );
+          return true;
+        }
+        return false;
+      },
+      child:Scaffold(
       backgroundColor: const ui.Color(0xFFEC7A34),
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
@@ -1131,10 +1226,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
               ),
             ),
 
-            // Timer del jugador
             _buildTimer(),
 
-            // Indicador de turno
             if (!_gameEnded)
               Container(
                 padding: EdgeInsets.symmetric(vertical: 8),
@@ -1157,6 +1250,14 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
                   boardOrientation: _playerColor!,
                   enableUserMoves: !_gameEnded && _isPlayerTurn,
                   onMove: playerMoved,
+                  arrows: _lastMoveFrom != null && _lastMoveTo != null
+                      ? [
+                    BoardArrow(
+                      from: _lastMoveFrom!,
+                      to: _lastMoveTo!,
+                      color: Colors.yellowAccent.withOpacity(0.5),
+                    ),
+                  ] : [],
                 ),
               ),
             ),
@@ -1182,6 +1283,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
           ],
         ),
       ),
+    )
     );
   }
 }
