@@ -1984,7 +1984,19 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _showComputerGameDialog(BuildContext context) {
     if (isChess) {
-      _showChessCpuDialog(context);
+      if (matchType == S.of(context).bet) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChessVsComputerScreen(
+              'Muy difícil',
+              matchType: widget.matchType,
+            ),
+          ),
+        );
+      } else {
+        _showChessCpuDialog(context);
+      }
     } else if (isDomino) {
       _showDominoCpuDialog(context);
     }
@@ -1995,7 +2007,24 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        String selectedDifficulty = S.of(context).normal;
+        List<String> availableDifficulties;
+        String selectedDifficulty;
+
+        if (matchType == S.of(context).bet) {
+          availableDifficulties = [
+            S.of(context).normal,
+            S.of(context).difficult,
+          ];
+          selectedDifficulty = S.of(context).normal;
+        } else {
+          availableDifficulties = [
+            S.of(context).veryEasy,
+            S.of(context).easy,
+            S.of(context).normal,
+            S.of(context).difficult,
+          ];
+          selectedDifficulty = S.of(context).normal;
+        }
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -2024,27 +2053,22 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         color: Colors.black87,
                       ),
                     ),
+
                     SizedBox(height: 20),
 
                     Column(
-                      children:
-                          [
-                            S.of(context).veryEasy,
-                            S.of(context).easy,
-                            S.of(context).normal,
-                            S.of(context).difficult,
-                          ].map((level) {
-                            return RadioListTile<String>(
-                              title: Text(level),
-                              value: level,
-                              groupValue: selectedDifficulty,
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedDifficulty = value!;
-                                });
-                              },
-                            );
-                          }).toList(),
+                      children: availableDifficulties.map((level) {
+                        return RadioListTile<String>(
+                          title: Text(level),
+                          value: level,
+                          groupValue: selectedDifficulty,
+                          onChanged: (value) {
+                            setState(() {
+                              selectedDifficulty = value!;
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
 
                     SizedBox(height: 20),
@@ -2057,11 +2081,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (context) => ChessVsComputerScreen(
-                                    selectedDifficulty,
-                                    matchType: widget.matchType,
-                                  ),
+                              builder: (context) => ChessVsComputerScreen(
+                                selectedDifficulty,
+                                matchType: widget.matchType,
+                              ),
                             ),
                           );
                         },

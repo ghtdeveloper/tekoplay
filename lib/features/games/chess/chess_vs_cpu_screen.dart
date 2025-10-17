@@ -71,21 +71,41 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _enableWakeLock();
-    switch (widget.selectedDifficulty.toLowerCase()) {
-      case 'muy fácil':
-        _cpuMoveTime = 50;
-        break;
-      case 'fácil':
-        _cpuMoveTime = 75;
-        break;
-      case 'normal':
-        _cpuMoveTime = 100;
-        break;
-      case 'difícil':
-        _cpuMoveTime = 150;
-        break;
-      default:
-        _cpuMoveTime = 100;
+
+    final isBetMode = widget.matchType.toLowerCase().contains('apuesta') ||
+        widget.matchType.toLowerCase().contains('bet');
+
+    if (isBetMode) {
+      switch (widget.selectedDifficulty.toLowerCase()) {
+        case 'normal':
+          _cpuMoveTime = 250;
+          break;
+        case 'difícil':
+          _cpuMoveTime = 400;
+          break;
+        case 'muy difícil':
+          _cpuMoveTime = 600;
+          break;
+        default:
+          _cpuMoveTime = 250;
+      }
+    } else {
+      switch (widget.selectedDifficulty.toLowerCase()) {
+        case 'muy fácil':
+          _cpuMoveTime = 50;
+          break;
+        case 'fácil':
+          _cpuMoveTime = 75;
+          break;
+        case 'normal':
+          _cpuMoveTime = 100;
+          break;
+        case 'difícil':
+          _cpuMoveTime = 150;
+          break;
+        default:
+          _cpuMoveTime = 100;
+      }
     }
 
     _stockfish = Stockfish();
@@ -537,22 +557,44 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     _stockfish.stdin = "isready";
     await Future.delayed(const Duration(milliseconds: 300));
 
-    _stockfish.stdin = "setoption name Threads value 1";
-    _stockfish.stdin = "setoption name Hash value 32";
+    if (widget.matchType == S.of(context).fun){
+      _stockfish.stdin = "setoption name Threads value 1";
+      _stockfish.stdin = "setoption name Hash value 32";
+    }
 
-    switch (widget.selectedDifficulty.toLowerCase()) {
-      case 'muy fácil':
-        _stockfish.stdin = "setoption name Skill Level value 0";
-        break;
-      case 'fácil':
-        _stockfish.stdin = "setoption name Skill Level value 5";
-        break;
-      case 'normal':
-        _stockfish.stdin = "setoption name Skill Level value 10";
-        break;
-      case 'difícil':
-        _stockfish.stdin = "setoption name Skill Level value 15";
-        break;
+    if (widget.matchType == S.of(context).bet) {
+      _stockfish.stdin = "setoption name Hash value 128";
+    } else {
+      _stockfish.stdin = "setoption name Hash value 32";
+    }
+
+    if (widget.matchType == S.of(context).bet) {
+      switch (widget.selectedDifficulty.toLowerCase()) {
+        case 'normal':
+          _stockfish.stdin = "setoption name Skill Level value 15";
+          break;
+        case 'difícil':
+          _stockfish.stdin = "setoption name Skill Level value 18";
+          break;
+        case 'muy difícil':
+          _stockfish.stdin = "setoption name Skill Level value 20";
+          break;
+      }
+    } else {
+      switch (widget.selectedDifficulty.toLowerCase()) {
+        case 'muy fácil':
+          _stockfish.stdin = "setoption name Skill Level value 0";
+          break;
+        case 'fácil':
+          _stockfish.stdin = "setoption name Skill Level value 5";
+          break;
+        case 'normal':
+          _stockfish.stdin = "setoption name Skill Level value 10";
+          break;
+        case 'difícil':
+          _stockfish.stdin = "setoption name Skill Level value 15";
+          break;
+      }
     }
   }
 
