@@ -45,10 +45,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   bool _waitingForMoveResponse = false;
   DateTime? _gameStartTime;
 
-  // Variables del sistema de tiempo
   Timer? _playerTimer;
   Timer? _initialMoveTimer;
-  int _playerTimeSeconds = 60; // 1 minuto fijo
+  int _playerTimeSeconds = 60;
   bool _hasPlayerMovedOnce = false;
   bool _gameStarted = false;
 

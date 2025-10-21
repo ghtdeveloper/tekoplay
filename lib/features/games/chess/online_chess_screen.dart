@@ -98,14 +98,14 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   bool _isScreenKeepOnActive = false;
 
   final List<Map<String, String>> _botProfiles = [
-    {'name': 'Player1923', 'avatar': '🤖'},
-    {'name': 'Player2323', 'avatar': '👾'},
-    {'name': 'Player6303', 'avatar': '🎮'},
-    {'name': 'Player8093', 'avatar': '👑'},
-    {'name': 'Player7993', 'avatar': '♟️'},
-    {'name': 'Player0967', 'avatar': '🧠'},
-    {'name': 'Player1569', 'avatar': '👾'},
-    {'name': 'Player5529', 'avatar': '👑'},
+    {'name': 'jContreras', 'avatar': '🤖'},
+    {'name': 'rLopez29', 'avatar': '👾'},
+    {'name': 'aGarcia203', 'avatar': '🎮'},
+    {'name': 'kSmith20', 'avatar': '👑'},
+    {'name': 'lPaker54', 'avatar': '♟️'},
+    {'name': 'abreyce', 'avatar': '🧠'},
+    {'name': 'katherineSmith', 'avatar': '👾'},
+    {'name': 'luisCoronado', 'avatar': '👑'},
   ];
 
   @override
@@ -684,7 +684,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
 
     _matchmakingTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
-      // Verificar si el widget está montado
+
       if (!mounted) {
         timer.cancel();
         return;
@@ -707,7 +707,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
             if (waitingGames.isNotEmpty && mounted) {
               final game = waitingGames.first;
-              final success = await MultiplayerGameService().joinGame(
+              final success = await MultiplayerGameService().joinGameOnline(
                 game.id,
                 currentUser!.uid,
                 currentUser!.displayName ?? 'Usuario',
@@ -727,7 +727,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           }
         }
 
-        const int maxWaitTime = 45;
+        const int maxWaitTime = 20;
         if (_matchmakingSeconds >= maxWaitTime && !_isPlayingAgainstBot) {
           timer.cancel();
           _startBotGame();
@@ -1191,7 +1191,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   Future<void> _joinGameWithBet(MultiplayerGameMatch game) async {
-    final success = await MultiplayerGameService().joinGame(
+    final success = await MultiplayerGameService().joinGameOnline(
       game.id,
       currentUser!.uid,
       currentUser!.displayName ?? 'Usuario',
@@ -1787,18 +1787,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _gameEnded = true;
     _playerTimer?.cancel();
 
-    _showTimeoutDialog(isMyTimeout: isMyTimeout);
-
     final result = isMyTimeout ? GameResultModel.loss : GameResultModel.win;
     _recordGameResult(result);
 
     if (!_isPlayingAgainstBot && _currentGame != null) {
-      final winnerId =
-          isMyTimeout
-              ? _currentGame!.getOpponentId(currentUser!.uid)
-              : currentUser!.uid;
+      final winnerId = isMyTimeout
+          ? _currentGame!.getOpponentId(currentUser!.uid)
+          : currentUser!.uid;
 
-      MultiplayerGameService().finishGame(
+      MultiplayerGameService().finishGameOnline(
         gameId: _currentGame!.id,
         result: result,
         winnerId: winnerId,
@@ -2114,7 +2111,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _playerTimer?.cancel();
 
     try {
-      await MultiplayerGameService().finishGame(
+      await MultiplayerGameService().finishGameOnline(
         gameId: _currentGame!.id,
         result: result,
         winnerId: winnerId,
@@ -2190,14 +2187,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       int currencyChange = calculations['player'] ?? 0;
 
       if (kDebugMode) {
-        print('=== DEBUG APUESTA ===');
+        print('=== DEBUG APUESTA ONLINE ===');
         print('Modo: ${widget.matchType}');
         print('isBetMode: $isBetMode');
         print('isFunMode: $isFunMode');
         print('Cantidad apostada: $_selectedBetAmount');
         print('Resultado: $result');
-        print('Cambio de moneda: $currencyChange');
+        print('Cambio de moneda calculado: $currencyChange');
         print('Moneda: ${isBetMode ? "diamantes" : "monedas"}');
+        print('isPlayingAgainstBot: $_isPlayingAgainstBot');
       }
 
       switch (result) {
@@ -2212,20 +2210,25 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           break;
       }
 
-      if (currencyChange != 0) {
+      if (_isPlayingAgainstBot && currencyChange != 0) {
         final userData = await _firestoreService.getUser(currentUser!.uid);
         if (userData != null) {
           if (isBetMode) {
             final currentDiamonds = userData.diamonds;
-            final currentDiamondsEarned = userData.diamondsEarned;
             final newDiamonds = currentDiamonds + currencyChange;
-            final newDiamondsEarned = currentDiamondsEarned + newDiamonds;
+
+            final netGain = currencyChange - _selectedBetAmount!;
+            final currentDiamondsEarned = userData.diamondsEarned;
+            final newDiamondsEarned = currentDiamondsEarned + (netGain > 0 ? netGain : 0);
+
             await _firestoreService.updateUserDiamonds(
               currentUser!.uid,
               newDiamonds,
             );
-            await _firestoreService.updateUserDiamondsEarned( currentUser!.uid,
-                newDiamondsEarned);
+            await _firestoreService.updateUserDiamondsEarned(
+              currentUser!.uid,
+              newDiamondsEarned,
+            );
             setState(() {
               _userDiamonds = newDiamonds;
             });
@@ -2233,8 +2236,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             final currentCoins = userData.coins;
             final newCoins = currentCoins + currencyChange;
             await _firestoreService.updateUserCoins(
-                currentUser!.uid,
-                newCoins
+              currentUser!.uid,
+              newCoins,
             );
             setState(() {
               _userCoins = newCoins;
@@ -2260,42 +2263,81 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
           'finalFEN': controller.getFen(),
           'betAmount': _selectedBetAmount,
-          'currencyChange': currencyChange,
+          'expectedCurrencyChange': currencyChange,
           'currencyType': isBetMode ? 'diamonds' : 'coins',
           'isPlayingAgainstBot': _isPlayingAgainstBot,
+          'isOnlineMatchmaking': !_isPlayingAgainstBot,
         },
       );
 
       if (success && mounted) {
         String currency = isBetMode ? 'diamantes' : 'monedas';
 
-        if (currencyChange > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('¡Ganaste $currencyChange $currency!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        } else if (currencyChange < 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Perdiste ${currencyChange.abs()} $currency'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        } else if (result == GameResultModel.draw) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Empate - Recuperaste ${((_selectedBetAmount! * 0.15).round())} $currency'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
-          );
+        // 📊 Mostrar mensaje informativo
+        if (!_isPlayingAgainstBot) {
+          // Para juegos online, mostrar mensaje genérico
+          if (currencyChange > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('¡Ganaste! Se están procesando tus recompensas...'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else if (currencyChange < 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Partida finalizada. Procesando resultados...'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else if (result == GameResultModel.draw) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Empate - Se procesarán las devoluciones...'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        } else {
+          // Para juegos contra bot, mostrar el cambio exacto
+          if (currencyChange > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('¡Ganaste $currencyChange $currency!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else if (currencyChange < 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Perdiste ${currencyChange.abs()} $currency'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else if (result == GameResultModel.draw) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Empate - Recuperaste ${((_selectedBetAmount! * 0.15).round())} $currency'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+
+        if (!_isPlayingAgainstBot) {
+          Future.delayed(Duration(seconds: 3), () {
+            if (mounted) {
+              _loadUserCurrency();
+            }
+          });
         }
       }
-
     } catch (e) {
       if (kDebugMode) {
         print('Error al registrar la partida: $e');
@@ -2432,10 +2474,12 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   Future<void> _abandonGame() async {
     if (_gameEnded) return;
+
     _gameEnded = true;
     _playerTimer?.cancel();
     _cleanupTimers();
 
+    // 🤖 ABANDONO CONTRA BOT
     if (_isPlayingAgainstBot) {
       _recordGameResult(GameResultModel.loss);
 
@@ -2448,20 +2492,35 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       return;
     }
 
+    // 🌐 ABANDONO EN JUEGO ONLINE
     if (_currentGame != null) {
       try {
-        final opponentId = _currentGame!.getOpponentId(currentUser!.uid);
+        if (kDebugMode) {
+          print('\n🚪 === ABANDONANDO JUEGO ONLINE ===');
+          print('   Game ID: ${_currentGame!.id}');
+          print('   Player ID: ${currentUser!.uid}');
+        }
 
-        await MultiplayerGameService().finishGame(
+        // ✅ USAR MÉTODO ESPECÍFICO PARA ONLINE
+        final success = await MultiplayerGameService().abandonGameOnline(
           gameId: _currentGame!.id,
-          result: GameResultModel.win,
-          winnerId: opponentId,
-          reason: 'abandoned',
+          playerId: currentUser!.uid,
         );
-        _recordGameResult(GameResultModel.loss);
+
+        if (success) {
+          if (kDebugMode) {
+            print('✅ Abandono registrado correctamente');
+          }
+          _recordGameResult(GameResultModel.loss);
+        } else {
+          if (kDebugMode) {
+            print('❌ Error al registrar abandono');
+          }
+          _recordGameResult(GameResultModel.loss);
+        }
       } catch (e) {
         if (kDebugMode) {
-          print('Error al abandonar la partida: $e');
+          print('💥 Error al abandonar: $e');
         }
         _recordGameResult(GameResultModel.loss);
       }
@@ -3144,7 +3203,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
 
   String _getCurrencyName() {
-    return widget.matchType == S.of(context).bet ? 'coins' : 'diamonds';
+    return widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
   }
 
   int? _getCurrentBalance() {

@@ -89,12 +89,10 @@ class MultiplayerGameService {
     }
   }
 
-  Future<bool> joinGame(
-      String gameId,
+  Future<bool> joinGame(String gameId,
       String playerId,
       String playerName,
-      String? playerPhotoUrl,
-      ) async {
+      String? playerPhotoUrl,) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
       final gameDoc = await gameRef.get();
@@ -147,8 +145,7 @@ class MultiplayerGameService {
 
   Stream<MultiplayerGameMatch?> getGameStream(String gameId) {
     return _firestore.collection(_gamesCollection).doc(gameId).snapshots().map((
-        snapshot,
-        ) {
+        snapshot,) {
       if (snapshot.exists) {
         return MultiplayerGameMatch.fromFirestore(snapshot);
       }
@@ -213,7 +210,6 @@ class MultiplayerGameService {
     required String playerId,
   }) async {
     try {
-
       final gameRef = FirebaseFirestore.instance
           .collection('multiplayer_games')
           .doc(gameId);
@@ -258,6 +254,358 @@ class MultiplayerGameService {
     }
   }
 
+
+  /// Método específico para unirse a juegos de matchmaking online
+  Future<bool> joinGameOnline(String gameId,
+      String playerId,
+      String playerName,
+      String? playerPhotoUrl,) async {
+    try {
+      final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
+      final gameDoc = await gameRef.get();
+
+      if (!gameDoc.exists) {
+        if (kDebugMode) {
+          print('❌ Juego online no encontrado: $gameId');
+        }
+        return false;
+      }
+
+      final game = MultiplayerGameMatch.fromFirestore(gameDoc);
+
+      // Validaciones específicas para online
+      if (game.guestId != null) {
+        if (kDebugMode) {
+          print('⚠️ El juego ya tiene un guest');
+        }
+        return false;
+      }
+
+      if (game.hostId == playerId) {
+        if (kDebugMode) {
+          print('⚠️ No puedes unirte a tu propio juego');
+        }
+        return false;
+      }
+
+      if (game.status != 'waiting') {
+        if (kDebugMode) {
+          print('⚠️ El juego no está en estado waiting: ${game.status}');
+        }
+        return false;
+      }
+
+      // Verificar que el juego sea de matchmaking online
+      final isOnlineMatchmaking = game.gameSettings?['isOnlineMatchmaking'] ??
+          false;
+      if (!isOnlineMatchmaking) {
+        if (kDebugMode) {
+          print('⚠️ Este no es un juego de matchmaking online');
+        }
+        return false;
+      }
+
+      if (kDebugMode) {
+        print('\n🎮 === UNIÉNDOSE A JUEGO ONLINE ===');
+        print('   Game ID: $gameId');
+        print('   Host: ${game.hostName} (${game.hostId})');
+        print('   Guest: $playerName ($playerId)');
+        print('   Currency: ${game.currencyType}');
+        print('   Bet Amount: ${game.betAmount}');
+        print('   Quota Amount: ${game.hostQuota}');
+      }
+
+      // Actualizar el juego con el guest
+      await gameRef.update({
+        'guestId': playerId,
+        'guestName': playerName,
+        'guestPhotoUrl': playerPhotoUrl,
+        'status': 'active',
+        'startedAt': FieldValue.serverTimestamp(),
+        'guestQuota': game.hostQuota,
+        'lastGuestActivity': FieldValue.serverTimestamp(),
+      });
+
+      if (kDebugMode) {
+        print('✅ Guest añadido al juego');
+      }
+
+      // 💰 COBRAR CUOTAS si hay apuesta
+      if (game.hostQuota != null && game.hostQuota! > 0) {
+        if (kDebugMode) {
+          print('\n💰 === COBRANDO CUOTAS ONLINE ===');
+          print('   Host: ${game.hostId}');
+          print('   Guest: $playerId');
+          print('   Amount: ${game.hostQuota} ${game.currencyType}');
+        }
+
+        final quotaService = GameQuotaService();
+        final result = await quotaService.collectQuotas(
+          gameId: gameId,
+          hostId: game.hostId,
+          guestId: playerId,
+          quotaAmount: game.hostQuota!,
+          currencyType: game.currencyType,
+        );
+
+        if (result['success'] != true) {
+          if (kDebugMode) {
+            print('❌ ERROR: Fallo al cobrar cuotas');
+            print('   Reason: ${result['error']}');
+            print('   Revirtiendo join...');
+          }
+
+          // Revertir el join si falla el cobro de cuotas
+          await gameRef.update({
+            'guestId': null,
+            'guestName': null,
+            'guestPhotoUrl': null,
+            'status': 'waiting',
+            'startedAt': null,
+            'guestQuota': null,
+            'lastGuestActivity': null,
+          });
+
+          if (kDebugMode) {
+            print('⚠️ Join revertido debido a fallo en cuotas');
+          }
+
+          return false;
+        }
+
+        if (kDebugMode) {
+          print('✅ Cuotas cobradas exitosamente');
+          print('   Total Pot: ${game.hostQuota! * 2} ${game.currencyType}');
+          print('   Quotas Collected: true\n');
+        }
+      } else {
+        if (kDebugMode) {
+          print('ℹ️ Sin cuotas que cobrar (juego sin apuesta)');
+        }
+      }
+
+      if (kDebugMode) {
+        print('✅ Join completado exitosamente');
+        print('   Status: active');
+        print('   Juego listo para comenzar\n');
+      }
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('\n💥 === ERROR EN JOIN ONLINE ===');
+        print('   Game ID: $gameId');
+        print('   Player: $playerId');
+        print('   Error: $e\n');
+      }
+      return false;
+    }
+  }
+
+  /// Método específico para abandonar juegos online
+  Future<bool> abandonGameOnline({
+    required String gameId,
+    required String playerId,
+  }) async {
+    try {
+      final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
+      final gameDoc = await gameRef.get();
+
+      if (!gameDoc.exists) {
+        if (kDebugMode) {
+          print('❌ Juego no encontrado: $gameId');
+        }
+        return false;
+      }
+
+      final gameData = gameDoc.data() as Map<String, dynamic>;
+      final currentStatus = gameData['status'] ?? '';
+
+      // Solo permitir abandono si el juego está activo
+      if (currentStatus != 'active') {
+        if (kDebugMode) {
+          print('⚠️ No se puede abandonar juego con status: $currentStatus');
+        }
+        return false;
+      }
+
+      // Verificar que sea un juego online
+      final isOnlineMatchmaking = gameData['gameSettings']?['isOnlineMatchmaking'] ??
+          false;
+      if (!isOnlineMatchmaking) {
+        if (kDebugMode) {
+          print('⚠️ Este no es un juego de matchmaking online');
+        }
+        return false;
+      }
+
+      // Determinar el ganador (el que no abandonó)
+      String? winnerId;
+      final hostId = gameData['hostId'];
+      final guestId = gameData['guestId'];
+
+      if (playerId == hostId) {
+        winnerId = guestId;
+      } else if (playerId == guestId) {
+        winnerId = hostId;
+      } else {
+        if (kDebugMode) {
+          print('⚠️ El jugador no pertenece a este juego');
+        }
+        return false;
+      }
+
+      if (kDebugMode) {
+        print('\n🚪 === ABANDONO DE JUEGO ONLINE ===');
+        print('   Game ID: $gameId');
+        print('   Abandoned by: $playerId');
+        print('   Winner: $winnerId');
+        print('   Currency: ${gameData['currencyType']}');
+        print('   Bet Amount: ${gameData['betAmount']}');
+        print('   Quotas Collected: ${gameData['quotasCollected']}');
+      }
+
+      // Marcar el juego como abandonado
+      await gameRef.update({
+        'status': 'abandoned',
+        'abandonedBy': playerId,
+        'winnerId': winnerId,
+        'result': 'win', // El resultado es victoria para el oponente
+        'finishedAt': FieldValue.serverTimestamp(),
+        'endTime': FieldValue.serverTimestamp(),
+        'reason': 'abandoned',
+      });
+
+      if (kDebugMode) {
+        print('✅ Juego marcado como abandonado');
+        print('   La Cloud Function distribuirá las recompensas');
+        print('   Winner recibirá el premio completo\n');
+      }
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('\n💥 === ERROR EN ABANDONO ONLINE ===');
+        print('   Game ID: $gameId');
+        print('   Player: $playerId');
+        print('   Error: $e\n');
+      }
+      return false;
+    }
+  }
+
+  /// Método específico para finalizar juegos online
+  Future<bool> finishGameOnline({
+    required String gameId,
+    required GameResultModel result,
+    String? winnerId,
+    String? reason,
+  }) async {
+    try {
+      final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
+      final gameDoc = await gameRef.get();
+
+      if (!gameDoc.exists) {
+        if (kDebugMode) {
+          print('❌ Juego no encontrado: $gameId');
+        }
+        return false;
+      }
+
+      final gameData = gameDoc.data() as Map<String, dynamic>;
+      final currentStatus = gameData['status'] ?? '';
+
+      if (currentStatus == 'finished' || currentStatus == 'abandoned') {
+        if (kDebugMode) {
+          print('⚠️ Juego ya finalizado: $gameId (status: $currentStatus)');
+        }
+        return false;
+      }
+
+      final isOnlineMatchmaking = gameData['gameSettings']?['isOnlineMatchmaking'] ??
+          false;
+      if (!isOnlineMatchmaking) {
+        if (kDebugMode) {
+          print('⚠️ Este no es un juego de matchmaking online');
+        }
+        return false;
+      }
+
+      final quotasCollected = gameData['quotasCollected'] ?? false;
+      final currencyType = gameData['currencyType'] ?? 'coins';
+      final betAmount = gameData['betAmount'];
+
+      if (kDebugMode) {
+        print('\n🏁 === FINALIZANDO JUEGO ONLINE ===');
+        print('   Game ID: $gameId');
+        print('   Reason: $reason');
+        print('   Result: $result');
+        print('   Winner: $winnerId');
+        print('   Currency: $currencyType');
+        print('   Bet Amount: $betAmount');
+        print('   Quotas Collected: $quotasCollected');
+      }
+
+      if (!quotasCollected) {
+        if (kDebugMode) {
+          print('⚠️ ADVERTENCIA: Finalizando sin cuotas cobradas');
+        }
+      }
+
+      await gameRef.update({
+        'status': 'finished',
+        'result': result
+            .toString()
+            .split('.')
+            .last,
+        'winnerId': winnerId,
+        'finishedAt': FieldValue.serverTimestamp(),
+        'reason': reason,
+      });
+
+      if (kDebugMode) {
+        print('✅ Juego marcado como finished');
+        print(
+            '   La Cloud Function distribuirá las recompensas automáticamente');
+
+        if (currencyType == 'diamonds' && betAmount != null) {
+          final totalPot = betAmount * 2;
+          final winnerPrize = betAmount + (betAmount * 0.7).round();
+          final commission = (betAmount * 0.3).round();
+
+          print('\n💎 Distribución esperada:');
+          print('   Total Pot: $totalPot diamantes');
+          if (result == GameResultModel.draw) {
+            final drawReturn = (betAmount * 0.15).round();
+            print('   Cada jugador recupera: $drawReturn diamantes');
+            print('   Comisión: ${totalPot - (drawReturn * 2)} diamantes');
+          } else {
+            print('   Ganador recibirá: $winnerPrize diamantes');
+            print('   Perdedor pierde: $betAmount diamantes');
+            print('   Comisión: $commission diamantes');
+          }
+        }
+      }
+
+      if (gameDoc.exists) {
+        final game = MultiplayerGameMatch.fromFirestore(gameDoc);
+        await _updatePlayerStats(game, result);
+      }
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('\n💥 === ERROR EN FINISH ONLINE ===');
+        print('   Game ID: $gameId');
+        print('   Error: $e\n');
+      }
+      return false;
+    }
+  }
+
+
+
+
   Future<bool> finishGame({
     required String gameId,
     required GameResultModel result,
@@ -267,7 +615,6 @@ class MultiplayerGameService {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
 
-      // ✅ PRIMERO: Verificar si quotasCollected está en true
       final gameDoc = await gameRef.get();
       if (!gameDoc.exists) return false;
 

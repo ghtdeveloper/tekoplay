@@ -31,7 +31,6 @@ class OnlineMatchmakingChessService {
       )
 
 
-
           .where(
         'gameSettings.hostRanking',
         isLessThanOrEqualTo: userRanking + maxRankingDifference,
@@ -47,8 +46,10 @@ class OnlineMatchmakingChessService {
 
       if (games.isNotEmpty) {
         games.sort((a, b) {
-          final diffA = ((a.gameSettings!['hostRanking'] as int) - userRanking).abs();
-          final diffB = ((b.gameSettings!['hostRanking'] as int) - userRanking).abs();
+          final diffA = ((a.gameSettings!['hostRanking'] as int) - userRanking)
+              .abs();
+          final diffB = ((b.gameSettings!['hostRanking'] as int) - userRanking)
+              .abs();
           return diffA.compareTo(diffB);
         });
       }
@@ -167,8 +168,10 @@ class OnlineMatchmakingChessService {
 
       if (games.isNotEmpty) {
         games.sort((a, b) {
-          final diffA = ((a.gameSettings!['hostRanking'] as int) - userRanking).abs();
-          final diffB = ((b.gameSettings!['hostRanking'] as int) - userRanking).abs();
+          final diffA = ((a.gameSettings!['hostRanking'] as int) - userRanking)
+              .abs();
+          final diffB = ((b.gameSettings!['hostRanking'] as int) - userRanking)
+              .abs();
           return diffA.compareTo(diffB);
         });
       }
@@ -195,6 +198,13 @@ class OnlineMatchmakingChessService {
     try {
       final gameRef = _firestore.collection('multiplayer_games').doc();
 
+      int quotaAmount;
+      if (betAmount != null) {
+        quotaAmount = betAmount;
+      } else {
+        quotaAmount = currencyType == 'diamonds' ? 25 : 100;
+      }
+
       final game = MultiplayerGameMatch(
         currencyType: currencyType,
         id: gameRef.id,
@@ -210,6 +220,11 @@ class OnlineMatchmakingChessService {
         isRanked: true,
         betAmount: betAmount,
         lastHostActivity: DateTime.now(),
+        hostQuota: quotaAmount,
+        guestQuota: null,
+        quotasCollected: false,
+        rewardsDistributed: false,
+        totalPot: null,
         gameSettings: {
           'timeMinutes': timeMinutes,
           'hostRanking': hostRanking,
@@ -219,6 +234,15 @@ class OnlineMatchmakingChessService {
       );
 
       await gameRef.set(game.toFirestore());
+
+      if (kDebugMode) {
+        print('✅ Juego online creado:');
+        print('   Game ID: ${gameRef.id}');
+        print('   Currency: $currencyType');
+        print('   Quota: $quotaAmount');
+        print('   Bet Amount: $betAmount');
+      }
+
       return gameRef.id;
     } catch (e) {
       if (kDebugMode) {
