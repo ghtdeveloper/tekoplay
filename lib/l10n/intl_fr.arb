@@ -353,7 +353,13 @@
   "enterAmountToWithdraw": "Saisissez le montant à retirer",
   "processing": "Traitement en cours...",
   "requestWithdrawal": "Demander un retrait",
-  "withdrawalsProcessedIn": "Les retraits sont traités sous 24 à 48 heures ouvrables"
+  "withdrawalsProcessedIn": "Les retraits sont traités sous 24 à 48 heures ouvrables",
+  "letGameBegin": "Que la partie commence !",
+  "youWonProcess": "Tu as gagné ! Tes récompenses sont en cours de traitement...",
+  "GameOverProcess": "Partie terminée. Traitement des résultats...",
+  "GameOverDraw": "Match nul - Les remboursements seront traités...",
+  "recovered": "Récupéré",
+  "errorResult": "Erreur lors du traitement du résultat"
 
 
 
