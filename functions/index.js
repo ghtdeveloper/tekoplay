@@ -1,242 +1,242 @@
-const {setGlobalOptions} = require("firebase-functions/v2/options");
-const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
-const logger = require("firebase-functions/logger");
-const admin = require('firebase-admin');
+  const {setGlobalOptions} = require("firebase-functions/v2/options");
+    const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
+    const logger = require("firebase-functions/logger");
+    const admin = require('firebase-admin');
 
-admin.initializeApp();
-const db = admin.firestore();
+    admin.initializeApp();
+    const db = admin.firestore();
 
+    // Configurar opciones globales
+    setGlobalOptions({ 
+      maxInstances: 10,
+      region: 'us-east1'
+    });
 
-setGlobalOptions({ 
-  maxInstances: 10,
-  region: 'us-east1'
-});
+    // Función para enviar notificaciones cuando se crea una invitación
+    exports.sendGameInvitationNotification = onDocumentCreated(
+      {
+        document: 'game_invitations/{invitationId}',
+        region: 'us-east1',
+      },
+      async (event) => {
+        const invitation = event.data?.data();
+        const invitationId = event.params.invitationId;
 
-
-exports.sendGameInvitationNotification = onDocumentCreated(
-  {
-    document: 'game_invitations/{invitationId}',
-    region: 'us-east1',
-  },
-  async (event) => {
-    const invitation = event.data?.data();
-    const invitationId = event.params.invitationId;
-
-    if (!invitation) {
-      console.log('No invitation data found');
-      return null;
-    }
-
-    try {
-      const tokenDoc = await admin.firestore()
-        .collection('user_tokens')
-        .doc(invitation.toUserId)
-        .get();
-
-      if (!tokenDoc.exists) {
-        console.log('No token found for user:', invitation.toUserId);
-        return null;
-      }
-
-      const userToken = tokenDoc.data().token;
-
-      const message = {
-        token: userToken,
-        notification: {
-          title: 'Nueva invitación de juego',
-          body: `${invitation.fromUserName} te invita a jugar ${invitation.gameType}`,
-        },
-        data: {
-          type: 'game_invitation',
-          invitationId: invitationId,
-          gameType: invitation.gameType,
-          fromUserName: invitation.fromUserName,
-        },
-        android: {
-          priority: 'high',
-          notification: {
-            icon: 'ic_notification',
-            color: '#EC7A34',
-            sound: 'default',
-          },
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-              badge: 1,
-            },
-          },
-        },
-      };
-
-      const response = await admin.messaging().send(message);
-      console.log('Notification sent successfully:', response);
-
-      return response;
-    } catch (error) {
-      console.error('Error sending notification:', error);
-      return null;
-    }
-  }
-);
-
-
-exports.sendGameMoveNotification = onDocumentUpdated(
-  {
-    document: 'multiplayer_games/{gameId}',
-    region: 'us-east1',
-  },
-  async (event) => {
-    const before = event.data?.before.data();
-    const after = event.data?.after.data();
-    const gameId = event.params.gameId;
-
-    if (!before || !after) {
-      console.log('No game data found');
-      return null;
-    }
-
-    if (before.currentTurn === after.currentTurn) {
-      return null;
-    }
-
-    try {
-      const currentPlayerId = after.currentTurn === 'host' ? after.hostId : after.guestId;
-      const opponentName = after.currentTurn === 'host' ? after.guestName : after.hostName;
-
-      if (!currentPlayerId) return null;
-
-      const tokenDoc = await admin.firestore()
-        .collection('user_tokens')
-        .doc(currentPlayerId)
-        .get();
-
-      if (!tokenDoc.exists) {
-        console.log('No token found for user:', currentPlayerId);
-        return null;
-      }
-
-      const userToken = tokenDoc.data().token;
-
-      const message = {
-        token: userToken,
-        notification: {
-          title: 'Tu turno',
-          body: `${opponentName} ha movido. ¡Es tu turno!`,
-        },
-        data: {
-          type: 'game_move',
-          gameId: gameId,
-          opponentName: opponentName,
-          moveNotation: after.lastMoveNotation || '',
-        },
-        android: {
-          priority: 'high',
-          notification: {
-            icon: 'ic_notification',
-            color: '#EC7A34',
-            sound: 'default',
-          },
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-              badge: 1,
-            },
-          },
-        },
-      };
-
-      const response = await admin.messaging().send(message);
-      console.log('Move notification sent:', response);
-
-      return response;
-    } catch (error) {
-      console.error('Error sending move notification:', error);
-      return null;
-    }
-  }
-);
-
-
-exports.sendGameFinishedNotification = onDocumentUpdated(
-  {
-    document: 'multiplayer_games/{gameId}',
-    region: 'us-east1',
-  },
-  async (event) => {
-    const before = event.data?.before.data();
-    const after = event.data?.after.data();
-    const gameId = event.params.gameId;
-
-    if (!before || !after) {
-      console.log('No game data found');
-      return null;
-    }
-
-    if (before.status === 'finished' || after.status !== 'finished') {
-      return null;
-    }
-
-    try {
-      const players = [
-        { id: after.hostId, name: after.hostName },
-        { id: after.guestId, name: after.guestName }
-      ];
-
-      const promises = players.map(async (player) => {
-        if (!player.id) return null;
-
-        const tokenDoc = await admin.firestore()
-          .collection('user_tokens')
-          .doc(player.id)
-          .get();
-
-        if (!tokenDoc.exists) return null;
-
-        const userToken = tokenDoc.data().token;
-
-        let title, body;
-        if (after.result === 'draw') {
-          title = 'Juego terminado';
-          body = 'La partida terminó en empate';
-        } else if (after.winnerId === player.id) {
-          title = '¡Felicidades!';
-          body = '¡Has ganado la partida!';
-        } else {
-          title = 'Juego terminado';
-          body = 'Has perdido la partida';
+        if (!invitation) {
+          console.log('No invitation data found');
+          return null;
         }
 
-        const message = {
-          token: userToken,
-          notification: { title, body },
-          data: {
-            type: 'game_finished',
-            gameId: gameId,
-            result: after.result,
-            winnerId: after.winnerId || '',
-          },
-        };
+        try {
+          const tokenDoc = await admin.firestore()
+            .collection('user_tokens')
+            .doc(invitation.toUserId)
+            .get();
 
-        return admin.messaging().send(message);
-      });
+          if (!tokenDoc.exists) {
+            console.log('No token found for user:', invitation.toUserId);
+            return null;
+          }
 
-      await Promise.all(promises);
-      console.log('Game finished notifications sent');
+          const userToken = tokenDoc.data().token;
 
-      return null;
-    } catch (error) {
-      console.error('Error sending game finished notifications:', error);
-      return null;
-    }
-  }
-);
+          const message = {
+            token: userToken,
+            notification: {
+              title: 'Nueva invitación de juego',
+              body: `${invitation.fromUserName} te invita a jugar ${invitation.gameType}`,
+            },
+            data: {
+              type: 'game_invitation',
+              invitationId: invitationId,
+              gameType: invitation.gameType,
+              fromUserName: invitation.fromUserName,
+            },
+            android: {
+              priority: 'high',
+              notification: {
+                icon: 'ic_notification',
+                color: '#EC7A34',
+                sound: 'default',
+              },
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: 'default',
+                  badge: 1,
+                },
+              },
+            },
+          };
+
+          const response = await admin.messaging().send(message);
+          console.log('Notification sent successfully:', response);
+
+          return response;
+        } catch (error) {
+          console.error('Error sending notification:', error);
+          return null;
+        }
+      }
+    );
+
+    // Función para notificar movimientos en el juego
+    exports.sendGameMoveNotification = onDocumentUpdated(
+      {
+        document: 'multiplayer_games/{gameId}',
+        region: 'us-east1',
+      },
+      async (event) => {
+        const before = event.data?.before.data();
+        const after = event.data?.after.data();
+        const gameId = event.params.gameId;
+
+        if (!before || !after) {
+          console.log('No game data found');
+          return null;
+        }
+
+        if (before.currentTurn === after.currentTurn) {
+          return null;
+        }
+
+        try {
+          const currentPlayerId = after.currentTurn === 'host' ? after.hostId : after.guestId;
+          const opponentName = after.currentTurn === 'host' ? after.guestName : after.hostName;
+
+          if (!currentPlayerId) return null;
+
+          const tokenDoc = await admin.firestore()
+            .collection('user_tokens')
+            .doc(currentPlayerId)
+            .get();
+
+          if (!tokenDoc.exists) {
+            console.log('No token found for user:', currentPlayerId);
+            return null;
+          }
+
+          const userToken = tokenDoc.data().token;
+
+          const message = {
+            token: userToken,
+            notification: {
+              title: 'Tu turno',
+              body: `${opponentName} ha movido. ¡Es tu turno!`,
+            },
+            data: {
+              type: 'game_move',
+              gameId: gameId,
+              opponentName: opponentName,
+              moveNotation: after.lastMoveNotation || '',
+            },
+            android: {
+              priority: 'high',
+              notification: {
+                icon: 'ic_notification',
+                color: '#EC7A34',
+                sound: 'default',
+              },
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: 'default',
+                  badge: 1,
+                },
+              },
+            },
+          };
+
+          const response = await admin.messaging().send(message);
+          console.log('Move notification sent:', response);
+
+          return response;
+        } catch (error) {
+          console.error('Error sending move notification:', error);
+          return null;
+        }
+      }
+    );
+
+    // Función para notificar cuando termina un juego
+    exports.sendGameFinishedNotification = onDocumentUpdated(
+      {
+        document: 'multiplayer_games/{gameId}',
+        region: 'us-east1',
+      },
+      async (event) => {
+        const before = event.data?.before.data();
+        const after = event.data?.after.data();
+        const gameId = event.params.gameId;
+
+        if (!before || !after) {
+          console.log('No game data found');
+          return null;
+        }
+
+        if (before.status === 'finished' || after.status !== 'finished') {
+          return null;
+        }
+
+        try {
+          const players = [
+            { id: after.hostId, name: after.hostName },
+            { id: after.guestId, name: after.guestName }
+          ];
+
+          const promises = players.map(async (player) => {
+            if (!player.id) return null;
+
+            const tokenDoc = await admin.firestore()
+              .collection('user_tokens')
+              .doc(player.id)
+              .get();
+
+            if (!tokenDoc.exists) return null;
+
+            const userToken = tokenDoc.data().token;
+
+            let title, body;
+            if (after.result === 'draw') {
+              title = 'Juego terminado';
+              body = 'La partida terminó en empate';
+            } else if (after.winnerId === player.id) {
+              title = '¡Felicidades!';
+              body = '¡Has ganado la partida!';
+            } else {
+              title = 'Juego terminado';
+              body = 'Has perdido la partida';
+            }
+
+            const message = {
+              token: userToken,
+              notification: { title, body },
+              data: {
+                type: 'game_finished',
+                gameId: gameId,
+                result: after.result,
+                winnerId: after.winnerId || '',
+              },
+            };
+
+            return admin.messaging().send(message);
+          });
+
+          await Promise.all(promises);
+          console.log('Game finished notifications sent');
+
+          return null;
+        } catch (error) {
+          console.error('Error sending game finished notifications:', error);
+          return null;
+        }
+      }
+    );
 
   
-
+   // FUNCIÓN: Distribuir recompensas del juego (finished Y abandoned)
 exports.distributeGameRewards = onDocumentUpdated(
   {
     document: 'multiplayer_games/{gameId}',
@@ -332,14 +332,13 @@ exports.distributeGameRewards = onDocumentUpdated(
         const guestData = guestDoc.data();
 
         const quotaAmount = totalPot / 2;
-     
-        const winnerPrize = quotaAmount + Math.ceil(quotaAmount * 0.7);
-        const houseCommission = Math.ceil(quotaAmount * 0.3);
+        const winnerPrize = quotaAmount + Math.round(quotaAmount * 0.7);
+        const houseCommission = Math.round(quotaAmount * 0.3);
 
         console.log(`\n💵 CÁLCULOS INICIALES:`);
         console.log(`   totalPot: ${totalPot}`);
         console.log(`   quotaAmount: ${quotaAmount}`);
-        console.log(`   winnerPrize: ${winnerPrize} (quota + ${Math.ceil(quotaAmount * 0.7)})`);
+        console.log(`   winnerPrize: ${winnerPrize}`);
         console.log(`   houseCommission: ${houseCommission}`);
 
         let hostReward = 0;
@@ -363,8 +362,7 @@ exports.distributeGameRewards = onDocumentUpdated(
           console.log(`   winnerId: "${winnerId}"`);
           
           if (result === 'draw') {
-         
-            const drawReturn = Math.ceil(quotaAmount * 0.15);
+            const drawReturn = Math.round(quotaAmount * 0.15);
             hostReward = drawReturn;
             guestReward = drawReturn;
             console.log(`   🤝 EMPATE → Cada uno recibe ${drawReturn}`);
@@ -429,7 +427,7 @@ exports.distributeGameRewards = onDocumentUpdated(
           console.log(`   Host: ${hostNewDiamonds} diamantes (${hostOldDiamonds} + ${hostReward})`);
           console.log(`   Guest: ${guestNewDiamonds} diamantes (${guestOldDiamonds} + ${guestReward})`);
           
-       
+          // Calcular ganancias netas para tracking
           const hostNetGain = hostReward - quotaAmount;
           const guestNetGain = guestReward - quotaAmount;
           
@@ -456,7 +454,7 @@ exports.distributeGameRewards = onDocumentUpdated(
           });
         }
 
-     
+        // Actualizar documento del juego
         transaction.update(gameRef, {
           rewardsDistributed: true,
           rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -492,7 +490,7 @@ exports.distributeGameRewards = onDocumentUpdated(
 );
 
 
-
+// FUNCIÓN: Distribuir recompensas del juego ONLINE DE APUESTA (solo diamantes)
 exports.distributeOnlineBetGameRewards = onDocumentUpdated(
   {
     document: 'multiplayer_games/{gameId}',
@@ -517,13 +515,13 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
       return null;
     }
 
-   
+    // Solo procesar juegos de APUESTA (diamantes) online
     if (afterData.currencyType !== 'diamonds') {
       console.log(`⏭️ [${gameId}] No es juego de apuesta con diamantes (SALIENDO)`);
       return null;
     }
 
-  
+    // Verificar que el juego sea online matchmaking
     if (!afterData.gameSettings?.isOnlineMatchmaking) {
       console.log(`⏭️ [${gameId}] No es juego de matchmaking online (SALIENDO)`);
       return null;
@@ -592,7 +590,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
         const hostData = hostDoc.data();
         const guestData = guestDoc.data();
 
-     
+        // PASO 1: COBRAR CUOTAS SI NO SE HAN COBRADO
         let quotasAlreadyCollected = currentGameData?.quotasCollected === true;
         let hostCurrentDiamonds = hostData.diamonds || 0;
         let guestCurrentDiamonds = guestData.diamonds || 0;
@@ -606,7 +604,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
           console.log(`   Guest diamonds: ${guestCurrentDiamonds}`);
           console.log(`💵 CUOTA A COBRAR: ${betAmount} diamantes c/u`);
 
-         
+          // Verificar que ambos tengan suficientes diamantes
           if (hostCurrentDiamonds < betAmount) {
             throw new Error(`Host no tiene suficientes diamantes: ${hostCurrentDiamonds} < ${betAmount}`);
           }
@@ -614,7 +612,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
             throw new Error(`Guest no tiene suficientes diamantes: ${guestCurrentDiamonds} < ${betAmount}`);
           }
 
-         
+          // Cobrar las cuotas
           hostCurrentDiamonds -= betAmount;
           guestCurrentDiamonds -= betAmount;
 
@@ -624,11 +622,11 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
           console.log(`💰 Total pot: ${betAmount * 2} diamantes`);
           console.log(`======================================\n`);
 
-        
+          // Actualizar los balances después del cobro
           transaction.update(hostRef, { diamonds: hostCurrentDiamonds });
           transaction.update(guestRef, { diamonds: guestCurrentDiamonds });
 
-         
+          // Marcar cuotas como cobradas
           transaction.update(gameRef, {
             quotasCollected: true,
             quotasCollectedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -640,16 +638,15 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
           console.log(`\n✅ Cuotas ya fueron cobradas previamente\n`);
         }
 
-      
+        // PASO 2: CALCULAR Y DISTRIBUIR RECOMPENSAS
         const totalPot = betAmount * 2;
-   
-        const winnerPrize = betAmount + Math.ceil(betAmount * 0.7);
-        const houseCommission = Math.ceil(betAmount * 0.3);
+        const winnerPrize = betAmount + Math.round(betAmount * 0.7);
+        const houseCommission = Math.round(betAmount * 0.3);
 
         console.log(`\n💵 CÁLCULOS DE RECOMPENSAS:`);
         console.log(`   totalPot: ${totalPot} diamantes`);
         console.log(`   betAmount por jugador: ${betAmount} diamantes`);
-        console.log(`   winnerPrize: ${winnerPrize} diamantes (${betAmount} + ${Math.ceil(betAmount * 0.7)})`);
+        console.log(`   winnerPrize: ${winnerPrize} diamantes`);
         console.log(`   houseCommission: ${houseCommission} diamantes (30%)`);
 
         let hostReward = 0;
@@ -675,8 +672,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
           
           if (result === 'draw') {
             distributionReason = 'draw';
-          
-            const drawReturn = Math.ceil(betAmount * 0.15);
+            const drawReturn = Math.round(betAmount * 0.15);
             hostReward = drawReturn;
             guestReward = drawReturn;
             console.log(`   🤝 EMPATE → Cada uno recibe ${drawReturn} diamantes de regreso`);
@@ -696,7 +692,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
         console.log(`   Guest reward: ${guestReward} diamantes`);
         console.log(`   House commission: ${houseCommission} diamantes`);
 
-      
+        // Aplicar las recompensas
         const hostNewDiamonds = hostCurrentDiamonds + hostReward;
         const guestNewDiamonds = guestCurrentDiamonds + guestReward;
 
@@ -705,7 +701,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
         console.log(`   Host: ${hostCurrentDiamonds} + ${hostReward} = ${hostNewDiamonds} diamantes`);
         console.log(`   Guest: ${guestCurrentDiamonds} + ${guestReward} = ${guestNewDiamonds} diamantes`);
 
-      
+        // Calcular ganancias NETAS (recompensa - cuota pagada)
         const hostNetGain = hostReward - betAmount;
         const guestNetGain = guestReward - betAmount;
 
@@ -713,7 +709,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
         console.log(`   Host: ${hostNetGain > 0 ? '+' : ''}${hostNetGain} diamantes`);
         console.log(`   Guest: ${guestNetGain > 0 ? '+' : ''}${guestNetGain} diamantes`);
 
-      
+        // Actualizar diamondsEarned SOLO si ganaron dinero
         const hostNewDiamondsEarned = (hostData.diamondsEarned || 0) + Math.max(0, hostNetGain);
         const guestNewDiamondsEarned = (guestData.diamondsEarned || 0) + Math.max(0, guestNetGain);
 
@@ -722,7 +718,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
         console.log(`   Guest: ${guestNewDiamondsEarned} (anterior: ${guestData.diamondsEarned || 0})`);
         console.log(`============================================\n`);
 
-    
+        // Actualizar usuarios
         transaction.update(hostRef, {
           diamonds: hostNewDiamonds,
           diamondsEarned: hostNewDiamondsEarned,
@@ -732,7 +728,7 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
           diamondsEarned: guestNewDiamondsEarned,
         });
 
-    
+        // Actualizar documento del juego
         transaction.update(gameRef, {
           rewardsDistributed: true,
           rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),

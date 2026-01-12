@@ -47,7 +47,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   int? _userDiamonds;
   BetNegotiationState _betState = BetNegotiationState.selecting;
   String? _pendingGameId;
-  final List<int> _betOptions = [10, 25, 50, 100, 250, 500, 1000, 5000, 10000];
+  final List<int> _betOptions = [10, 20, 50, 100, 250, 500, 1000, 5000, 10000];
   int? _userCoins;
   final List<int> _coinBetOptions = [50, 100, 250, 500, 1000, 2500, 5000];
   String? _lastMoveFromSquare;

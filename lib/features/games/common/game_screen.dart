@@ -164,9 +164,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   Future<void> _processWithdrawal(int amount) async {
     try {
-      // Aquí implementarías la lógica de retiro a través de tu servicio
-      // Por ejemplo: await AuthService().withdrawDiamonds(amount);
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Solicitud de retiro procesada: $amount diamantes'),
@@ -197,7 +194,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         }
         break;
       case AppLifecycleState.paused:
-        // App went to background - disable wakelock to save battery
         _disableWakeLock();
         break;
       case AppLifecycleState.detached:
@@ -1159,7 +1155,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        // Si hay poco espacio y es modo bet, usar diseño vertical
                         final shouldStack = constraints.maxWidth < 200 &&
                             matchType == S.of(context).bet &&
                             (_withdrawableDiamonds ?? 0) > 0;
@@ -1655,7 +1650,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         builder: (context) {
           return StatefulBuilder(
             builder: (context, setState) {
-              // Validar monto de apuesta
               void validateBetAmount(String value) {
                 if (matchType != S.of(context).bet) return;
 
@@ -1769,7 +1763,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                           ),
                         ),
 
-                        // Campo de monto de apuesta (solo para modo bet)
                         if (matchType == S.of(context).bet) ...[
                           SizedBox(height: 16),
                           TextField(
@@ -1838,7 +1831,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
                         SizedBox(height: 20),
 
-                        // Botón de enviar
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
@@ -1846,15 +1838,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                 (isLoading || !isFormValid)
                                     ? null
                                     : () async {
-                                      // Revalidar fondos antes de enviar invitación
                                       final stillHasEnoughFunds =
                                           await _validateUserFundsForInvitation();
                                       if (!stillHasEnoughFunds) {
                                         Navigator.of(context).pop();
                                         return;
                                       }
-
-                                      // Validar monto de apuesta si es modo bet
                                       if (matchType == S.of(context).bet) {
                                         final betAmount = int.tryParse(
                                           betAmountController.text.trim(),
