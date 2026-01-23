@@ -359,7 +359,8 @@
   "GameOverProcess": "Partie terminée. Traitement des résultats...",
   "GameOverDraw": "Match nul - Les remboursements seront traités...",
   "recovered": "Récupéré",
-  "errorResult": "Erreur lors du traitement du résultat"
+  "errorResult": "Erreur lors du traitement du résultat",
+  "tutorialTitle": "Comment jouer au Ludo"
 
 
 

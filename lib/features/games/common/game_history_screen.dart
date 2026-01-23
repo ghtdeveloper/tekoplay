@@ -592,6 +592,13 @@ Future<void> _disableWakeLock() async {
           height: size,
           fit: BoxFit.contain,
         );
+      case GameTypeModel.ludo:
+        return Image.asset(
+          'assets/images/parchis.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+        );
     }
   }
 }

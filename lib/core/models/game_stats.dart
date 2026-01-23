@@ -28,6 +28,8 @@ class GameStats {
         return 1000;
       case GameTypeModel.domino:
         return 1000;
+      case GameTypeModel.ludo:
+        return 1000;
     }
   }
 

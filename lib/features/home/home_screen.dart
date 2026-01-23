@@ -1293,9 +1293,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                 imagePath: 'assets/images/parchis.png',
                                 title: S.of(context).parchisShort,
                                 onTap: () {
+                                  _showGameTypeDialog(context, S.of(context).parchisShort);
                                 },
                                 size: cardSize,
-                                isEnabled: false,
+                                isEnabled: true,
                               ),
                               // Poker - Deshabilitado
                               GameCard(

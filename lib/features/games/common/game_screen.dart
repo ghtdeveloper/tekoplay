@@ -10,6 +10,7 @@ import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
 import 'package:tekoplay/features/games/common/ranking_screen.dart';
 import 'package:tekoplay/features/games/common/withdraw_dialog.dart';
 import 'package:tekoplay/features/games/common/withdrawal_widget.dart';
+import 'package:tekoplay/features/games/ludo/ludo_tutorial_screen.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../core/models/multiplayer_game_match_chess.dart';
@@ -31,6 +32,7 @@ import '../chess/multiplayer_chess_screen.dart';
 import '../chess/online_chess_screen.dart';
 import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
+import '../ludo/ludo_vs_cpu_screen.dart';
 import 'game_history_screen.dart';
 
 class GameScreen extends StatefulWidget {
@@ -68,6 +70,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   String? _localizedChess;
   String? _localizedDomino;
+  String? _localizedLudo;
   String? _localizedBet;
   String? _localizedFun;
   int? _withdrawableDiamonds;
@@ -88,6 +91,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _setupWalletInfoUser();
     _localizedChess = S.of(context).chess;
     _localizedDomino = S.of(context).domino;
+    _localizedLudo = S.of(context).parchisShort;
     _localizedBet = S.of(context).bet;
     _localizedFun = S.of(context).fun;
   }
@@ -95,6 +99,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool get isChess => gameType == _localizedChess;
 
   bool get isDomino => gameType == _localizedDomino;
+
+  bool get isLudo => gameType == _localizedLudo;
 
   void _setupWalletInfoUser() {
     if (_currentUser == null) {
@@ -164,7 +170,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   Future<void> _processWithdrawal(int amount) async {
     try {
-      // Aquí implementarías la lógica de retiro a través de tu servicio
+      // TODO Aquí implementarías la lógica de retiro a través de tu servicio
       // Por ejemplo: await AuthService().withdrawDiamonds(amount);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -197,7 +203,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         }
         break;
       case AppLifecycleState.paused:
-        // App went to background - disable wakelock to save battery
         _disableWakeLock();
         break;
       case AppLifecycleState.detached:
@@ -1159,7 +1164,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        // Si hay poco espacio y es modo bet, usar diseño vertical
                         final shouldStack = constraints.maxWidth < 200 &&
                             matchType == S.of(context).bet &&
                             (_withdrawableDiamonds ?? 0) > 0;
@@ -1980,7 +1984,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         ),
       );
     }
+    else if (isLudo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LudoTutorialScreen(),
+        ),
+      );
+    }
   }
+
 
   void _showComputerGameDialog(BuildContext context) {
     if (isChess) {
@@ -2000,7 +2013,125 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     } else if (isDomino) {
       _showDominoCpuDialog(context);
     }
+    else if (isLudo) {
+      _showLudoCpuDialog(context);
+    }
   }
+
+  void _showLudoCpuDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        String selectedDifficulty = S.of(context).normal;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Botón cerrar
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: IconButton(
+                        icon: Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+
+                    // Icono de Ludo
+                    Icon(
+                      Icons.casino,
+                      size: 48,
+                      color: Color(0xFFEC7A34),
+                    ),
+                    SizedBox(height: 12),
+
+                    // Título
+                    Text(
+                      S.of(context).playVsComputer,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: Colors.black87,
+                      ),
+                    ),
+
+                    SizedBox(height: 20),
+
+                    // Radio buttons de dificultad
+                    Column(
+                      children: [
+                        S.of(context).veryEasy,
+                        S.of(context).easy,
+                        S.of(context).normal,
+                        S.of(context).difficult,
+                      ].map((level) {
+                        return RadioListTile<String>(
+                          title: Text(level),
+                          value: level,
+                          groupValue: selectedDifficulty,
+                          onChanged: (value) {
+                            setState(() {
+                              selectedDifficulty = value!;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+
+                    SizedBox(height: 20),
+
+                    // Botón de iniciar juego
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop(); // Cierra el diálogo
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => LudoVsCpuScreen(
+                                difficulty: selectedDifficulty,
+                                matchType: widget.matchType,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: Icon(Icons.smart_toy),
+                        label: Text(
+                          S.of(context).startGame,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEC7A34),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+
 
   void _showChessCpuDialog(BuildContext context) {
     showDialog(

@@ -404,6 +404,13 @@ class _RankingScreenState extends State<RankingScreen>
           height: size,
           fit: BoxFit.contain,
         );
+      case GameTypeModel.ludo:
+        return Image.asset(
+          'assets/images/parchis.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+        );
     }
   }
 }

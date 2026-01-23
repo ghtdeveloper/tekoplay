@@ -361,5 +361,6 @@
   "GameOverProcess": "Partida finalizada. Procesando resultados...",
   "GameOverDraw": "Empate - Se procesarán las devoluciones...",
   "recovered": "Recuperaste",
-  "errorResult": "Error al procesar el resultado"
+  "errorResult": "Error al procesar el resultado",
+  "tutorialTitle": "Cómo jugar Ludo"
 }
