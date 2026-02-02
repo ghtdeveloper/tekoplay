@@ -2024,6 +2024,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       barrierDismissible: false,
       builder: (context) {
         String selectedDifficulty = S.of(context).normal;
+        int selectedCpuCount = 1;
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -2032,96 +2033,255 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(20),
               ),
               backgroundColor: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Botón cerrar
-                    Align(
-                      alignment: Alignment.topRight,
-                      child: IconButton(
-                        icon: Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: IconButton(
+                          icon: Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
                       ),
-                    ),
 
-                    // Icono de Ludo
-                    Icon(
-                      Icons.casino,
-                      size: 48,
-                      color: Color(0xFFEC7A34),
-                    ),
-                    SizedBox(height: 12),
-
-                    // Título
-                    Text(
-                      S.of(context).playVsComputer,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Colors.black87,
+                      Icon(
+                        Icons.casino,
+                        size: 48,
+                        color: Color(0xFFEC7A34),
                       ),
-                    ),
+                      SizedBox(height: 12),
 
-                    SizedBox(height: 20),
+                      Text(
+                        S.of(context).playVsComputer,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Colors.black87,
+                        ),
+                      ),
 
-                    // Radio buttons de dificultad
-                    Column(
-                      children: [
-                        S.of(context).veryEasy,
-                        S.of(context).easy,
-                        S.of(context).normal,
-                        S.of(context).difficult,
-                      ].map((level) {
-                        return RadioListTile<String>(
-                          title: Text(level),
-                          value: level,
-                          groupValue: selectedDifficulty,
-                          onChanged: (value) {
-                            setState(() {
-                              selectedDifficulty = value!;
-                            });
-                          },
-                        );
-                      }).toList(),
-                    ),
+                      SizedBox(height: 20),
 
-                    SizedBox(height: 20),
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.people, color: Color(0xFFEC7A34), size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Cantidad de oponentes CPU',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [1, 2, 3].map((count) {
+                                final isSelected = selectedCpuCount == count;
+                                return Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          selectedCpuCount = count;
+                                        });
+                                      },
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? Color(0xFFEC7A34)
+                                              : Colors.white,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? Color(0xFFEC7A34)
+                                                : Colors.grey.shade300,
+                                            width: 2,
+                                          ),
+                                          boxShadow: isSelected ? [
+                                            BoxShadow(
+                                              color: Color(0xFFEC7A34).withOpacity(0.3),
+                                              blurRadius: 8,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ] : [],
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Icon(
+                                              Icons.smart_toy,
+                                              color: isSelected ? Colors.white : Colors.grey,
+                                              size: 24,
+                                            ),
+                                            SizedBox(height: 4),
+                                            Text(
+                                              '$count CPU${count > 1 ? 's' : ''}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: isSelected ? Colors.white : Colors.black87,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            SizedBox(height: 2),
+                                            Text(
+                                              count == 1 ? '(1 vs 1)' :
+                                              count == 2 ? '(3 jugadores)' :
+                                              '(4 jugadores)',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: isSelected
+                                                    ? Colors.white70
+                                                    : Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                    // Botón de iniciar juego
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop(); // Cierra el diálogo
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => LudoVsCpuScreen(
-                                difficulty: selectedDifficulty,
-                                matchType: widget.matchType,
+                      SizedBox(height: 20),
+
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.speed, color: Color(0xFFEC7A34), size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Dificultad',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              children: [
+                                S.of(context).veryEasy,
+                                S.of(context).easy,
+                                S.of(context).normal,
+                                S.of(context).difficult,
+                              ].map((level) {
+                                return RadioListTile<String>(
+                                  title: Text(level),
+                                  value: level,
+                                  groupValue: selectedDifficulty,
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedDifficulty = value!;
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 20),
+
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.green, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                selectedCpuCount == 1
+                                    ? 'Jugarás 1 vs 1 contra la CPU en posiciones opuestas'
+                                    : selectedCpuCount == 2
+                                    ? 'Jugarás contra 2 CPUs (3 jugadores en total)'
+                                    : 'Jugarás contra 3 CPUs (4 jugadores en total)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green.shade800,
+                                ),
                               ),
                             ),
-                          );
-                        },
-                        icon: Icon(Icons.smart_toy),
-                        label: Text(
-                          S.of(context).startGame,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEC7A34),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: EdgeInsets.symmetric(vertical: 14),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+
+                      SizedBox(height: 20),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => LudoVsCpuScreen(
+                                  difficulty: selectedDifficulty,
+                                  matchType: widget.matchType,
+                                  cpuCount: selectedCpuCount,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: Icon(Icons.play_arrow, size: 24),
+                          label: Text(
+                            S.of(context).startGame,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEC7A34),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            elevation: 4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );

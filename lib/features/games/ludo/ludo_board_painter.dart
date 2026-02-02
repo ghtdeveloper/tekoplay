@@ -25,7 +25,7 @@ class LudoBoardPainter extends CustomPainter {
     _drawSpecialSquares(canvas, squareSize);
     _drawHomeStretches(canvas, size, squareSize);
     _drawCenterTriangles(canvas, size, squareSize);
-    _drawStartingSquares(canvas, squareSize); // NUEVO: Casillas de salida coloreadas
+    _drawStartingSquares(canvas, squareSize);
     _drawPathNumbers(canvas, squareSize);
     _drawPieces(canvas, size, squareSize);
   }
@@ -36,10 +36,11 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawHomeAreas(Canvas canvas, Size size, double squareSize) {
-    _drawHomeArea(canvas, Rect.fromLTWH(0, 0, 6 * squareSize, 6 * squareSize), Color(0xFFFFD700), squareSize);
-    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 0, 6 * squareSize, 6 * squareSize), Color(0xFF00C853), squareSize);
-    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFFFF5252), squareSize);
-    _drawHomeArea(canvas, Rect.fromLTWH(0, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFF2979FF), squareSize);
+    // CORREGIDO: Amarillo arriba-izquierda, Azul abajo-izquierda
+    _drawHomeArea(canvas, Rect.fromLTWH(0, 0, 6 * squareSize, 6 * squareSize), Color(0xFFFFD700), squareSize); // Amarillo arriba-izq
+    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 0, 6 * squareSize, 6 * squareSize), Color(0xFF00C853), squareSize); // Verde arriba-der
+    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFFFF5252), squareSize); // Rojo abajo-der
+    _drawHomeArea(canvas, Rect.fromLTWH(0, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFF2979FF), squareSize); // Azul abajo-izq
   }
 
   void _drawHomeArea(Canvas canvas, Rect area, Color color, double squareSize) {
@@ -222,7 +223,6 @@ class LudoBoardPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  // NUEVO: Casillas de salida coloreadas en lugar de estrellas
   void _drawStartingSquares(Canvas canvas, double squareSize) {
     final startingSquares = {
       Offset(1, 6): {'color': Color(0xFFFFD700), 'position': 0},   // Yellow
@@ -231,19 +231,17 @@ class LudoBoardPainter extends CustomPainter {
       Offset(6, 12): {'color': Color(0xFF2979FF), 'position': 39}, // Blue
     };
 
-    // Otras casillas seguras (gris)
     final otherSafeSquares = [
-      Offset(2, 6),   // Posición 1 (Yellow safe)
-      Offset(6, 2),   // Posición 8 (Yellow to Green)
-      Offset(12, 6),  // Posición 21 (Green safe)
-      Offset(12, 8),  // Posición 34 (Red safe)
-      Offset(8, 12),  // Posición 47 (Blue safe)
-      Offset(2, 8),   // Posición 47 (Blue to Yellow)
+      Offset(2, 6),
+      Offset(6, 2),
+      Offset(12, 6),
+      Offset(12, 8),
+      Offset(8, 12),
+      Offset(2, 8),
     ];
 
     final borderPaint = Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 2.0;
 
-    // Dibujar casillas de salida con color
     startingSquares.forEach((pos, data) {
       final color = data['color'] as Color;
 
@@ -254,24 +252,20 @@ class LudoBoardPainter extends CustomPainter {
         squareSize,
       );
 
-      // Fondo con color semi-transparente
       final bgPaint = Paint()
         ..color = color.withOpacity(0.4)
         ..style = PaintingStyle.fill;
       canvas.drawRect(rect, bgPaint);
 
-      // Borde del mismo color más fuerte
       final colorBorderPaint = Paint()
         ..color = color
         ..style = PaintingStyle.stroke
         ..strokeWidth = 4.0;
       canvas.drawRect(rect, colorBorderPaint);
 
-      // Borde negro encima
       canvas.drawRect(rect, borderPaint);
     });
 
-    // Dibujar otras casillas seguras con estrellas grises
     for (final pos in otherSafeSquares) {
       _drawStar(
         canvas,
@@ -356,7 +350,6 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawPieces(Canvas canvas, Size size, double squareSize) {
-    // Agrupar fichas por posición
     final piecesAtPosition = <int, List<Map<String, dynamic>>>{};
 
     void addPieceToPosition(LudoPiece piece, Color color, String colorName) {
@@ -372,7 +365,6 @@ class LudoBoardPainter extends CustomPainter {
       });
     }
 
-    // Agregar todas las fichas en el tablero
     for (final piece in gameState.yellowPieces) {
       addPieceToPosition(piece, Color(0xFFFFD700), 'yellow');
     }
@@ -386,7 +378,6 @@ class LudoBoardPainter extends CustomPainter {
       addPieceToPosition(piece, Color(0xFF2979FF), 'blue');
     }
 
-    // Dibujar fichas apiladas en el tablero
     for (final entry in piecesAtPosition.entries) {
       final position = entry.key;
       final piecesHere = entry.value;
@@ -397,44 +388,37 @@ class LudoBoardPainter extends CustomPainter {
           _drawSinglePiece(canvas, piecesHere[0]['piece'], piecesHere[0]['color'],
               piecesHere[0]['colorName'], boardPos, squareSize);
         } else {
-          // NUEVO: Dibujar fichas apiladas como en Parchís Star
           _drawStackedPiecesNew(canvas, piecesHere, boardPos, squareSize);
         }
       }
     }
 
-    // Dibujar fichas en casa y finalizadas
     _drawColorPieces(canvas, gameState.yellowPieces, Color(0xFFFFD700), 'yellow', squareSize, true);
     _drawColorPieces(canvas, gameState.greenPieces, Color(0xFF00C853), 'green', squareSize, true);
     _drawColorPieces(canvas, gameState.redPieces, Color(0xFFFF5252), 'red', squareSize, true);
     _drawColorPieces(canvas, gameState.bluePieces, Color(0xFF2979FF), 'blue', squareSize, true);
   }
 
-  // NUEVO: Método mejorado para apilar fichas - MÁXIMO 2 DEL MISMO COLOR
   void _drawStackedPiecesNew(Canvas canvas, List<Map<String, dynamic>> pieces, Offset center, double squareSize) {
     final radius = squareSize * 0.35;
 
-    // Agrupar por color - máximo 2 fichas del mismo color
     final Map<String, List<Map<String, dynamic>>> byColor = {};
     for (final piece in pieces) {
       final colorName = piece['colorName'] as String;
       if (!byColor.containsKey(colorName)) {
         byColor[colorName] = [];
       }
-      // SOLO agregar si hay menos de 2 del mismo color
       if (byColor[colorName]!.length < 2) {
         byColor[colorName]!.add(piece);
       }
     }
 
-    // Aplanar lista limitada
     final limitedPieces = <Map<String, dynamic>>[];
     byColor.forEach((color, colorPieces) {
       limitedPieces.addAll(colorPieces);
     });
 
     if (limitedPieces.length == 1) {
-      // 1 ficha: centrada
       _drawSinglePiece(
         canvas,
         limitedPieces[0]['piece'],
@@ -444,8 +428,7 @@ class LudoBoardPainter extends CustomPainter {
         squareSize,
       );
     } else if (limitedPieces.length == 2) {
-      // 2 fichas: una al lado de la otra con MÁS ESPACIO
-      final offset = squareSize * 0.28; // Aumentado de 0.22 a 0.28
+      final offset = squareSize * 0.28;
 
       _drawSinglePiece(
         canvas,
@@ -467,9 +450,8 @@ class LudoBoardPainter extends CustomPainter {
         radius: radius * 0.85,
       );
     } else if (limitedPieces.length == 3) {
-      // 3 fichas: 2 arriba, 1 abajo con más espacio
-      final offsetX = squareSize * 0.26; // Aumentado
-      final offsetY = squareSize * 0.22; // Aumentado
+      final offsetX = squareSize * 0.26;
+      final offsetY = squareSize * 0.22;
 
       _drawSinglePiece(canvas, limitedPieces[0]['piece'], limitedPieces[0]['color'], limitedPieces[0]['colorName'],
           center - Offset(offsetX, offsetY), squareSize, radius: radius * 0.75);
@@ -478,8 +460,7 @@ class LudoBoardPainter extends CustomPainter {
       _drawSinglePiece(canvas, limitedPieces[2]['piece'], limitedPieces[2]['color'], limitedPieces[2]['colorName'],
           center + Offset(0, offsetY), squareSize, radius: radius * 0.75);
     } else if (limitedPieces.length >= 4) {
-      // 4 fichas: 2x2 con más espacio
-      final offset = squareSize * 0.24; // Aumentado de 0.18 a 0.24
+      final offset = squareSize * 0.24;
 
       _drawSinglePiece(canvas, limitedPieces[0]['piece'], limitedPieces[0]['color'], limitedPieces[0]['colorName'],
           center - Offset(offset, offset), squareSize, radius: radius * 0.7);
@@ -520,13 +501,11 @@ class LudoBoardPainter extends CustomPainter {
 
     final isHighlighted = highlightedPieceColor == colorName && highlightedPieceId == piece.id;
 
-    // Sombra
     final shadowPaint = Paint()
       ..color = Colors.black.withOpacity(0.5)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6);
     canvas.drawCircle(position + Offset(4, 4), pieceRadius, shadowPaint);
 
-    // Gradiente de la ficha
     final gradient = RadialGradient(
       colors: [color.withOpacity(0.9), color, color.withOpacity(0.7)],
       stops: [0.0, 0.6, 1.0],
@@ -537,19 +516,15 @@ class LudoBoardPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     canvas.drawCircle(position, pieceRadius, piecePaint);
 
-    // Borde negro
     final borderPaint = Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 3.5;
     canvas.drawCircle(position, pieceRadius, borderPaint);
 
-    // Borde interior blanco
     final innerBorderPaint = Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2.5;
     canvas.drawCircle(position, pieceRadius * 0.7, innerBorderPaint);
 
-    // Brillo
     final highlightPaint = Paint()..color = Colors.white.withOpacity(0.7)..style = PaintingStyle.fill;
     canvas.drawCircle(position - Offset(pieceRadius * 0.25, pieceRadius * 0.35), pieceRadius * 0.28, highlightPaint);
 
-    // Resaltado si está seleccionada
     if (isHighlighted) {
       final selectPaint = Paint()
         ..color = Colors.white.withOpacity(0.6)

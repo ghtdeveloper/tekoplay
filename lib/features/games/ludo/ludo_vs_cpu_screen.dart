@@ -11,11 +11,13 @@ import 'ludo_board_painter.dart';
 class LudoVsCpuScreen extends StatefulWidget {
   final String difficulty;
   final String matchType;
+  final int cpuCount; // NUEVO: 1, 2 o 3 CPUs
 
   const LudoVsCpuScreen({
     Key? key,
     required this.difficulty,
     required this.matchType,
+    this.cpuCount = 1, // Por defecto 1 CPU
   }) : super(key: key);
 
   @override
@@ -25,7 +27,11 @@ class LudoVsCpuScreen extends StatefulWidget {
 class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderStateMixin {
   late LudoGameState _gameState;
   String _currentPlayer = 'yellow';
-  String _cpuColor = 'green';
+
+  // NUEVO: Lista de colores activos según número de CPUs
+  late List<String> _activePlayers;
+  late List<String> _cpuPlayers;
+
   int _dice1Value = 0;
   int _dice2Value = 0;
   int _totalDiceValue = 0;
@@ -44,7 +50,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   bool _hasUsedDice2 = false;
   bool _waitingForNextMove = false;
 
-  // NUEVO: Control de dobles consecutivos
   int _consecutiveDoubles = 0;
   int _previousDice1 = 0;
   int _previousDice2 = 0;
@@ -61,6 +66,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     _gameState = LudoGameState.initial();
     _gameStartTime = DateTime.now();
 
+    // NUEVO: Configurar jugadores activos según número de CPUs
+    _setupActivePlayers();
+
     _diceAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -69,6 +77,30 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     _diceRotation = Tween<double>(begin: 0, end: 2 * pi).animate(
       CurvedAnimation(parent: _diceAnimationController, curve: Curves.easeInOut),
     );
+  }
+
+  // NUEVO: Configurar jugadores según número de CPUs
+  void _setupActivePlayers() {
+    switch (widget.cpuCount) {
+      case 1:
+      // 1 CPU: Jugador (amarillo) vs CPU (rojo) - EN CRUZ
+        _activePlayers = ['yellow', 'red'];
+        _cpuPlayers = ['red'];
+        break;
+      case 2:
+      // 2 CPUs: Jugador (amarillo) vs CPU1 (verde) y CPU2 (rojo)
+        _activePlayers = ['yellow', 'green', 'red'];
+        _cpuPlayers = ['green', 'red'];
+        break;
+      case 3:
+      // 3 CPUs: Todos juegan
+        _activePlayers = ['yellow', 'green', 'red', 'blue'];
+        _cpuPlayers = ['green', 'red', 'blue'];
+        break;
+      default:
+        _activePlayers = ['yellow', 'red'];
+        _cpuPlayers = ['red'];
+    }
   }
 
   @override
@@ -102,7 +134,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       _totalDiceValue = _dice1Value + _dice2Value;
       _isRollingDice = false;
 
-      // NUEVO: Verificar dobles consecutivos
       if (_dice1Value == _dice2Value && _dice1Value == _previousDice1 && _dice2Value == _previousDice2) {
         _consecutiveDoubles++;
       } else if (_dice1Value == _dice2Value) {
@@ -141,7 +172,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       final piece = pieces[i];
 
       if (piece.isHome) {
-        // REGLA AJUSTADA: Solo se puede salir con 5 (NO con 6)
         if (!_hasUsedDice1 && _dice1Value == 5) {
           final startPos = _getStartPosition(_currentPlayer);
           if (_canMoveToPosition(_currentPlayer, startPos, piece)) {
@@ -166,7 +196,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
           }
         }
       } else {
-        // Pieza en el tablero
         if (!_hasUsedDice1 && _canMovePieceWithDiceValue(piece, _dice1Value)) {
           _movablePieces.add({
             'pieceId': i,
@@ -188,77 +217,64 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     }
   }
 
-  // CORREGIDO: Verificar si se puede mover a una posición (reglas de Parchís)
   bool _canMoveToPosition(String color, int position, LudoPiece movingPiece) {
-    if (position >= 52) return true; // Home stretch siempre OK
+    if (position >= 52) return true;
 
-    // Contar cuántas fichas DEL MISMO COLOR hay en esa posición
     final myPieces = _gameState.getPiecesByColor(color);
     int myCount = 0;
 
     for (final piece in myPieces) {
-      if (piece == movingPiece) continue; // No contar la ficha que se está moviendo
+      if (piece == movingPiece) continue;
       if (!piece.isHome && !piece.isFinished && piece.position == position) {
         myCount++;
       }
     }
 
-    // REGLA: Máximo 2 fichas del mismo color por casilla
     if (myCount >= 2) return false;
 
-    // REGLA: Si hay una ficha enemiga, se puede capturar (a menos que sea casilla segura)
     if (!_isSafePosition(position)) {
-      // Verificar si hay fichas enemigas
-      for (final enemyColor in ['yellow', 'green', 'red', 'blue']) {
+      for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
 
         final enemyPieces = _gameState.getPiecesByColor(enemyColor);
         for (final enemy in enemyPieces) {
           if (!enemy.isHome && !enemy.isFinished && enemy.position == position) {
-            return true; // Se puede mover para capturar
+            return true;
           }
         }
       }
     }
 
-    return true; // Casilla libre o segura
+    return true;
   }
 
   bool _canMovePieceWithDiceValue(LudoPiece piece, int diceValue) {
     if (piece.isFinished) return false;
-    // REGLA AJUSTADA: Solo se puede salir con 5 (NO con 6)
     if (piece.isHome) return diceValue == 5;
 
-    // Calcular nueva posición
     final newPosition = _calculateNewPosition(piece, diceValue, _currentPlayer);
     if (newPosition == null) return false;
 
-    // NUEVO: Verificar que no haya barreras en el camino
     if (_hasBarrierInPath(piece, diceValue, _currentPlayer)) {
-      return false; // Hay una barrera bloqueando el camino
+      return false;
     }
 
-    // Verificar si se puede mover a esa posición
     return _canMoveToPosition(_currentPlayer, newPosition, piece);
   }
 
-  // CORREGIDO: Calcular nueva posición correctamente
   int? _calculateNewPosition(LudoPiece piece, int diceValue, String color) {
     if (piece.isHome) {
       return _getStartPosition(color);
     }
 
-    // Si está en home stretch (posiciones 52-57)
     if (piece.position >= 52) {
       final newPos = piece.position + diceValue;
-      if (newPos > 57) return null; // No se puede pasar de 57
+      if (newPos > 57) return null;
       return newPos;
     }
 
-    // Posición en el tablero principal (0-51)
     final startPos = _getStartPosition(color);
 
-    // Calcular cuántas casillas ha avanzado desde su salida
     int stepsFromStart;
     if (piece.position >= startPos) {
       stepsFromStart = piece.position - startPos;
@@ -268,29 +284,25 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
     final newStepsFromStart = stepsFromStart + diceValue;
 
-    // Si llega a la entrada del home stretch (después de dar la vuelta)
     if (newStepsFromStart >= 51) {
       final stepsIntoHomeStretch = newStepsFromStart - 51;
-      if (stepsIntoHomeStretch > 5) return null; // No se puede pasar
+      if (stepsIntoHomeStretch > 5) return null;
       return 52 + stepsIntoHomeStretch;
     }
 
-    // Sigue en el tablero principal
     final newPos = (startPos + newStepsFromStart) % 52;
     return newPos;
   }
 
-  // NUEVO: Verificar si hay una barrera en el camino
   bool _hasBarrierInPath(LudoPiece piece, int diceValue, String color) {
     if (piece.isHome) return false;
-    if (piece.position >= 52) return false; // En home stretch no hay barreras
+    if (piece.position >= 52) return false;
 
     final startPos = _getStartPosition(color);
 
-    // Calcular el camino que recorrerá la ficha (SIN incluir posición final)
     List<int> pathPositions = [];
 
-    for (int step = 1; step < diceValue; step++) { // step < diceValue (no incluye destino)
+    for (int step = 1; step < diceValue; step++) {
       int stepsFromStart;
       if (piece.position >= startPos) {
         stepsFromStart = piece.position - startPos;
@@ -300,7 +312,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
       final newStepsFromStart = stepsFromStart + step;
 
-      // Si entra al home stretch, ya no hay barreras
       if (newStepsFromStart >= 51) {
         break;
       }
@@ -309,21 +320,18 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       pathPositions.add(checkPos);
     }
 
-    // Verificar si hay barreras en alguna de las posiciones del camino
     for (final checkPos in pathPositions) {
       if (_isBarrierAt(checkPos, color)) {
-        return true; // Hay una barrera, no puede pasar
+        return true;
       }
     }
 
-    return false; // No hay barreras en el camino
+    return false;
   }
 
-  // NUEVO: Verificar si hay una barrera (2 fichas del mismo color) en una posición
   bool _isBarrierAt(int position, String movingColor) {
-    // Contar fichas de cada color enemigo en esta posición
-    for (final enemyColor in ['yellow', 'green', 'red', 'blue']) {
-      if (enemyColor == movingColor) continue; // No contar mis propias fichas
+    for (final enemyColor in _activePlayers) {
+      if (enemyColor == movingColor) continue;
 
       final enemyPieces = _gameState.getPiecesByColor(enemyColor);
       int count = 0;
@@ -334,7 +342,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
         }
       }
 
-      // Si hay 2 o más fichas del mismo color enemigo → BARRERA
       if (count >= 2) {
         return true;
       }
@@ -559,7 +566,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   }
 
   void _executePieceMove(String color, int pieceId, int diceValue, int diceNumber) {
-    // SEGURIDAD: Solo permitir movimientos del jugador correcto
     if (color != _currentPlayer) {
       debugPrint('⚠️ Intento de mover ficha cuando no es su turno: $color vs $_currentPlayer');
       return;
@@ -575,17 +581,16 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     if (newPosition == null) return;
     if (!_canMoveToPosition(color, newPosition, piece)) return;
 
-    // CAPTURA: Si hay fichas enemigas en posición no segura, capturarlas
     bool captured = false;
     if (newPosition < 52 && !_isSafePosition(newPosition)) {
-      for (final enemyColor in ['yellow', 'green', 'red', 'blue']) {
+      for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
 
         final enemyPieces = _gameState.getPiecesByColor(enemyColor);
         for (final enemyPiece in enemyPieces) {
           if (!enemyPiece.isHome && !enemyPiece.isFinished && enemyPiece.position == newPosition) {
             setState(() {
-              enemyPiece.position = -1; // Devolver a casa
+              enemyPiece.position = -1;
             });
             captured = true;
           }
@@ -615,14 +620,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     _calculateMovablePieces();
 
     if (_movablePieces.isNotEmpty && !hadDouble && !captured) {
-      // Hay más movimientos disponibles
       setState(() {
         _waitingForNextMove = true;
       });
       return;
     }
 
-    // No hay más movimientos o hubo doble/captura
     setState(() {
       _dice1Value = 0;
       _dice2Value = 0;
@@ -633,33 +636,27 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       _waitingForNextMove = false;
     });
 
-    // NUEVO: Si hay dobles consecutivos (2 veces seguidas), permite otra tirada
     final shouldRollAgain = hadDouble || captured || _consecutiveDoubles >= 2;
 
     if (shouldRollAgain) {
-      // Mismo jugador tira de nuevo
       setState(() {
         _canRollDice = true;
       });
 
-      // Resetear contador si ya tuvo su turno extra por dobles consecutivos
       if (_consecutiveDoubles >= 2 && !hadDouble) {
         _consecutiveDoubles = 0;
         _previousDice1 = 0;
         _previousDice2 = 0;
       }
 
-      // Si es CPU, esperar antes de su próxima tirada
-      if (color == _cpuColor) {
+      if (_cpuPlayers.contains(color)) {
         Future.delayed(Duration(milliseconds: 1200), () {
-          // Verificar que sigue siendo turno del CPU
-          if (_currentPlayer == _cpuColor && !_gameEnded && _canRollDice) {
+          if (_currentPlayer == color && !_gameEnded && _canRollDice) {
             _playCpuTurn();
           }
         });
       }
     } else {
-      // Cambiar de turno con delay
       Future.delayed(Duration(milliseconds: 800), () {
         if (!_gameEnded) {
           _nextTurn();
@@ -672,7 +669,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     if (_gameEnded) return;
 
     setState(() {
-      _currentPlayer = _currentPlayer == 'yellow' ? 'green' : 'yellow';
+      // NUEVO: Ciclar solo entre jugadores activos
+      final currentIndex = _activePlayers.indexOf(_currentPlayer);
+      final nextIndex = (currentIndex + 1) % _activePlayers.length;
+      _currentPlayer = _activePlayers[nextIndex];
+
       _canRollDice = true;
       _dice1Value = 0;
       _dice2Value = 0;
@@ -681,7 +682,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       _hasUsedDice1 = false;
       _hasUsedDice2 = false;
       _waitingForNextMove = false;
-      // Resetear dobles al cambiar de turno
       _consecutiveDoubles = 0;
       _previousDice1 = 0;
       _previousDice2 = 0;
@@ -689,11 +689,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
     debugPrint('🔄 Cambio de turno a: $_currentPlayer');
 
-    // Si es turno del CPU, esperar antes de jugar
-    if (_currentPlayer == _cpuColor) {
+    if (_cpuPlayers.contains(_currentPlayer)) {
       Future.delayed(Duration(milliseconds: 1200), () {
-        // Verificar que sigue siendo turno del CPU
-        if (_currentPlayer == _cpuColor && !_gameEnded && _canRollDice) {
+        if (_currentPlayer == _activePlayers[_activePlayers.indexOf(_currentPlayer)] && !_gameEnded && _canRollDice) {
           _playCpuTurn();
         }
       });
@@ -701,10 +699,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   }
 
   Future<void> _playCpuTurn() async {
-    // SEGURIDAD: Verificar que es turno del CPU
     if (_gameEnded) return;
-    if (_currentPlayer != _cpuColor) {
-      debugPrint('⚠️ CPU intentó jugar pero no es su turno. Turno actual: $_currentPlayer');
+    if (!_cpuPlayers.contains(_currentPlayer)) {
+      debugPrint('⚠️ CPU intentó jugar pero no es su turno');
       return;
     }
     if (!_canRollDice) {
@@ -714,8 +711,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
     await Future.delayed(const Duration(milliseconds: 800));
 
-    // Verificar de nuevo antes de tirar
-    if (_currentPlayer != _cpuColor || _gameEnded) return;
+    if (!_cpuPlayers.contains(_currentPlayer) || _gameEnded) return;
 
     setState(() {
       _dice1Value = _random.nextInt(6) + 1;
@@ -725,7 +721,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       _hasUsedDice1 = false;
       _hasUsedDice2 = false;
 
-      // NUEVO: Verificar dobles consecutivos para CPU
       if (_dice1Value == _dice2Value && _dice1Value == _previousDice1 && _dice2Value == _previousDice2) {
         _consecutiveDoubles++;
       } else if (_dice1Value == _dice2Value) {
@@ -740,8 +735,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
     await Future.delayed(const Duration(milliseconds: 1200));
 
-    // Verificar de nuevo
-    if (_currentPlayer != _cpuColor || _gameEnded) return;
+    if (!_cpuPlayers.contains(_currentPlayer) || _gameEnded) return;
 
     _calculateMovablePieces();
 
@@ -752,28 +746,25 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
         _totalDiceValue = 0;
       });
       await Future.delayed(const Duration(milliseconds: 500));
-      if (_currentPlayer == _cpuColor && !_gameEnded) {
+      if (_cpuPlayers.contains(_currentPlayer) && !_gameEnded) {
         _nextTurn();
       }
       return;
     }
 
-    // CPU hace movimientos hasta que no haya más disponibles
-    while (_movablePieces.isNotEmpty && _currentPlayer == _cpuColor && !_gameEnded) {
+    while (_movablePieces.isNotEmpty && _cpuPlayers.contains(_currentPlayer) && !_gameEnded) {
       final bestMove = _calculateBestCpuMove();
       if (bestMove != null) {
         await Future.delayed(const Duration(milliseconds: 600));
 
-        // Verificar que sigue siendo turno del CPU antes de mover
-        if (_currentPlayer != _cpuColor || _gameEnded) break;
+        if (!_cpuPlayers.contains(_currentPlayer) || _gameEnded) break;
 
-        _executePieceMove(_cpuColor, bestMove['pieceId'], bestMove['diceValue'], bestMove['diceNumber']);
+        _executePieceMove(_currentPlayer, bestMove['pieceId'], bestMove['diceValue'], bestMove['diceNumber']);
 
-        if (_checkVictory(_cpuColor)) break;
+        if (_checkVictory(_currentPlayer)) break;
         await Future.delayed(const Duration(milliseconds: 400));
 
-        // Verificar que sigue siendo turno del CPU
-        if (_currentPlayer == _cpuColor && !_gameEnded) {
+        if (_cpuPlayers.contains(_currentPlayer) && !_gameEnded) {
           _calculateMovablePieces();
         } else {
           break;
@@ -799,11 +790,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       if (piece.position > 0 && piece.position < 52) score += piece.position * 10;
 
       final diceValue = move['diceValue'] as int;
-      final newPos = _calculateNewPosition(piece, diceValue, _cpuColor);
+      final newPos = _calculateNewPosition(piece, diceValue, _currentPlayer);
 
       if (newPos != null && newPos < 52 && !_isSafePosition(newPos)) {
-        for (final color in ['yellow', 'red', 'blue']) {
-          if (color == _cpuColor) continue;
+        for (final color in _activePlayers) {
+          if (color == _currentPlayer) continue;
           final enemyPieces = _gameState.getPiecesByColor(color);
           for (final enemy in enemyPieces) {
             if (!enemy.isHome && !enemy.isFinished && enemy.position == newPos) {
@@ -823,13 +814,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     return bestMove;
   }
 
-  // CORREGIDO: Posiciones de salida correctas
   int _getStartPosition(String color) {
     switch (color) {
-      case 'yellow': return 0;   // Casilla 0 (posición visual 1)
-      case 'green': return 13;   // Casilla 13 (posición visual 14) - CORREGIDO
-      case 'red': return 26;     // Casilla 26 (posición visual 27)
-      case 'blue': return 39;    // Casilla 39 (posición visual 40)
+      case 'yellow': return 0;
+      case 'green': return 13;
+      case 'red': return 26;
+      case 'blue': return 39;
       default: return 0;
     }
   }
@@ -845,7 +835,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   }
 
   bool _isSafePosition(int position) {
-    // Solo las casillas de SALIDA son seguras
     return [0, 13, 26, 39].contains(position);
   }
 
@@ -864,7 +853,17 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     final result = winnerColor == 'yellow' ? GameResultModel.win : GameResultModel.loss;
     _recordGameResult(result);
 
-    _showGameEndDialog(winnerColor == 'yellow' ? '¡Ganaste! 🎉' : 'La CPU ganó 🤖');
+    _showGameEndDialog(winnerColor == 'yellow' ? '¡Ganaste! 🎉' : 'CPU (${_getColorName(winnerColor)}) ganó 🤖');
+  }
+
+  String _getColorName(String color) {
+    switch (color) {
+      case 'yellow': return 'Amarillo';
+      case 'green': return 'Verde';
+      case 'red': return 'Rojo';
+      case 'blue': return 'Azul';
+      default: return color;
+    }
   }
 
   Future<void> _recordGameResult(GameResultModel result) async {
@@ -880,11 +879,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
         result: result,
         pointsEarned: pointsEarned,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName: 'CPU (${widget.difficulty})',
+        opponentName: 'CPU x${widget.cpuCount} (${widget.difficulty})',
         additionalData: {
           'difficulty': widget.difficulty,
           'playerColor': 'yellow',
           'matchType': widget.matchType,
+          'cpuCount': widget.cpuCount,
         },
       );
     } catch (e) {
@@ -936,6 +936,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                 _consecutiveDoubles = 0;
                 _previousDice1 = 0;
                 _previousDice2 = 0;
+                _setupActivePlayers();
               });
             },
             style: ElevatedButton.styleFrom(
@@ -965,8 +966,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFFEC7A34),
-        title: Text('Parchís vs CPU - ${widget.difficulty}',
-            style: TextStyle(color: Colors.white)),
+        title: Text(
+            'Parchís vs ${widget.cpuCount} CPU${widget.cpuCount > 1 ? 's' : ''} - ${widget.difficulty}',
+            style: TextStyle(color: Colors.white)
+        ),
         elevation: 2,
       ),
       body: Column(
@@ -1034,50 +1037,45 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildPlayerCard('Tú', 'yellow', _currentPlayer == 'yellow'),
-          _buildPlayerCard('CPU', 'green', _currentPlayer == 'green'),
-        ],
-      ),
-    );
-  }
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: _activePlayers.map((color) {
+          final isPlayer = color == 'yellow';
+          final isActive = color == _currentPlayer;
+          final pieces = _gameState.getPiecesByColor(color);
+          final finishedCount = pieces.where((p) => p.isFinished).length;
 
-  Widget _buildPlayerCard(String name, String color, bool isActive) {
-    final pieces = _gameState.getPiecesByColor(color);
-    final finishedCount = pieces.where((p) => p.isFinished).length;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isActive ? _getPlayerColor(color).withOpacity(0.15) : Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isActive ? _getPlayerColor(color) : Colors.grey.shade300,
-          width: isActive ? 3 : 2,
-        ),
-      ),
-      child: Column(
-        children: [
-          Text(
-            name,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: isActive ? _getPlayerColor(color) : Colors.black87,
+          return Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isActive ? _getPlayerColor(color).withOpacity(0.15) : Colors.grey[100],
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isActive ? _getPlayerColor(color) : Colors.grey.shade300,
+                width: isActive ? 3 : 2,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.flag, color: _getPlayerColor(color), size: 18),
-              const SizedBox(width: 4),
-              Text('$finishedCount/4', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isPlayer ? 'Tú' : 'CPU',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isActive ? _getPlayerColor(color) : Colors.black87,
+                  ),
+                ),
+                SizedBox(width: 4),
+                Icon(Icons.flag, color: _getPlayerColor(color), size: 16),
+                SizedBox(width: 2),
+                Text('$finishedCount/4', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -1157,7 +1155,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                 ),
               ),
             ),
-          // Indicador de dobles consecutivos
           if (_consecutiveDoubles >= 1)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -1170,7 +1167,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                 ),
                 child: Text(
                   _consecutiveDoubles == 1
-                      ? '🎲 ¡Dobles! ${_consecutiveDoubles == 2 ? "Turno extra" : ""}'
+                      ? '🎲 ¡Dobles!'
                       : '🎲🎲 ¡Doble-Doble! Turno extra',
                   style: TextStyle(
                     color: Colors.amber.shade900,
