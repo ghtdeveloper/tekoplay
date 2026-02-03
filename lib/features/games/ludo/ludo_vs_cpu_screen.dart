@@ -524,11 +524,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   }
 
   Offset _getHomePosition(String color, int pieceId, double squareSize) {
+    // ROTADO: Nuevas posiciones de casas
     final homes = {
-      'yellow': Offset(3.0, 3.0),
-      'green': Offset(12.0, 3.0),
-      'red': Offset(12.0, 12.0),
-      'blue': Offset(3.0, 12.0),
+      'yellow': Offset(12.0, 12.0),  // Amarillo abajo-derecha
+      'green': Offset(3.0, 12.0),    // Verde abajo-izquierda
+      'red': Offset(3.0, 3.0),       // Rojo arriba-izquierda
+      'blue': Offset(12.0, 3.0),     // Azul arriba-derecha
     };
 
     final basePos = homes[color]!;
@@ -543,19 +544,24 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   }
 
   Offset? _getBoardPosition(int position, double squareSize) {
+    // ROTADO: Nuevo recorrido con las casillas de salida correctas
     final positions = <Offset>[
-      Offset(1, 6), Offset(2, 6), Offset(3, 6), Offset(4, 6), Offset(5, 6),
-      Offset(6, 5), Offset(6, 4), Offset(6, 3), Offset(6, 2), Offset(6, 1), Offset(6, 0),
-      Offset(7, 0), Offset(8, 0),
-      Offset(8, 1), Offset(8, 2), Offset(8, 3), Offset(8, 4), Offset(8, 5),
-      Offset(9, 6), Offset(10, 6), Offset(11, 6), Offset(12, 6), Offset(13, 6), Offset(14, 6),
-      Offset(14, 7), Offset(14, 8),
+      // Amarillo sale (posición 0)
       Offset(13, 8), Offset(12, 8), Offset(11, 8), Offset(10, 8), Offset(9, 8),
       Offset(8, 9), Offset(8, 10), Offset(8, 11), Offset(8, 12), Offset(8, 13), Offset(8, 14),
       Offset(7, 14), Offset(6, 14),
+      // Verde sale (posición 13) - CORREGIDO
       Offset(6, 13), Offset(6, 12), Offset(6, 11), Offset(6, 10), Offset(6, 9),
       Offset(5, 8), Offset(4, 8), Offset(3, 8), Offset(2, 8), Offset(1, 8), Offset(0, 8),
       Offset(0, 7), Offset(0, 6),
+      // Rojo sale (posición 26)
+      Offset(1, 6), Offset(2, 6), Offset(3, 6), Offset(4, 6), Offset(5, 6),
+      Offset(6, 5), Offset(6, 4), Offset(6, 3), Offset(6, 2), Offset(6, 1), Offset(6, 0),
+      Offset(7, 0), Offset(8, 0),
+      // Azul sale (posición 39) - CORREGIDO
+      Offset(8, 1), Offset(8, 2), Offset(8, 3), Offset(8, 4), Offset(8, 5),
+      Offset(9, 6), Offset(10, 6), Offset(11, 6), Offset(12, 6), Offset(13, 6), Offset(14, 6),
+      Offset(14, 7), Offset(14, 8),
     ];
 
     if (position >= 0 && position < positions.length) {
@@ -815,11 +821,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   }
 
   int _getStartPosition(String color) {
+    // ROTADO: Nuevas posiciones de salida
     switch (color) {
-      case 'yellow': return 0;
-      case 'green': return 13;
-      case 'red': return 26;
-      case 'blue': return 39;
+      case 'yellow': return 0;   // Amarillo abajo-derecha (posición 26 visual -> 0 lógica)
+      case 'green': return 13;   // Verde abajo-izquierda (posición 39 visual -> 13 lógica)
+      case 'red': return 26;     // Rojo arriba-izquierda (posición 0 visual -> 26 lógica)
+      case 'blue': return 39;    // Azul arriba-derecha (posición 13 visual -> 39 lógica)
       default: return 0;
     }
   }

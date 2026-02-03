@@ -36,11 +36,11 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawHomeAreas(Canvas canvas, Size size, double squareSize) {
-    // CORREGIDO: Amarillo arriba-izquierda, Azul abajo-izquierda
-    _drawHomeArea(canvas, Rect.fromLTWH(0, 0, 6 * squareSize, 6 * squareSize), Color(0xFFFFD700), squareSize); // Amarillo arriba-izq
-    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 0, 6 * squareSize, 6 * squareSize), Color(0xFF00C853), squareSize); // Verde arriba-der
-    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFFFF5252), squareSize); // Rojo abajo-der
-    _drawHomeArea(canvas, Rect.fromLTWH(0, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFF2979FF), squareSize); // Azul abajo-izq
+    // ROTADO: Rojo arriba-izq, Verde abajo-izq, Amarillo abajo-der, Azul arriba-der
+    _drawHomeArea(canvas, Rect.fromLTWH(0, 0, 6 * squareSize, 6 * squareSize), Color(0xFFFF5252), squareSize); // Rojo arriba-izq
+    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 0, 6 * squareSize, 6 * squareSize), Color(0xFF2979FF), squareSize); // Azul arriba-der
+    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFFFFD700), squareSize); // Amarillo abajo-der
+    _drawHomeArea(canvas, Rect.fromLTWH(0, 9 * squareSize, 6 * squareSize, 6 * squareSize), Color(0xFF00C853), squareSize); // Verde abajo-izq
   }
 
   void _drawHomeArea(Canvas canvas, Rect area, Color color, double squareSize) {
@@ -134,10 +134,11 @@ class LudoBoardPainter extends CustomPainter {
       {'pos': Offset(0, 6), 'color': Color(0xFFFFFFFF)},
       {'pos': Offset(0, 8), 'color': Color(0xFFFFFFFF)},
 
-      {'pos': Offset(7, 0), 'color': Color(0xFFFFD700)},
-      {'pos': Offset(14, 7), 'color': Color(0xFF00C853)},
-      {'pos': Offset(7, 14), 'color': Color(0xFFFF5252)},
-      {'pos': Offset(0, 7), 'color': Color(0xFF2979FF)},
+      // ROTADO: Rojo arriba, Azul derecha, Amarillo abajo, Verde izquierda
+      {'pos': Offset(7, 0), 'color': Color(0xFFFF5252)},   // Rojo arriba
+      {'pos': Offset(14, 7), 'color': Color(0xFF2979FF)},  // Azul derecha
+      {'pos': Offset(7, 14), 'color': Color(0xFFFFD700)},  // Amarillo abajo
+      {'pos': Offset(0, 7), 'color': Color(0xFF00C853)},   // Verde izquierda
     ];
 
     final borderPaint = Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 2.0;
@@ -155,10 +156,11 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawHomeStretches(Canvas canvas, Size size, double squareSize) {
-    _drawHomeStretch(canvas, Color(0xFFFFD700), squareSize, 7, 1, true, 5);
-    _drawHomeStretch(canvas, Color(0xFF00C853), squareSize, 9, 7, false, 5);
-    _drawHomeStretch(canvas, Color(0xFFFF5252), squareSize, 7, 9, true, 5);
-    _drawHomeStretch(canvas, Color(0xFF2979FF), squareSize, 1, 7, false, 5);
+    // ROTADO: Rojo arriba, Azul derecha, Amarillo abajo, Verde izquierda
+    _drawHomeStretch(canvas, Color(0xFFFF5252), squareSize, 7, 1, true, 5);   // Rojo arriba
+    _drawHomeStretch(canvas, Color(0xFF2979FF), squareSize, 9, 7, false, 5);  // Azul derecha
+    _drawHomeStretch(canvas, Color(0xFFFFD700), squareSize, 7, 9, true, 5);   // Amarillo abajo
+    _drawHomeStretch(canvas, Color(0xFF00C853), squareSize, 1, 7, false, 5);  // Verde izquierda
   }
 
   void _drawHomeStretch(Canvas canvas, Color color, double squareSize, int startCol, int startRow, bool isVertical, int count) {
@@ -179,25 +181,26 @@ class LudoBoardPainter extends CustomPainter {
     final centerX = 7.5 * squareSize;
     final centerY = 7.5 * squareSize;
 
-    _drawTriangle(canvas, Color(0xFFFFD700), [
+    // ROTADO: Rojo arriba, Azul derecha, Amarillo abajo, Verde izquierda
+    _drawTriangle(canvas, Color(0xFFFF5252), [
       Offset(centerX, centerY),
       Offset(6 * squareSize, 6 * squareSize),
       Offset(9 * squareSize, 6 * squareSize),
     ]);
 
-    _drawTriangle(canvas, Color(0xFF00C853), [
+    _drawTriangle(canvas, Color(0xFF2979FF), [
       Offset(centerX, centerY),
       Offset(9 * squareSize, 6 * squareSize),
       Offset(9 * squareSize, 9 * squareSize),
     ]);
 
-    _drawTriangle(canvas, Color(0xFFFF5252), [
+    _drawTriangle(canvas, Color(0xFFFFD700), [
       Offset(centerX, centerY),
       Offset(9 * squareSize, 9 * squareSize),
       Offset(6 * squareSize, 9 * squareSize),
     ]);
 
-    _drawTriangle(canvas, Color(0xFF2979FF), [
+    _drawTriangle(canvas, Color(0xFF00C853), [
       Offset(centerX, centerY),
       Offset(6 * squareSize, 9 * squareSize),
       Offset(6 * squareSize, 6 * squareSize),
@@ -224,20 +227,21 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawStartingSquares(Canvas canvas, double squareSize) {
+    // ROTADO: Casillas de salida coloreadas (donde salen las fichas)
     final startingSquares = {
-      Offset(1, 6): {'color': Color(0xFFFFD700), 'position': 0},   // Yellow
-      Offset(8, 2): {'color': Color(0xFF00C853), 'position': 13},  // Green
-      Offset(13, 8): {'color': Color(0xFFFF5252), 'position': 26}, // Red
-      Offset(6, 12): {'color': Color(0xFF2979FF), 'position': 39}, // Blue
+      Offset(13, 8): {'color': Color(0xFFFFD700), 'position': 0},  // Amarillo abajo-der
+      Offset(6, 13): {'color': Color(0xFF00C853), 'position': 13}, // Verde abajo-izq (CORREGIDO)
+      Offset(1, 6): {'color': Color(0xFFFF5252), 'position': 26},  // Rojo arriba-izq
+      Offset(8, 1): {'color': Color(0xFF2979FF), 'position': 39},  // Azul arriba-der (CORREGIDO)
     };
 
     final otherSafeSquares = [
-      Offset(2, 6),
-      Offset(6, 2),
-      Offset(12, 6),
-      Offset(12, 8),
-      Offset(8, 12),
-      Offset(2, 8),
+      Offset(12, 8),  // Segura posición 1 amarillo
+      Offset(6, 12),  // Segura posición 14 verde (CORREGIDO)
+      Offset(2, 6),   // Segura posición 27 rojo
+      Offset(8, 2),   // Segura posición 40 azul (CORREGIDO)
+      Offset(12, 6),  // Otra segura
+      Offset(2, 8),   // Otra segura
     ];
 
     final borderPaint = Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 2.0;
@@ -333,19 +337,24 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   List<Offset> _getPositionCoordinates() {
+    // ROTADO: El recorrido correcto con las casillas de salida coloreadas
     return [
-      Offset(1, 6), Offset(2, 6), Offset(3, 6), Offset(4, 6), Offset(5, 6),
-      Offset(6, 5), Offset(6, 4), Offset(6, 3), Offset(6, 2), Offset(6, 1), Offset(6, 0),
-      Offset(7, 0), Offset(8, 0),
-      Offset(8, 1), Offset(8, 2), Offset(8, 3), Offset(8, 4), Offset(8, 5),
-      Offset(9, 6), Offset(10, 6), Offset(11, 6), Offset(12, 6), Offset(13, 6), Offset(14, 6),
-      Offset(14, 7), Offset(14, 8),
+      // Amarillo sale en posición 0 (casilla 26 visual)
       Offset(13, 8), Offset(12, 8), Offset(11, 8), Offset(10, 8), Offset(9, 8),
       Offset(8, 9), Offset(8, 10), Offset(8, 11), Offset(8, 12), Offset(8, 13), Offset(8, 14),
       Offset(7, 14), Offset(6, 14),
+      // Verde sale en posición 13 (CORREGIDO)
       Offset(6, 13), Offset(6, 12), Offset(6, 11), Offset(6, 10), Offset(6, 9),
       Offset(5, 8), Offset(4, 8), Offset(3, 8), Offset(2, 8), Offset(1, 8), Offset(0, 8),
       Offset(0, 7), Offset(0, 6),
+      // Rojo sale en posición 26
+      Offset(1, 6), Offset(2, 6), Offset(3, 6), Offset(4, 6), Offset(5, 6),
+      Offset(6, 5), Offset(6, 4), Offset(6, 3), Offset(6, 2), Offset(6, 1), Offset(6, 0),
+      Offset(7, 0), Offset(8, 0),
+      // Azul sale en posición 39 (CORREGIDO)
+      Offset(8, 1), Offset(8, 2), Offset(8, 3), Offset(8, 4), Offset(8, 5),
+      Offset(9, 6), Offset(10, 6), Offset(11, 6), Offset(12, 6), Offset(13, 6), Offset(14, 6),
+      Offset(14, 7), Offset(14, 8),
     ];
   }
 
@@ -535,11 +544,12 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   Offset _getHomePosition(String color, int pieceId, double squareSize) {
+    // ROTADO: Nuevas posiciones de casas
     final homes = {
-      'yellow': Offset(3.0, 3.0),
-      'green': Offset(12.0, 3.0),
-      'red': Offset(12.0, 12.0),
-      'blue': Offset(3.0, 12.0),
+      'yellow': Offset(12.0, 12.0),  // Amarillo abajo-derecha
+      'green': Offset(3.0, 12.0),    // Verde abajo-izquierda
+      'red': Offset(3.0, 3.0),       // Rojo arriba-izquierda
+      'blue': Offset(12.0, 3.0),     // Azul arriba-derecha
     };
 
     final basePos = homes[color]!;
@@ -560,13 +570,13 @@ class LudoBoardPainter extends CustomPainter {
 
     switch (color) {
       case 'yellow':
-        return Offset(centerX * squareSize, (centerY - 1.0 - pieceId * 0.55) * squareSize);
+        return Offset(centerX * squareSize, (centerY + 1.0 + pieceId * 0.55) * squareSize); // Abajo
       case 'green':
-        return Offset((centerX + 1.0 + pieceId * 0.55) * squareSize, centerY * squareSize);
+        return Offset((centerX - 1.0 - pieceId * 0.55) * squareSize, centerY * squareSize); // Izquierda
       case 'red':
-        return Offset(centerX * squareSize, (centerY + 1.0 + pieceId * 0.55) * squareSize);
+        return Offset(centerX * squareSize, (centerY - 1.0 - pieceId * 0.55) * squareSize); // Arriba
       case 'blue':
-        return Offset((centerX - 1.0 - pieceId * 0.55) * squareSize, centerY * squareSize);
+        return Offset((centerX + 1.0 + pieceId * 0.55) * squareSize, centerY * squareSize); // Derecha
       default:
         return Offset(centerX * squareSize, centerY * squareSize);
     }
