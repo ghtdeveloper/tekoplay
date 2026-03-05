@@ -738,6 +738,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFFEC7A34),
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           'Parchís vs ${widget.cpuCount} CPU${widget.cpuCount > 1 ? "s" : ""} - ${widget.difficulty}',
           style: const TextStyle(color: Colors.white),

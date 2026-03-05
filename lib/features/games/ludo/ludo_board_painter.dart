@@ -18,14 +18,13 @@ class LudoBoardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final squareSize = size.width / 15;
-
     _drawBackground(canvas, size);
     _drawHomeAreas(canvas, size, squareSize);
     _drawPath(canvas, size, squareSize);
-    _drawSpecialSquares(canvas, squareSize);
     _drawHomeStretches(canvas, size, squareSize);
     _drawCenterTriangles(canvas, size, squareSize);
     _drawStartingSquares(canvas, squareSize);
+    _drawSafeStars(canvas, squareSize);
     _drawPathNumbers(canvas, squareSize);
     _drawPieces(canvas, size, squareSize);
   }
@@ -36,10 +35,10 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawHomeAreas(Canvas canvas, Size size, double squareSize) {
-    _drawHomeArea(canvas, Rect.fromLTWH(0, 0, 6 * squareSize, 6 * squareSize), const Color(0xFFFFD700), squareSize); // Amarillo arriba-izq
-    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 0, 6 * squareSize, 6 * squareSize), const Color(0xFF00C853), squareSize); // Verde arriba-der
-    _drawHomeArea(canvas, Rect.fromLTWH(0, 9 * squareSize, 6 * squareSize, 6 * squareSize), const Color(0xFF2979FF), squareSize); // Azul abajo-izq
-    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 9 * squareSize, 6 * squareSize, 6 * squareSize), const Color(0xFFFF5252), squareSize); // Rojo abajo-der
+    _drawHomeArea(canvas, Rect.fromLTWH(0, 0, 6 * squareSize, 6 * squareSize), const Color(0xFFFFD700), squareSize);
+    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 0, 6 * squareSize, 6 * squareSize), const Color(0xFF00C853), squareSize);
+    _drawHomeArea(canvas, Rect.fromLTWH(0, 9 * squareSize, 6 * squareSize, 6 * squareSize), const Color(0xFF2979FF), squareSize);
+    _drawHomeArea(canvas, Rect.fromLTWH(9 * squareSize, 9 * squareSize, 6 * squareSize, 6 * squareSize), const Color(0xFFFF5252), squareSize);
   }
 
   void _drawHomeArea(Canvas canvas, Rect area, Color color, double squareSize) {
@@ -53,12 +52,7 @@ class LudoBoardPainter extends CustomPainter {
     final centerY = area.top + area.height / 2;
     final innerSize = squareSize * 3.2;
 
-    final innerRect = Rect.fromCenter(
-      center: Offset(centerX, centerY),
-      width: innerSize,
-      height: innerSize,
-    );
-
+    final innerRect = Rect.fromCenter(center: Offset(centerX, centerY), width: innerSize, height: innerSize);
     final innerPaint = Paint()..color = Colors.white..style = PaintingStyle.fill;
     canvas.drawRect(innerRect, innerPaint);
     canvas.drawRect(innerRect, borderPaint);
@@ -103,42 +97,6 @@ class LudoBoardPainter extends CustomPainter {
     }
   }
 
-  void _drawSpecialSquares(Canvas canvas, double squareSize) {
-    final borderPaint = Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 2.0;
-    final safeSquares = [
-      Offset(6, 5),
-      Offset(9, 6),
-      Offset(8, 9),
-      Offset(5, 8),
-    ];
-
-    for (final pos in safeSquares) {
-      _drawStar(
-        canvas,
-        Offset((pos.dx + 0.5) * squareSize, (pos.dy + 0.5) * squareSize),
-        squareSize * 0.32,
-        Colors.grey[400]!,
-      );
-    }
-
-    final coloredStartSquares = [
-      {'col': 6, 'row': 1, 'color': const Color(0xFFFFD700)},
-      {'col': 13, 'row': 6, 'color': const Color(0xFF00C853)},
-      {'col': 8, 'row': 13, 'color': const Color(0xFFFF5252)},
-      {'col': 1, 'row': 8, 'color': const Color(0xFF2979FF)},
-    ];
-
-    for (final sq in coloredStartSquares) {
-      final col = sq['col'] as int;
-      final row = sq['row'] as int;
-      final color = sq['color'] as Color;
-      final rect = Rect.fromLTWH(col * squareSize, row * squareSize, squareSize, squareSize);
-      final paint = Paint()..color = color..style = PaintingStyle.fill;
-      canvas.drawRect(rect, paint);
-      canvas.drawRect(rect, borderPaint);
-    }
-  }
-
   void _drawHomeStretches(Canvas canvas, Size size, double squareSize) {
     _drawHomeStretch(canvas, const Color(0xFFFFD700), squareSize, 7, 1, true, 5);
     _drawHomeStretch(canvas, const Color(0xFF00C853), squareSize, 9, 7, false, 5);
@@ -154,7 +112,6 @@ class LudoBoardPainter extends CustomPainter {
       final rect = isVertical
           ? Rect.fromLTWH(startCol * squareSize, (startRow + i) * squareSize, squareSize, squareSize)
           : Rect.fromLTWH((startCol + i) * squareSize, startRow * squareSize, squareSize, squareSize);
-
       canvas.drawRect(rect, paint);
       canvas.drawRect(rect, borderPaint);
     }
@@ -164,25 +121,21 @@ class LudoBoardPainter extends CustomPainter {
     final centerX = 7.5 * squareSize;
     final centerY = 7.5 * squareSize;
 
-
     _drawTriangle(canvas, const Color(0xFFFFD700), [
       Offset(centerX, centerY),
       Offset(6 * squareSize, 6 * squareSize),
       Offset(9 * squareSize, 6 * squareSize),
     ]);
-
     _drawTriangle(canvas, const Color(0xFF00C853), [
       Offset(centerX, centerY),
       Offset(9 * squareSize, 6 * squareSize),
       Offset(9 * squareSize, 9 * squareSize),
     ]);
-
     _drawTriangle(canvas, const Color(0xFFFF5252), [
       Offset(centerX, centerY),
       Offset(9 * squareSize, 9 * squareSize),
       Offset(6 * squareSize, 9 * squareSize),
     ]);
-
     _drawTriangle(canvas, const Color(0xFF2979FF), [
       Offset(centerX, centerY),
       Offset(6 * squareSize, 9 * squareSize),
@@ -193,7 +146,6 @@ class LudoBoardPainter extends CustomPainter {
       ..color = Colors.black
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0;
-
     canvas.drawLine(Offset(6 * squareSize, 6 * squareSize), Offset(9 * squareSize, 9 * squareSize), borderPaint);
     canvas.drawLine(Offset(6 * squareSize, 9 * squareSize), Offset(9 * squareSize, 6 * squareSize), borderPaint);
   }
@@ -204,20 +156,33 @@ class LudoBoardPainter extends CustomPainter {
       ..lineTo(points[1].dx, points[1].dy)
       ..lineTo(points[2].dx, points[2].dy)
       ..close();
-
     final paint = Paint()..color = color..style = PaintingStyle.fill;
     canvas.drawPath(path, paint);
   }
 
   void _drawStartingSquares(Canvas canvas, double squareSize) {
-    final startingSquares = {
-      Offset(6, 1): {'color': const Color(0xFFFFD700)},
-      Offset(13, 6): {'color': const Color(0xFF00C853)},
-      Offset(8, 13): {'color': const Color(0xFFFF5252)},
-      Offset(1, 8): {'color': const Color(0xFF2979FF)},
-    };
+    final borderPaint = Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 2.0;
 
-    final otherSafeSquares = [
+    final startingSquares = [
+      {'col': 6, 'row': 1, 'color': const Color(0xFFFFD700)},
+      {'col': 13, 'row': 6, 'color': const Color(0xFF00C853)},
+      {'col': 8, 'row': 13, 'color': const Color(0xFFFF5252)},
+      {'col': 1, 'row': 8, 'color': const Color(0xFF2979FF)},
+    ];
+
+    for (final sq in startingSquares) {
+      final col = sq['col'] as int;
+      final row = sq['row'] as int;
+      final color = sq['color'] as Color;
+      final rect = Rect.fromLTWH(col * squareSize, row * squareSize, squareSize, squareSize);
+      final paint = Paint()..color = color..style = PaintingStyle.fill;
+      canvas.drawRect(rect, paint);
+      canvas.drawRect(rect, borderPaint);
+    }
+  }
+
+  void _drawSafeStars(Canvas canvas, double squareSize) {
+    final safeSquares = [
       Offset(6, 5),
       Offset(9, 6),
       Offset(8, 9),
@@ -228,21 +193,7 @@ class LudoBoardPainter extends CustomPainter {
       Offset(8, 2),
     ];
 
-    final borderPaint = Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 2.0;
-
-    startingSquares.forEach((pos, data) {
-      final color = data['color'] as Color;
-      final rect = Rect.fromLTWH(pos.dx * squareSize, pos.dy * squareSize, squareSize, squareSize);
-
-      final bgPaint = Paint()..color = color.withOpacity(0.5)..style = PaintingStyle.fill;
-      canvas.drawRect(rect, bgPaint);
-
-      final colorBorderPaint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 4.0;
-      canvas.drawRect(rect, colorBorderPaint);
-      canvas.drawRect(rect, borderPaint);
-    });
-
-    for (final pos in otherSafeSquares) {
+    for (final pos in safeSquares) {
       _drawStar(
         canvas,
         Offset((pos.dx + 0.5) * squareSize, (pos.dy + 0.5) * squareSize),
@@ -262,7 +213,6 @@ class LudoBoardPainter extends CustomPainter {
       final angle = i * angleStep / 2 - math.pi / 2;
       final x = center.dx + r * math.cos(angle);
       final y = center.dy + r * math.sin(angle);
-
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -273,7 +223,6 @@ class LudoBoardPainter extends CustomPainter {
 
     final paint = Paint()..color = color..style = PaintingStyle.fill;
     canvas.drawPath(path, paint);
-
     final borderPaint = Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2.0;
     canvas.drawPath(path, borderPaint);
   }
@@ -308,7 +257,6 @@ class LudoBoardPainter extends CustomPainter {
     }
   }
 
-
   List<Offset> _getPositionCoordinates() {
     return [
       Offset(6, 1), Offset(6, 2), Offset(6, 3), Offset(6, 4), Offset(6, 5),
@@ -331,112 +279,80 @@ class LudoBoardPainter extends CustomPainter {
 
     void addPieceToPosition(LudoPiece piece, Color color, String colorName) {
       if (piece.isHome || piece.isFinished) return;
-
       if (!piecesAtPosition.containsKey(piece.position)) {
         piecesAtPosition[piece.position] = [];
       }
-      piecesAtPosition[piece.position]!.add({
-        'piece': piece,
-        'color': color,
-        'colorName': colorName,
-      });
+      piecesAtPosition[piece.position]!.add({'piece': piece, 'color': color, 'colorName': colorName});
     }
 
-    for (final piece in gameState.yellowPieces) {
-      addPieceToPosition(piece, const Color(0xFFFFD700), 'yellow');
-    }
-    for (final piece in gameState.greenPieces) {
-      addPieceToPosition(piece, const Color(0xFF00C853), 'green');
-    }
-    for (final piece in gameState.redPieces) {
-      addPieceToPosition(piece, const Color(0xFFFF5252), 'red');
-    }
-    for (final piece in gameState.bluePieces) {
-      addPieceToPosition(piece, const Color(0xFF2979FF), 'blue');
-    }
+    for (final piece in gameState.yellowPieces) addPieceToPosition(piece, const Color(0xFFFFD700), 'yellow');
+    for (final piece in gameState.greenPieces) addPieceToPosition(piece, const Color(0xFF00C853), 'green');
+    for (final piece in gameState.redPieces) addPieceToPosition(piece, const Color(0xFFFF5252), 'red');
+    for (final piece in gameState.bluePieces) addPieceToPosition(piece, const Color(0xFF2979FF), 'blue');
 
     for (final entry in piecesAtPosition.entries) {
       final position = entry.key;
       final piecesHere = entry.value;
-
       final boardPos = _getBoardPosition(position, squareSize);
       if (boardPos != null) {
         if (piecesHere.length == 1) {
           _drawSinglePiece(canvas, piecesHere[0]['piece'], piecesHere[0]['color'],
               piecesHere[0]['colorName'], boardPos, squareSize);
         } else {
-          _drawStackedPiecesNew(canvas, piecesHere, boardPos, squareSize);
+          _drawStackedPieces(canvas, piecesHere, boardPos, squareSize);
         }
       }
     }
 
-    _drawColorPieces(canvas, gameState.yellowPieces, const Color(0xFFFFD700), 'yellow', squareSize, true);
-    _drawColorPieces(canvas, gameState.greenPieces, const Color(0xFF00C853), 'green', squareSize, true);
-    _drawColorPieces(canvas, gameState.redPieces, const Color(0xFFFF5252), 'red', squareSize, true);
-    _drawColorPieces(canvas, gameState.bluePieces, const Color(0xFF2979FF), 'blue', squareSize, true);
+    _drawColorPieces(canvas, gameState.yellowPieces, const Color(0xFFFFD700), 'yellow', squareSize);
+    _drawColorPieces(canvas, gameState.greenPieces, const Color(0xFF00C853), 'green', squareSize);
+    _drawColorPieces(canvas, gameState.redPieces, const Color(0xFFFF5252), 'red', squareSize);
+    _drawColorPieces(canvas, gameState.bluePieces, const Color(0xFF2979FF), 'blue', squareSize);
   }
 
-  void _drawStackedPiecesNew(Canvas canvas, List<Map<String, dynamic>> pieces, Offset center, double squareSize) {
+  void _drawStackedPieces(Canvas canvas, List<Map<String, dynamic>> pieces, Offset center, double squareSize) {
     final radius = squareSize * 0.35;
-
     final Map<String, List<Map<String, dynamic>>> byColor = {};
+
     for (final piece in pieces) {
       final colorName = piece['colorName'] as String;
-      if (!byColor.containsKey(colorName)) {
-        byColor[colorName] = [];
-      }
-      if (byColor[colorName]!.length < 2) {
-        byColor[colorName]!.add(piece);
-      }
+      if (!byColor.containsKey(colorName)) byColor[colorName] = [];
+      if (byColor[colorName]!.length < 2) byColor[colorName]!.add(piece);
     }
 
-    final limitedPieces = <Map<String, dynamic>>[];
-    byColor.forEach((color, colorPieces) {
-      limitedPieces.addAll(colorPieces);
-    });
+    final limited = <Map<String, dynamic>>[];
+    byColor.forEach((_, colorPieces) => limited.addAll(colorPieces));
 
-    if (limitedPieces.length == 1) {
-      _drawSinglePiece(canvas, limitedPieces[0]['piece'], limitedPieces[0]['color'],
-          limitedPieces[0]['colorName'], center, squareSize);
-    } else if (limitedPieces.length == 2) {
-      final offset = squareSize * 0.28;
-      _drawSinglePiece(canvas, limitedPieces[0]['piece'], limitedPieces[0]['color'],
-          limitedPieces[0]['colorName'], center - Offset(offset, 0), squareSize, radius: radius * 0.85);
-      _drawSinglePiece(canvas, limitedPieces[1]['piece'], limitedPieces[1]['color'],
-          limitedPieces[1]['colorName'], center + Offset(offset, 0), squareSize, radius: radius * 0.85);
-    } else if (limitedPieces.length == 3) {
-      final offsetX = squareSize * 0.26;
-      final offsetY = squareSize * 0.22;
-      _drawSinglePiece(canvas, limitedPieces[0]['piece'], limitedPieces[0]['color'],
-          limitedPieces[0]['colorName'], center - Offset(offsetX, offsetY), squareSize, radius: radius * 0.75);
-      _drawSinglePiece(canvas, limitedPieces[1]['piece'], limitedPieces[1]['color'],
-          limitedPieces[1]['colorName'], center + Offset(offsetX, -offsetY), squareSize, radius: radius * 0.75);
-      _drawSinglePiece(canvas, limitedPieces[2]['piece'], limitedPieces[2]['color'],
-          limitedPieces[2]['colorName'], center + Offset(0, offsetY), squareSize, radius: radius * 0.75);
+    if (limited.length == 1) {
+      _drawSinglePiece(canvas, limited[0]['piece'], limited[0]['color'], limited[0]['colorName'], center, squareSize);
+    } else if (limited.length == 2) {
+      final off = squareSize * 0.28;
+      _drawSinglePiece(canvas, limited[0]['piece'], limited[0]['color'], limited[0]['colorName'], center - Offset(off, 0), squareSize, radius: radius * 0.85);
+      _drawSinglePiece(canvas, limited[1]['piece'], limited[1]['color'], limited[1]['colorName'], center + Offset(off, 0), squareSize, radius: radius * 0.85);
+    } else if (limited.length == 3) {
+      final ox = squareSize * 0.26;
+      final oy = squareSize * 0.22;
+      _drawSinglePiece(canvas, limited[0]['piece'], limited[0]['color'], limited[0]['colorName'], center - Offset(ox, oy), squareSize, radius: radius * 0.75);
+      _drawSinglePiece(canvas, limited[1]['piece'], limited[1]['color'], limited[1]['colorName'], center + Offset(ox, -oy), squareSize, radius: radius * 0.75);
+      _drawSinglePiece(canvas, limited[2]['piece'], limited[2]['color'], limited[2]['colorName'], center + Offset(0, oy), squareSize, radius: radius * 0.75);
     } else {
-      final offset = squareSize * 0.24;
-      _drawSinglePiece(canvas, limitedPieces[0]['piece'], limitedPieces[0]['color'],
-          limitedPieces[0]['colorName'], center - Offset(offset, offset), squareSize, radius: radius * 0.7);
-      _drawSinglePiece(canvas, limitedPieces[1]['piece'], limitedPieces[1]['color'],
-          limitedPieces[1]['colorName'], center + Offset(offset, -offset), squareSize, radius: radius * 0.7);
-      _drawSinglePiece(canvas, limitedPieces[2]['piece'], limitedPieces[2]['color'],
-          limitedPieces[2]['colorName'], center + Offset(-offset, offset), squareSize, radius: radius * 0.7);
-      _drawSinglePiece(canvas, limitedPieces[3]['piece'], limitedPieces[3]['color'],
-          limitedPieces[3]['colorName'], center + Offset(offset, offset), squareSize, radius: radius * 0.7);
+      final off = squareSize * 0.24;
+      _drawSinglePiece(canvas, limited[0]['piece'], limited[0]['color'], limited[0]['colorName'], center - Offset(off, off), squareSize, radius: radius * 0.7);
+      _drawSinglePiece(canvas, limited[1]['piece'], limited[1]['color'], limited[1]['colorName'], center + Offset(off, -off), squareSize, radius: radius * 0.7);
+      _drawSinglePiece(canvas, limited[2]['piece'], limited[2]['color'], limited[2]['colorName'], center + Offset(-off, off), squareSize, radius: radius * 0.7);
+      _drawSinglePiece(canvas, limited[3]['piece'], limited[3]['color'], limited[3]['colorName'], center + Offset(off, off), squareSize, radius: radius * 0.7);
     }
   }
 
-  void _drawColorPieces(Canvas canvas, List<LudoPiece> pieces, Color color, String colorName,
-      double squareSize, bool skipBoard) {
+  void _drawColorPieces(Canvas canvas, List<LudoPiece> pieces, Color color, String colorName, double squareSize) {
     for (final piece in pieces) {
-      if (skipBoard && !piece.isHome && !piece.isFinished) continue;
+      if (!piece.isHome && !piece.isFinished) continue;
       _drawPiece(canvas, piece, color, colorName, squareSize);
     }
   }
 
   void _drawPiece(Canvas canvas, LudoPiece piece, Color color, String colorName, double squareSize) {
     Offset? position;
-
     if (piece.isHome) {
       position = _getHomePosition(colorName, piece.id, squareSize);
     } else if (piece.isFinished) {
@@ -444,7 +360,6 @@ class LudoBoardPainter extends CustomPainter {
     } else {
       return;
     }
-
     if (position == null) return;
     _drawSinglePiece(canvas, piece, color, colorName, position, squareSize);
   }
@@ -463,7 +378,6 @@ class LudoBoardPainter extends CustomPainter {
       colors: [color.withOpacity(0.9), color, color.withOpacity(0.7)],
       stops: const [0.0, 0.6, 1.0],
     );
-
     final piecePaint = Paint()
       ..shader = gradient.createShader(Rect.fromCircle(center: position, radius: pieceRadius))
       ..style = PaintingStyle.fill;
@@ -487,7 +401,6 @@ class LudoBoardPainter extends CustomPainter {
     }
   }
 
-
   Offset _getHomePosition(String color, int pieceId, double squareSize) {
     final homes = {
       'yellow': const Offset(3.0, 3.0),
@@ -495,25 +408,20 @@ class LudoBoardPainter extends CustomPainter {
       'blue': const Offset(3.0, 12.0),
       'red': const Offset(12.0, 12.0),
     };
-
     final basePos = homes[color]!;
-    final offset = 0.75;
-
+    const offset = 0.75;
     final positions = [
       Offset((basePos.dx - offset) * squareSize, (basePos.dy - offset) * squareSize),
       Offset((basePos.dx + offset) * squareSize, (basePos.dy - offset) * squareSize),
       Offset((basePos.dx - offset) * squareSize, (basePos.dy + offset) * squareSize),
       Offset((basePos.dx + offset) * squareSize, (basePos.dy + offset) * squareSize),
     ];
-
     return positions[pieceId];
   }
-
 
   Offset _getFinishPosition(String color, int pieceId, double squareSize) {
     const centerX = 7.5;
     const centerY = 7.5;
-
     switch (color) {
       case 'yellow':
         return Offset(centerX * squareSize, (centerY - 0.8 - pieceId * 0.45) * squareSize);
@@ -530,7 +438,6 @@ class LudoBoardPainter extends CustomPainter {
 
   Offset? _getBoardPosition(int position, double squareSize) {
     final positions = _getPositionCoordinates();
-
     if (position >= 0 && position < positions.length) {
       final pos = positions[position];
       return Offset((pos.dx + 0.5) * squareSize, (pos.dy + 0.5) * squareSize);
