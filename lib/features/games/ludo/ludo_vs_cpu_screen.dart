@@ -13,11 +13,11 @@ class LudoVsCpuScreen extends StatefulWidget {
   final int cpuCount;
 
   const LudoVsCpuScreen({
-    Key? key,
+    super.key,
     required this.difficulty,
     required this.matchType,
     this.cpuCount = 1,
-  }) : super(key: key);
+  });
 
   @override
   State<LudoVsCpuScreen> createState() => _LudoVsCpuScreenState();
@@ -46,6 +46,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
   bool _hasUsedDice1 = false;
   bool _hasUsedDice2 = false;
+
+  bool _bonusSelectionActive = false;
+  bool _bonusHadDouble = false;
 
   int _consecutiveDoubles = 0;
 
@@ -391,16 +394,47 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
     if (_isEnemyBarrierAt(newPos, color)) return false;
 
+    // La casilla de salida de cada color es exclusiva:
+    // ningún enemigo puede aterrizar ahí si hay fichas del dueño
+    for (final ownerColor in _activePlayers) {
+      if (ownerColor == color) continue;
+      final ownerStart = _getStartPosition(ownerColor);
+      if (newPos == ownerStart) {
+        final ownerPieces = _gameState.getPiecesByColor(ownerColor);
+        final ownerCount = ownerPieces.where(
+                (p) => !p.isHome && !p.isFinished && p.position == ownerStart
+        ).length;
+        if (ownerCount > 0) return false;
+      }
+    }
+
     return true;
   }
 
   void _handleBoardTap(Offset localPosition) {
-    if (_gameEnded || _currentPlayer != 'yellow' || _totalDiceValue == 0 ||
-        _boardSize == 0 || _movablePieces.isEmpty) return;
+    if (_gameEnded || _currentPlayer != 'yellow' || _boardSize == 0) return;
 
     final squareSize = _boardSize / 15;
     final yellowPieces = _gameState.getPiecesByColor('yellow');
     final tapRadius = squareSize * 0.7;
+
+    if (_bonusSelectionActive) {
+      // Modo bonus: el jugador toca la ficha que quiere que reciba el +20
+      for (int i = 0; i < yellowPieces.length; i++) {
+        final piece = yellowPieces[i];
+        final hasBonusMove = _movablePieces.any((m) => m['pieceId'] == i);
+        if (!hasBonusMove) continue;
+
+        final piecePos = _getPieceScreenPosition(piece, 'yellow', squareSize);
+        if (piecePos != null && (localPosition - piecePos).distance < tapRadius) {
+          _showBonusConfirmDialog(i);
+          return;
+        }
+      }
+      return;
+    }
+
+    if (_totalDiceValue == 0 || _movablePieces.isEmpty) return;
 
     for (int i = 0; i < yellowPieces.length; i++) {
       final piece = yellowPieces[i];
@@ -412,6 +446,117 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
         return;
       }
     }
+  }
+
+  void _showBonusConfirmDialog(int pieceId) {
+    final opt = _movablePieces.firstWhere((m) => m['pieceId'] == pieceId, orElse: () => {});
+    if (opt.isEmpty) return;
+
+    final p = opt['piece'] as LudoPiece;
+    final bonusPos = opt['bonusPos'] as int;
+    final hadDouble = _bonusHadDouble;
+    final steps = _stepsFromStart(p.position, _getStartPosition('yellow'));
+    final isSafe = bonusPos >= 52 || _isSafeForColor(bonusPos, 'yellow');
+    final willCapture = bonusPos < 52 && !_isSafeForColor(bonusPos, 'yellow') &&
+        _activePlayers.any((ec) => ec != 'yellow' &&
+            _gameState.getPiecesByColor(ec).any((e) => !e.isHome && !e.isFinished && e.position == bonusPos));
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🎯 Bonus +20 casillas',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFEC7A34))),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: willCapture
+                        ? [const Color(0xFFE53935), const Color(0xFFEF5350)]
+                        : [const Color(0xFF00897B), const Color(0xFF26A69A)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.25), shape: BoxShape.circle),
+                      child: Center(
+                        child: Text('${pieceId + 1}',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Ficha ${pieceId + 1}  •  Paso $steps → ${steps + 20}',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 2),
+                          Text(
+                            willCapture ? '🔥 ¡Comerá otra ficha!' : isSafe ? '⭐ Casilla segura' : '➡ Avanza +20',
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey.shade600,
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _bonusSelectionActive = false;
+                          _movablePieces.clear();
+                        });
+                        _applyBonusTopiece('yellow', p, bonusPos, hadDouble);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEC7A34),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Mover', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showMovementSelectionDialog(int pieceId) {
@@ -428,7 +573,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -453,7 +598,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(colors: [Color(0xFFEC7A34), Color(0xFFFF9F5A)]),
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: const Color(0xFFEC7A34).withOpacity(0.3), blurRadius: 5, offset: const Offset(0, 3))],
+                        boxShadow: [BoxShadow(color: const Color(0xFFEC7A34).withValues(alpha: 0.3), blurRadius: 5, offset: const Offset(0, 3))],
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -482,7 +627,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       width: 50, height: 50,
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(8),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Center(child: CustomPaint(size: const Size(40, 40), painter: DiceDotsPainter(value))),
     );
@@ -571,7 +716,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     bool captured = false;
 
     // Capturar ANTES de mover la ficha propia
-    if (newPosition < 52 && !_isSafePosition(newPosition)) {
+    if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
         final enemyPieces = _gameState.getPiecesByColor(enemyColor);
@@ -587,8 +732,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     setState(() {
       piece.position = newPosition;
       if (newPosition == 57) piece.isFinished = true;
-      if (diceNumber == 1) _hasUsedDice1 = true;
-      else if (diceNumber == 2) _hasUsedDice2 = true;
+      if (diceNumber == 1) {
+        _hasUsedDice1 = true;
+      } else if (diceNumber == 2) {
+        _hasUsedDice2 = true;
+      }
     });
 
     if (_checkVictory(color)) {
@@ -636,32 +784,29 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     if (!mounted) return;
 
     final allPieces = _gameState.getPiecesByColor(color);
-    final movablePieces = <Map<String, dynamic>>[];
+    final bonusMoves = <Map<String, dynamic>>[];
 
     for (int i = 0; i < allPieces.length; i++) {
       final p = allPieces[i];
       if (p.isFinished || p.isHome) continue;
       final bonusPos = _calculateCaptureBonusPosition(p, color);
       if (bonusPos == null) continue;
-      // Verificar que no haya barrera en el camino del bonus
       if (bonusPos < 52 && _isEnemyBarrierAt(bonusPos, color)) continue;
-      // Verificar que no haya ya 2 fichas propias en el destino
-      if (bonusPos < 52) {
+      if (bonusPos < 52 && !_isSafeForColor(bonusPos, color)) {
         final samePos = allPieces.where((q) => q != p && !q.isHome && !q.isFinished && q.position == bonusPos).length;
         if (samePos >= 2) continue;
       }
-      movablePieces.add({'pieceId': i, 'piece': p, 'bonusPos': bonusPos});
+      bonusMoves.add({'pieceId': i, 'piece': p, 'bonusPos': bonusPos, 'diceValue': 20, 'diceNumber': 0});
     }
 
-    if (movablePieces.isEmpty) {
+    if (bonusMoves.isEmpty) {
       _showEventToast('¡Comiste! Sin bonus disponible 🎯');
       _resolveTurnAfterCapture(hadDouble);
       return;
     }
 
     if (color != 'yellow') {
-      // CPU: aplicar bonus automáticamente a la más avanzada
-      final best = movablePieces.reduce((a, b) {
+      final best = bonusMoves.reduce((a, b) {
         final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition(color));
         final stB = _stepsFromStart((b['piece'] as LudoPiece).position, _getStartPosition(color));
         return stA >= stB ? a : b;
@@ -670,106 +815,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       return;
     }
 
-    // Jugador humano: SIEMPRE mostrar diálogo de selección
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🎯 ¡Comiste! +20 casillas',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFEC7A34))),
-              const SizedBox(height: 6),
-              const Text('Elige qué ficha avanza',
-                  style: TextStyle(fontSize: 13, color: Colors.black54)),
-              const SizedBox(height: 16),
-              ...movablePieces.map((opt) {
-                final p = opt['piece'] as LudoPiece;
-                final bonusPos = opt['bonusPos'] as int;
-                final steps = _stepsFromStart(p.position, _getStartPosition(color));
-                final isSafe = bonusPos >= 52 || _isSafePosition(bonusPos);
-                final willCapture = bonusPos < 52 && !_isSafePosition(bonusPos) &&
-                    _activePlayers.any((ec) => ec != color &&
-                        _gameState.getPiecesByColor(ec).any((e) => !e.isHome && !e.isFinished && e.position == bonusPos));
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      _applyBonusTopiece(color, p, bonusPos, hadDouble);
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: willCapture
-                              ? [const Color(0xFFE53935), const Color(0xFFEF5350)]
-                              : [const Color(0xFF00897B), const Color(0xFF26A69A)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (willCapture ? Colors.red : Colors.teal).withOpacity(0.3),
-                            blurRadius: 6, offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 32, height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.25),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${(opt['pieceId'] as int) + 1}',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Ficha ${(opt['pieceId'] as int) + 1}  •  Paso $steps → ${steps + 20}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  willCapture ? '🔥 ¡Comerá otra ficha!' : isSafe ? '⭐ Casilla segura' : '➡ Avanza +20',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
-              const SizedBox(height: 4),
-            ],
-          ),
-        ),
-      ),
-    );
+    // Jugador humano: guardar bonusMoves para que el jugador toque la ficha
+    setState(() {
+      _movablePieces = bonusMoves;
+      _bonusSelectionActive = true;
+      _bonusHadDouble = hadDouble;
+    });
+    _showEventToast('🎯 ¡Comiste! Toca la ficha que quieres mover +20');
   }
 
   void _resolveTurnAfterCapture(bool hadDouble) {
@@ -785,7 +837,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   void _applyBonusTopiece(String color, LudoPiece piece, int bonusPos, bool hadDouble) {
     if (!mounted || piece.isFinished) return;
 
-    if (bonusPos < 52 && !_isSafePosition(bonusPos)) {
+    if (bonusPos < 52 && !_isSafeForColor(bonusPos, color)) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
         final enemyList = _gameState.getPiecesByColor(enemyColor)
@@ -823,6 +875,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       _movablePieces.clear();
       _hasUsedDice1 = false; _hasUsedDice2 = false;
       _consecutiveDoubles = 0;
+      _bonusSelectionActive = false;
+      _bonusHadDouble = false;
     });
     _showTurnBanner(_currentPlayer);
 
@@ -934,7 +988,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
     bool captured = false;
 
-    if (newPosition < 52 && !_isSafePosition(newPosition)) {
+    if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
         for (final enemyPiece in _gameState.getPiecesByColor(enemyColor)) {
@@ -949,8 +1003,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     setState(() {
       piece.position = newPosition;
       if (newPosition == 57) piece.isFinished = true;
-      if (diceNumber == 1) _hasUsedDice1 = true;
-      else if (diceNumber == 2) _hasUsedDice2 = true;
+      if (diceNumber == 1) {
+        _hasUsedDice1 = true;
+      } else if (diceNumber == 2) {
+        _hasUsedDice2 = true;
+      }
     });
 
     if (captured) _applyBonusTopiece(color, piece, _calculateCaptureBonusPosition(piece, color) ?? piece.position, false);
@@ -977,7 +1034,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
       final diceValue = move['diceValue'] as int;
       final newPos = _calculateNewPosition(piece, diceValue, _currentPlayer);
-      if (newPos != null && newPos < 52 && !_isSafePosition(newPos)) {
+      if (newPos != null && newPos < 52 && !_isSafeForColor(newPos, _currentPlayer)) {
         for (final ec in _activePlayers) {
           if (ec == _currentPlayer) continue;
           for (final e in _gameState.getPiecesByColor(ec)) {
@@ -1053,6 +1110,22 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     return safePositions.contains(position);
   }
 
+  // Devuelve true si la posición es segura para el color dado.
+  // Las casillas de salida solo son seguras para su color dueño.
+  bool _isSafeForColor(int position, String color) {
+    // Casillas de salida: solo seguras para el dueño
+    final startPositions = {
+      'green': 0, 'red': 13, 'blue': 26, 'yellow': 39,
+    };
+    for (final entry in startPositions.entries) {
+      if (position == entry.value) {
+        return entry.key == color; // segura solo para el dueño
+      }
+    }
+    // Resto de casillas seguras: seguras para todos
+    return _isSafePosition(position);
+  }
+
   bool _checkVictory(String color) {
     return _gameState.getPiecesByColor(color).every((p) => p.isFinished);
   }
@@ -1114,7 +1187,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: isWin ? Colors.amber : const Color(0xFFEC7A34), width: 2),
             boxShadow: [BoxShadow(
-              color: isWin ? Colors.amber.withOpacity(0.25) : const Color(0xFFEC7A34).withOpacity(0.25),
+              color: isWin ? Colors.amber.withValues(alpha: 0.25) : const Color(0xFFEC7A34).withValues(alpha: 0.25),
               blurRadius: 24, spreadRadius: 4,
             )],
           ),
@@ -1236,10 +1309,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: _getPlayerColor(_currentPlayer).withOpacity(0.35),
+                                    color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.35),
                                     blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
                                   ),
-                                  BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
                                 ],
                               ),
                               child: ClipRRect(
@@ -1281,11 +1354,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                           decoration: BoxDecoration(
                             gradient: LinearGradient(colors: [
-                              _turnOverlayColor.withOpacity(0.95),
-                              _turnOverlayColor.withOpacity(0.75),
+                              _turnOverlayColor.withValues(alpha: 0.95),
+                              _turnOverlayColor.withValues(alpha: 0.75),
                             ]),
                             borderRadius: BorderRadius.circular(30),
-                            boxShadow: [BoxShadow(color: _turnOverlayColor.withOpacity(0.5), blurRadius: 20, spreadRadius: 2)],
+                            boxShadow: [BoxShadow(color: _turnOverlayColor.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: 2)],
                           ),
                           child: Text(
                             _turnOverlayText,
@@ -1317,7 +1390,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                         decoration: BoxDecoration(
                           color: Colors.black87,
                           borderRadius: BorderRadius.circular(16),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 12)],
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 12)],
                         ),
                         child: Text(
                           _toastMessage,
@@ -1340,7 +1413,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1355,11 +1428,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
             duration: const Duration(milliseconds: 300),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: isActive ? playerColor.withOpacity(0.12) : Colors.grey[100],
+              color: isActive ? playerColor.withValues(alpha: 0.12) : Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: isActive ? playerColor : Colors.grey.shade300, width: isActive ? 2.5 : 1),
               boxShadow: isActive
-                  ? [BoxShadow(color: playerColor.withOpacity(0.3), blurRadius: 8, spreadRadius: 1)]
+                  ? [BoxShadow(color: playerColor.withValues(alpha: 0.3), blurRadius: 8, spreadRadius: 1)]
                   : [],
             ),
             child: Column(
@@ -1372,7 +1445,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                       width: 10, height: 10,
                       decoration: BoxDecoration(
                         color: playerColor, shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: playerColor.withOpacity(0.5), blurRadius: 4)],
+                        boxShadow: [BoxShadow(color: playerColor.withValues(alpha: 0.5), blurRadius: 4)],
                       ),
                     ),
                     const SizedBox(width: 5),
@@ -1424,7 +1497,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, -2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, -2))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1467,7 +1540,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                             begin: Alignment.topLeft, end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(16),
-                          boxShadow: [BoxShadow(color: const Color(0xFFEC7A34).withOpacity(glow), blurRadius: 18, spreadRadius: 3)],
+                          boxShadow: [BoxShadow(color: const Color(0xFFEC7A34).withValues(alpha: glow), blurRadius: 18, spreadRadius: 3)],
                         ),
                         child: const Column(
                           mainAxisSize: MainAxisSize.min,
@@ -1486,7 +1559,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                   duration: const Duration(milliseconds: 300),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                   decoration: BoxDecoration(
-                    color: _getPlayerColor(_currentPlayer).withOpacity(0.12),
+                    color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: _getPlayerColor(_currentPlayer), width: 2.5),
                   ),
@@ -1499,7 +1572,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                       ),
                       const SizedBox(height: 2),
                       Text(_getColorName(_currentPlayer),
-                          style: TextStyle(color: _getPlayerColor(_currentPlayer).withOpacity(0.8), fontSize: 11)),
+                          style: TextStyle(color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.8), fontSize: 11)),
                     ],
                   ),
                 ),
@@ -1511,17 +1584,30 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.blue.shade200),
+                  color: _bonusSelectionActive ? Colors.green.shade50 : Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _bonusSelectionActive ? Colors.green.shade300 : Colors.blue.shade200),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.touch_app, color: Colors.blue.shade700, size: 18),
+                    Icon(
+                      _bonusSelectionActive ? Icons.star : Icons.touch_app,
+                      color: _bonusSelectionActive ? Colors.green.shade700 : Colors.blue.shade700,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
-                    Text('Toca una ficha para mover',
-                        style: TextStyle(color: Colors.blue.shade900, fontSize: 13, fontWeight: FontWeight.w500)),
-                    if (_moveTimerSeconds > 0) ...[
+                    Text(
+                      _bonusSelectionActive
+                          ? '🎯 Toca la ficha que recibirá +20'
+                          : 'Toca una ficha para mover',
+                      style: TextStyle(
+                        color: _bonusSelectionActive ? Colors.green.shade900 : Colors.blue.shade900,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (_moveTimerSeconds > 0 && !_bonusSelectionActive) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1545,8 +1631,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                  color: Colors.amber.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1593,10 +1679,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                 ),
                 boxShadow: isAvailable && value > 0
                     ? [
-                  BoxShadow(color: activeColor.withOpacity(0.35), blurRadius: 10, offset: const Offset(0, 3)),
-                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 3),
+                  BoxShadow(color: activeColor.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 3)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 3),
                 ]
-                    : [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 3)],
+                    : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3)],
               ),
               child: Center(
                 child: value > 0
