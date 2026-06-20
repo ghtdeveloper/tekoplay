@@ -50,7 +50,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
         },
         {
           'title': 'Las Fichas',
-          'description': 'Cada jugador tiene 4 fichas del mismo color. Las tuyas son AMARILLAS y están en la esquina superior izquierda.',
+          'description': 'Cada jugador tiene 4 fichas del mismo color. Las tuyas son AMARILLAS y están en la esquina superior derecha.',
           'action': 'observe',
           'highlightArea': 'yellow-home',
         },
@@ -976,12 +976,14 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                       ),
                       child: Stack(
                         children: [
-                          CustomPaint(
-                            painter: LudoBoardPainter(
-                              gameState: _gameState,
-                              highlightedPieceColor: null,
-                              highlightedPieceId: null,
-                              validMovePositions: [],
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: LudoBoardPainter(
+                                gameState: _gameState,
+                                highlightedPieceColor: null,
+                                highlightedPieceId: null,
+                                validMovePositions: [],
+                              ),
                             ),
                           ),
                           if (_waitingForAction && step.containsKey('highlightPieces'))

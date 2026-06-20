@@ -533,13 +533,13 @@ class LudoBoardPainter extends CustomPainter {
     final si = position - 52;
     switch (color) {
       case 'green':
-        return Offset(7.5 * squareSize, (5.0 - si) * squareSize);
+        return Offset(7.5 * squareSize, (1.5 + si) * squareSize);
       case 'red':
-        return Offset((2.0 + si) * squareSize, 7.5 * squareSize);
+        return Offset((1.5 + si) * squareSize, 7.5 * squareSize);
       case 'blue':
-        return Offset(7.5 * squareSize, (10.0 + si) * squareSize);
+        return Offset(7.5 * squareSize, (13.5 - si) * squareSize);
       case 'yellow':
-        return Offset((13.0 - si) * squareSize, 7.5 * squareSize);
+        return Offset((13.5 - si) * squareSize, 7.5 * squareSize);
       default:
         return Offset(7.5 * squareSize, 7.5 * squareSize);
     }

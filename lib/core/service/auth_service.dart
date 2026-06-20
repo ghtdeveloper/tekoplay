@@ -135,11 +135,15 @@ class AuthService {
         email: email,
         password: password,
       );
-      if (userCredential.user != null && userCredential.user!.emailVerified) {
-        await _firestoreService.createOrGetUser(userCredential.user!);
+      // Reload to get the latest emailVerified status from the server,
+      // since Firebase caches this value locally and it may be stale.
+      await userCredential.user?.reload();
+      final freshUser = _auth.currentUser;
+      if (freshUser != null && freshUser.emailVerified) {
+        await _firestoreService.createOrGetUser(freshUser);
         // Transfer anonymous wallet if exists
-        await _transferAnonymousWalletOnLogin(userCredential.user!.uid);
-        return userCredential.user;
+        await _transferAnonymousWalletOnLogin(freshUser.uid);
+        return freshUser;
       } else {
         if (kDebugMode) {
           print("El correo no ha sido verificado");
@@ -315,8 +319,7 @@ class AuthService {
     if (user == null || !await canAccessApp()) {
       return await _walletService.addAnonymousCoins(coinsToAdd);
     } else {
-      final currentCoins = await getCurrentUserCoins();
-      return await _firestoreService.updateUserCoins(user.uid, currentCoins + coinsToAdd);
+      return await _firestoreService.incrementUserCoins(user.uid, coinsToAdd);
     }
   }
 
@@ -326,8 +329,7 @@ class AuthService {
     if (user == null || !await canAccessApp()) {
       return await _walletService.addAnonymousDiamonds(diamondsToAdd);
     } else {
-      final currentDiamonds = await getCurrentUserDiamonds();
-      return await _firestoreService.updateUserDiamonds(user.uid, currentDiamonds + diamondsToAdd);
+      return await _firestoreService.incrementUserDiamonds(user.uid, diamondsToAdd);
     }
   }
 

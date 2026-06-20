@@ -32,9 +32,14 @@ class LudoGameService {
         quotaAmount = currencyType == 'diamonds' ? 25 : 100;
       }
 
-      // Asignar colores aleatoriamente
-      final colors = ['red', 'blue', 'green', 'yellow'];
-      colors.shuffle(_random);
+      // Asignar colores — para 2 jugadores sólo pares opuestos (red↔yellow, blue↔green)
+      List<String> colors;
+      if (numberOfPlayers == 2) {
+        final oppositePairs = [['red', 'yellow'], ['blue', 'green']];
+        colors = List<String>.from(oppositePairs[_random.nextInt(2)])..shuffle(_random);
+      } else {
+        colors = ['red', 'blue', 'green', 'yellow']..shuffle(_random);
+      }
 
       final game = LudoGameMatch(
         id: gameRef.id,
@@ -53,7 +58,7 @@ class LudoGameService {
         player2Color: numberOfPlayers >= 2 ? colors[1] : null,
         player3Color: numberOfPlayers >= 3 ? colors[2] : null,
         player4Color: numberOfPlayers == 4 ? colors[3] : null,
-        betAmount: betAmount,
+        betAmount: quotaAmount,
         gameSettings: {
           'numberOfPlayers': numberOfPlayers,
           'isOnlineMatchmaking': isOnlineMatchmaking,
@@ -392,9 +397,33 @@ class LudoGameService {
 
       if (game.status != 'active') return false;
 
+      // Determine the winner: in a 2-player game it is the other player;
+      // in 3-4 player games we don't auto-set a winner (game continues).
+      String? winnerId;
+      final activePlayers = [
+        game.hostId,
+        if (game.guest2Id != null) game.guest2Id!,
+        if (game.guest3Id != null) game.guest3Id!,
+        if (game.guest4Id != null) game.guest4Id!,
+      ].where((id) => id != playerId).toList();
+
+      if (activePlayers.length == 1) {
+        winnerId = activePlayers.first;
+      }
+
+      if (kDebugMode) {
+        print('🚪 Abandonando juego Ludo: $gameId');
+        print('   Abandonado por: $playerId');
+        print('   Ganador determinado: $winnerId');
+        print('   Moneda: ${game.currencyType}');
+        print('   Apuesta: ${game.betAmount}');
+      }
+
       await gameRef.update({
         'status': 'abandoned',
         'abandonedBy': playerId,
+        'winnerId': winnerId,
+        'result': 'win',
         'finishedAt': FieldValue.serverTimestamp(),
         'reason': 'abandoned',
       });
@@ -460,6 +489,29 @@ class LudoGameService {
     // Posiciones seguras en el tablero de Ludo
     final safePositions = [0, 8, 13, 21, 26, 34, 39, 47];
     return safePositions.contains(position);
+  }
+
+  /// Stream de partidas activas donde el usuario es host (para detectar cuando el invitado se unió)
+  Stream<List<LudoGameMatch>> getActiveGames(String userId) {
+    return _firestore
+        .collection(_gamesCollection)
+        .where('hostId', isEqualTo: userId)
+        .where('status', isEqualTo: 'active')
+        .snapshots()
+        .asyncMap((hostSnapshot) async {
+          final guest2Snapshot = await _firestore
+              .collection(_gamesCollection)
+              .where('guest2Id', isEqualTo: userId)
+              .where('status', isEqualTo: 'active')
+              .get();
+
+          final seen = <String>{};
+          final allDocs = [...hostSnapshot.docs, ...guest2Snapshot.docs];
+          return allDocs
+              .where((doc) => seen.add(doc.id))
+              .map((doc) => LudoGameMatch.fromFirestore(doc))
+              .toList();
+        });
   }
 
   /// Buscar partidas disponibles para matchmaking

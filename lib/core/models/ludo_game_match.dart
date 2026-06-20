@@ -62,6 +62,12 @@ class LudoGameMatch {
   final String? player3Color;
   final String? player4Color;
 
+  // Dados activos (para sincronización multijugador)
+  final int dice1;
+  final int dice2;
+  final bool hasUsedDice1;
+  final bool hasUsedDice2;
+
   LudoGameMatch({
     required this.id,
     required this.gameType,
@@ -106,6 +112,10 @@ class LudoGameMatch {
     this.player2Color,
     this.player3Color,
     this.player4Color,
+    this.dice1 = 0,
+    this.dice2 = 0,
+    this.hasUsedDice1 = false,
+    this.hasUsedDice2 = false,
   });
 
   factory LudoGameMatch.fromFirestore(DocumentSnapshot doc) {
@@ -170,6 +180,10 @@ class LudoGameMatch {
       player2Color: data['player2Color'],
       player3Color: data['player3Color'],
       player4Color: data['player4Color'],
+      dice1: (data['dice1'] as int?) ?? 0,
+      dice2: (data['dice2'] as int?) ?? 0,
+      hasUsedDice1: (data['hasUsedDice1'] as bool?) ?? false,
+      hasUsedDice2: (data['hasUsedDice2'] as bool?) ?? false,
     );
   }
 
@@ -225,6 +239,10 @@ class LudoGameMatch {
       'player2Color': player2Color,
       'player3Color': player3Color,
       'player4Color': player4Color,
+      'dice1': dice1,
+      'dice2': dice2,
+      'hasUsedDice1': hasUsedDice1,
+      'hasUsedDice2': hasUsedDice2,
     };
   }
 

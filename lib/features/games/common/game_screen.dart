@@ -11,12 +11,15 @@ import 'package:tekoplay/features/games/common/ranking_screen.dart';
 import 'package:tekoplay/features/games/common/withdraw_dialog.dart';
 import 'package:tekoplay/features/games/common/withdrawal_widget.dart';
 import 'package:tekoplay/features/games/ludo/ludo_tutorial_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../core/models/ludo_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/anonymous_wallet_service.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/service/ludo_game_service.dart';
 import '../../../core/service/multiplayer_game_service.dart';
 import '../../../core/service/notification_service.dart';
 import '../../../core/service/payment_service.dart';
@@ -33,6 +36,8 @@ import '../chess/online_chess_screen.dart';
 import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
 import '../ludo/ludo_vs_cpu_screen.dart';
+import '../ludo/multiplayer_ludo_screen.dart';
+import '../ludo/online_ludo_screen.dart';
 import 'game_history_screen.dart';
 
 class GameScreen extends StatefulWidget {
@@ -58,12 +63,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   int? _userCoins;
   String? _anonymousPlayerName;
   bool _isAnonymousMode = false;
-  late AudioPlayer _audioPlayer;
+  AudioPlayer? _audioPlayer;
   double _currentVolume = 0.5;
   bool _isDisposed = false;
   bool _isInitialized = false;
   StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
   StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
+  StreamSubscription<List<LudoGameMatch>>? _activeLudoGamesSubscription;
+  List<LudoGameMatch> _previousActiveLudoGames = [];
   StreamSubscription<DocumentSnapshot>? _diamondsSubscription;
   final AnonymousWalletService _walletService = AnonymousWalletService();
   bool _isScreenKeepOnActive = false;
@@ -412,6 +419,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     try {
       if (_isDisposed) return;
       _audioPlayer = AudioPlayer();
+      final prefs = await SharedPreferences.getInstance();
+      _currentVolume = prefs.getDouble('musicVolume') ?? 0.5;
+      await _audioPlayer!.setVolume(_currentVolume);
+      await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
+      await _audioPlayer!.play(AssetSource('audio/background_music.mp3'));
       _loadCurrentUser();
       if (_isDisposed) return;
       _initializeNotifications();
@@ -444,7 +456,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     if (_isDisposed) return;
     try {
       _currentVolume = newVolume;
-      await _audioPlayer.setVolume(newVolume);
+      await _audioPlayer?.setVolume(newVolume);
       if (mounted) setState(() {});
     } catch (e) {
       if (kDebugMode) {
@@ -559,6 +571,27 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               }
             },
           );
+
+      _activeLudoGamesSubscription?.cancel();
+      _activeLudoGamesSubscription = LudoGameService()
+          .getActiveGames(_currentUser!.uid)
+          .handleError((error) {
+            if (kDebugMode) {
+              print('Error en stream de juegos Ludo: $error');
+            }
+          })
+          .listen(
+            (games) {
+              if (mounted && !_isDisposed) {
+                _handleNewActiveLudoGames(games);
+              }
+            },
+            onError: (error) {
+              if (kDebugMode) {
+                print('Error en subscription de juegos Ludo: $error');
+              }
+            },
+          );
     } catch (e) {
       if (kDebugMode) {
         print('Error configurando streams: $e');
@@ -593,6 +626,31 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       }
     }
     _previousActiveGames = List.from(currentGames);
+  }
+
+  void _handleNewActiveLudoGames(List<LudoGameMatch> currentGames) {
+    final newGames = currentGames.where((game) {
+      return !_previousActiveLudoGames.any((prev) => prev.id == game.id);
+    }).toList();
+
+    for (final newGame in newGames) {
+      if (newGame.hostId == _currentUser!.uid &&
+          newGame.status == 'active' &&
+          newGame.guest2Id != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MultiplayerLudoScreen(
+              gameId: newGame.id,
+              playerNumber: 1,
+              matchType: newGame.currencyType,
+            ),
+          ),
+        );
+        break;
+      }
+    }
+    _previousActiveLudoGames = List.from(currentGames);
   }
 
   void _showCoinPurchaseDialog() {
@@ -639,6 +697,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         if (success) {
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
+          } else {
+            if (mounted && !_isDisposed) {
+              setState(() { _userCoins = (_userCoins ?? 0) + coins; });
+            }
           }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -692,7 +754,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
           } else {
-            // Para usuarios autenticados, el listener de Firestore se encargará
+            if (mounted && !_isDisposed) {
+              setState(() { _userDiamonds = (_userDiamonds ?? 0) + diamonds; });
+            }
           }
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -727,9 +791,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _isDisposed = true;
     _invitationsSubscription?.cancel();
     _activeGamesSubscription?.cancel();
+    _activeLudoGamesSubscription?.cancel();
     _diamondsSubscription?.cancel();
-    _audioPlayer.dispose();
+    _audioPlayer?.dispose();
     _previousActiveGames.clear();
+    _previousActiveLudoGames.clear();
     if (_isAnonymousMode) {
       try {
         AuthService().disableAnonymousMode();
@@ -1584,17 +1650,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                   Navigator.push(
                                                     context,
                                                     MaterialPageRoute(
-                                                      builder:
-                                                          (
-                                                            context,
-                                                          ) => MultiplayerChessScreen(
-                                                            gameId:
-                                                                result['gameId'],
-                                                            isHost: false,
-                                                            matchType:
-                                                                widget
-                                                                    .matchType,
-                                                          ),
+                                                      builder: (context) => result['isLudo'] == true
+                                                          ? MultiplayerLudoScreen(
+                                                              gameId: result['gameId'],
+                                                              playerNumber: result['playerNumber'] ?? 2,
+                                                              matchType: result['matchType'] ?? widget.matchType,
+                                                            )
+                                                          : MultiplayerChessScreen(
+                                                              gameId: result['gameId'],
+                                                              isHost: false,
+                                                              matchType: widget.matchType,
+                                                            ),
                                                     ),
                                                   );
                                                 } else {
@@ -2515,6 +2581,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         context,
         MaterialPageRoute(
           builder: (context) => OnlineChessScreen(matchType: matchType),
+        ),
+      );
+    } else if (isLudo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OnlineLudoScreen(matchType: matchType),
         ),
       );
     } else if (isDomino) {

@@ -47,3 +47,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Archivos sensibles — se restauran en CI desde GitHub Secrets
+.env
+.env.*
+android/app/google-services.json
+lib/firebase_options.dart
+.firebaserc
+firebase.json
+android/key.properties
+android/app/*.jks
+android/app/*.keystore

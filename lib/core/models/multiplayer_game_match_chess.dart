@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tekoplay/core/models/user.dart';
+import '../service/ludo_game_service.dart';
 import '../service/multiplayer_game_service.dart';
 import '../utils/game_result.dart';
 
@@ -305,7 +306,9 @@ class GameInvitationService {
     required String gameType,
     bool isRanked = false,
     int? betAmount,
-    required String currencyType
+    required String currencyType,
+    String? existingGameId,
+    int numberOfPlayers = 2,
   }) async {
     try {
       final usersQuery =
@@ -340,6 +343,8 @@ class GameInvitationService {
         'isRanked': isRanked,
         'betAmount': betAmount,
         'currencyType': currencyType,
+        if (existingGameId != null) 'existingGameId': existingGameId,
+        'numberOfPlayers': numberOfPlayers,
       });
 
       await _sendInvitationNotification(
@@ -412,16 +417,53 @@ class GameInvitationService {
       final invitationData = invitationDoc.data()!;
 
       if (accept) {
-        final gameId = await MultiplayerGameService().createGame(
-          hostId: invitationData['fromUserId'],
-          hostName: invitationData['fromUserName'],
-          guestId: invitationData['toUserId'],
-          guestName: invitationData['toUserName'],
-          gameType: invitationData['gameType'],
-          isRanked: invitationData['isRanked'] ?? false,
-          betAmount: invitationData['betAmount'],
-          currencyType: invitationData['currencyType']
-        );
+        final gameType = invitationData['gameType'] as String? ?? '';
+        final currencyType = invitationData['currencyType'] as String? ?? 'coins';
+        final isLudo = gameType.toLowerCase().contains('ludo') ||
+            gameType.toLowerCase().contains('parch');
+
+        String? gameId;
+
+        if (isLudo) {
+          final existingGameId = invitationData['existingGameId'] as String?;
+          final numberOfPlayers = (invitationData['numberOfPlayers'] as int?) ?? 2;
+          if (existingGameId != null) {
+            // Game already created by host — just join it
+            final joined = await LudoGameService().joinGame(
+              gameId: existingGameId,
+              playerId: invitationData['toUserId'],
+              playerName: invitationData['toUserName'],
+            );
+            gameId = joined ? existingGameId : null;
+          } else {
+            // Legacy flow: create game then join
+            gameId = await LudoGameService().createGame(
+              hostId: invitationData['fromUserId'],
+              hostName: invitationData['fromUserName'],
+              currencyType: currencyType,
+              betAmount: invitationData['betAmount'],
+              numberOfPlayers: numberOfPlayers,
+            );
+            if (gameId != null) {
+              await LudoGameService().joinGame(
+                gameId: gameId,
+                playerId: invitationData['toUserId'],
+                playerName: invitationData['toUserName'],
+              );
+            }
+          }
+        } else {
+          gameId = await MultiplayerGameService().createGame(
+            hostId: invitationData['fromUserId'],
+            hostName: invitationData['fromUserName'],
+            guestId: invitationData['toUserId'],
+            guestName: invitationData['toUserName'],
+            gameType: gameType,
+            isRanked: invitationData['isRanked'] ?? false,
+            betAmount: invitationData['betAmount'],
+            currencyType: currencyType,
+          );
+        }
 
         await invitationRef.update({
           'status': 'accepted',
@@ -433,7 +475,10 @@ class GameInvitationService {
           'success': true,
           'gameId': gameId,
           'isHost': false,
-          'gameType': invitationData['gameType'],
+          'gameType': gameType,
+          'isLudo': isLudo,
+          'playerNumber': isLudo ? 2 : null,
+          'matchType': currencyType,
         };
       } else {
         await invitationRef.update({

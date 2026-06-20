@@ -338,7 +338,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     final stepsFromStart = _stepsFromStart(piece.position, startPos);
     final newSteps = stepsFromStart + diceValue;
 
-    if (newSteps > 51) {
+    if (newSteps > 50) {
       final stepsIntoStretch = newSteps - 51;
       if (stepsIntoStretch > 5) return null;
       return 52 + stepsIntoStretch;
@@ -356,11 +356,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     if (piece.isHome || piece.position >= 52) return false;
 
     final startPos = _getStartPosition(color);
+    final stepsFromStart = _stepsFromStart(piece.position, startPos);
 
     for (int step = 1; step < diceValue; step++) {
-      final stepsFromStart = _stepsFromStart(piece.position, startPos);
       final newSteps = stepsFromStart + step;
-      if (newSteps > 51) break;
+      if (newSteps > 51) break; // posiciones >= 52 son la recta final (no hay barreras enemigas ahí)
       final checkPos = (startPos + newSteps) % 52;
       if (_isEnemyBarrierAt(checkPos, color)) return true;
     }
@@ -384,15 +384,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   bool _canLandOn(String color, int newPos, LudoPiece movingPiece) {
     if (newPos >= 52) return true;
 
-    final myPieces = _gameState.getPiecesByColor(color);
-    int myCount = 0;
-    for (final p in myPieces) {
-      if (p == movingPiece) continue;
-      if (!p.isHome && !p.isFinished && p.position == newPos) myCount++;
-    }
-    if (myCount >= 2) return false;
-
     if (_isEnemyBarrierAt(newPos, color)) return false;
+
+    // No permitir una 3ra ficha del mismo color en la misma casilla (máximo 2 = barrera)
+    final sameColorCount = _gameState.getPiecesByColor(color)
+        .where((p) => p != movingPiece && !p.isHome && !p.isFinished && p.position == newPos)
+        .length;
+    if (sameColorCount >= 2) return false;
 
     // La casilla de salida de cada color es exclusiva:
     // ningún enemigo puede aterrizar ahí si hay fichas del dueño
@@ -455,7 +453,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     final p = opt['piece'] as LudoPiece;
     final bonusPos = opt['bonusPos'] as int;
     final hadDouble = _bonusHadDouble;
-    final steps = _stepsFromStart(p.position, _getStartPosition('yellow'));
     final isSafe = bonusPos >= 52 || _isSafeForColor(bonusPos, 'yellow');
     final willCapture = bonusPos < 52 && !_isSafeForColor(bonusPos, 'yellow') &&
         _activePlayers.any((ec) => ec != 'yellow' &&
@@ -504,7 +501,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Ficha ${pieceId + 1}  •  Paso $steps → ${steps + 20}',
+                          Text('Ficha ${pieceId + 1}  •  Casilla ${p.position} → $bonusPos',
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(height: 2),
                           Text(
@@ -647,13 +644,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     final si = position - 52;
     switch (color) {
       case 'green':
-        return Offset(7.5 * squareSize, (5.0 - si) * squareSize);
+        return Offset(7.5 * squareSize, (1.5 + si) * squareSize);
       case 'red':
-        return Offset((2.0 + si) * squareSize, 7.5 * squareSize);
+        return Offset((1.5 + si) * squareSize, 7.5 * squareSize);
       case 'blue':
-        return Offset(7.5 * squareSize, (10.0 + si) * squareSize);
+        return Offset(7.5 * squareSize, (13.5 - si) * squareSize);
       case 'yellow':
-        return Offset((13.0 - si) * squareSize, 7.5 * squareSize);
+        return Offset((13.5 - si) * squareSize, 7.5 * squareSize);
       default:
         return Offset(7.5 * squareSize, 7.5 * squareSize);
     }
@@ -1010,9 +1007,56 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       }
     });
 
-    if (captured) _applyBonusTopiece(color, piece, _calculateCaptureBonusPosition(piece, color) ?? piece.position, false);
+    if (captured) _applyCpuCaptureBonus(color);
 
     return captured;
+  }
+
+  void _applyCpuCaptureBonus(String color) {
+    final allPieces = _gameState.getPiecesByColor(color);
+    final bonusMoves = <Map<String, dynamic>>[];
+
+    for (int i = 0; i < allPieces.length; i++) {
+      final p = allPieces[i];
+      if (p.isFinished || p.isHome) continue;
+      final bonusPos = _calculateCaptureBonusPosition(p, color);
+      if (bonusPos == null) continue;
+      if (bonusPos < 52 && _isEnemyBarrierAt(bonusPos, color)) continue;
+      if (bonusPos < 52 && !_isSafeForColor(bonusPos, color)) {
+        final samePos = allPieces.where((q) => q != p && !q.isHome && !q.isFinished && q.position == bonusPos).length;
+        if (samePos >= 2) continue;
+      }
+      bonusMoves.add({'piece': p, 'bonusPos': bonusPos});
+    }
+
+    if (bonusMoves.isEmpty) return;
+
+    final best = bonusMoves.reduce((a, b) {
+      final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition(color));
+      final stB = _stepsFromStart((b['piece'] as LudoPiece).position, _getStartPosition(color));
+      return stA >= stB ? a : b;
+    });
+
+    final bestPiece = best['piece'] as LudoPiece;
+    final bonusPos = best['bonusPos'] as int;
+
+    // Capturar ficha enemiga si hay una sola en la posición destino
+    if (bonusPos < 52 && !_isSafeForColor(bonusPos, color)) {
+      for (final enemyColor in _activePlayers) {
+        if (enemyColor == color) continue;
+        final enemyList = _gameState.getPiecesByColor(enemyColor)
+            .where((p) => !p.isHome && !p.isFinished && p.position == bonusPos)
+            .toList();
+        if (enemyList.length == 1) {
+          setState(() => enemyList[0].position = -1);
+        }
+      }
+    }
+
+    setState(() {
+      bestPiece.position = bonusPos;
+      if (bonusPos == 57) bestPiece.isFinished = true;
+    });
   }
 
   Map<String, dynamic>? _calculateBestCpuMove() {
@@ -1060,7 +1104,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     }
     final startPos = _getStartPosition(color);
     final newSteps = _stepsFromStart(piece.position, startPos) + bonus;
-    if (newSteps > 51) {
+    if (newSteps > 50) {
       final into = newSteps - 51;
       if (into > 5) return 57;
       return 52 + into;
