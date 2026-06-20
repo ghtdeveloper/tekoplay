@@ -2089,231 +2089,254 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        String selectedDifficulty = S.of(context).normal;
+        final isBet = widget.matchType == 'Apuesta';
+        // En modo apuesta solo existe dificultad máxima para que la CPU gane
+        String selectedDifficulty = isBet ? S.of(context).difficult : S.of(context).normal;
         int selectedCpuCount = 1;
 
         return StatefulBuilder(
           builder: (context, setState) {
+            final screenHeight = MediaQuery.of(context).size.height;
             return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               backgroundColor: Colors.white,
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Align(
-                        alignment: Alignment.topRight,
-                        child: IconButton(
-                          icon: Icon(Icons.close),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ),
-
-                      Icon(
-                        Icons.casino,
-                        size: 48,
-                        color: Color(0xFFEC7A34),
-                      ),
-                      SizedBox(height: 12),
-
-                      Text(
-                        S.of(context).playVsComputer,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: Colors.black87,
-                        ),
-                      ),
-
-                      SizedBox(height: 20),
-
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.people, color: Color(0xFFEC7A34), size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Cantidad de oponentes CPU',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ],
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: screenHeight * 0.82),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Header fijo ──────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEC7A34).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [1, 2, 3].map((count) {
-                                final isSelected = selectedCpuCount == count;
-                                return Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    child: InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          selectedCpuCount = count;
-                                        });
-                                      },
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(vertical: 12),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? Color(0xFFEC7A34)
-                                              : Colors.white,
-                                          borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? Color(0xFFEC7A34)
-                                                : Colors.grey.shade300,
-                                            width: 2,
-                                          ),
-                                          boxShadow: isSelected ? [
-                                            BoxShadow(
-                                              color: Color(0xFFEC7A34).withOpacity(0.3),
-                                              blurRadius: 8,
-                                              offset: Offset(0, 2),
-                                            ),
-                                          ] : [],
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Icon(
-                                              Icons.smart_toy,
-                                              color: isSelected ? Colors.white : Colors.grey,
-                                              size: 24,
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              '$count CPU${count > 1 ? 's' : ''}',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: isSelected ? Colors.white : Colors.black87,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            SizedBox(height: 2),
-                                            Text(
-                                              count == 1 ? '(1 vs 1)' :
-                                              count == 2 ? '(3 jugadores)' :
-                                              '(4 jugadores)',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: isSelected
-                                                    ? Colors.white70
-                                                    : Colors.grey.shade600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      SizedBox(height: 20),
-
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.speed, color: Color(0xFFEC7A34), size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Dificultad',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              children: [
-                                S.of(context).veryEasy,
-                                S.of(context).easy,
-                                S.of(context).normal,
-                                S.of(context).difficult,
-                              ].map((level) {
-                                return RadioListTile<String>(
-                                  title: Text(level),
-                                  value: level,
-                                  groupValue: selectedDifficulty,
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedDifficulty = value!;
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      SizedBox(height: 20),
-
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.green.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.green, size: 20),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                selectedCpuCount == 1
-                                    ? 'Jugarás 1 vs 1 contra la CPU en posiciones opuestas'
-                                    : selectedCpuCount == 2
-                                    ? 'Jugarás contra 2 CPUs (3 jugadores en total)'
-                                    : 'Jugarás contra 3 CPUs (4 jugadores en total)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green.shade800,
-                                ),
+                            child: const Icon(Icons.casino, size: 28, color: Color(0xFFEC7A34)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              S.of(context).playVsComputer,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17,
+                                color: Colors.black87,
                               ),
                             ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.black54),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const Divider(height: 20),
+
+                    // ── Contenido scrollable ─────────────────────────────
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Selector de CPUs
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withValues(alpha: 0.07),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.people, color: Color(0xFFEC7A34), size: 18),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'Cantidad de oponentes CPU',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [1, 2, 3].map((count) {
+                                      final isSelected = selectedCpuCount == count;
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          child: GestureDetector(
+                                            onTap: () => setState(() => selectedCpuCount = count),
+                                            child: AnimatedContainer(
+                                              duration: const Duration(milliseconds: 180),
+                                              padding: const EdgeInsets.symmetric(vertical: 10),
+                                              decoration: BoxDecoration(
+                                                color: isSelected ? const Color(0xFFEC7A34) : Colors.white,
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: isSelected ? const Color(0xFFEC7A34) : Colors.grey.shade300,
+                                                  width: 2,
+                                                ),
+                                                boxShadow: isSelected
+                                                    ? [BoxShadow(color: const Color(0xFFEC7A34).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))]
+                                                    : [],
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  Icon(Icons.smart_toy,
+                                                      color: isSelected ? Colors.white : Colors.grey.shade400, size: 22),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    '$count CPU${count > 1 ? 's' : ''}',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isSelected ? Colors.white : Colors.black87,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    count == 1 ? '(1 vs 1)' : count == 2 ? '(3 jugadores)' : '(4 jugadores)',
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      color: isSelected ? Colors.white70 : Colors.grey.shade500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            // Selector de dificultad (oculto en modo apuesta — siempre Difícil)
+                            if (!isBet) ...[
+                              Container(
+                                padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.speed, color: Color(0xFFEC7A34), size: 18),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'Dificultad',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    ...[
+                                      S.of(context).veryEasy,
+                                      S.of(context).easy,
+                                      S.of(context).normal,
+                                      S.of(context).difficult,
+                                    ].map((level) => RadioListTile<String>(
+                                      title: Text(level, style: const TextStyle(fontSize: 14)),
+                                      value: level,
+                                      groupValue: selectedDifficulty,
+                                      dense: true,
+                                      visualDensity: const VisualDensity(vertical: -2),
+                                      contentPadding: EdgeInsets.zero,
+                                      activeColor: const Color(0xFFEC7A34),
+                                      onChanged: (v) => setState(() => selectedDifficulty = v!),
+                                    )),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ] else ...[
+                              // Badge informativo en modo apuesta
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.psychology, color: Colors.red, size: 18),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Dificultad: Máxima',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red),
+                                          ),
+                                          Text(
+                                            'En modo apuesta la CPU juega al máximo nivel.',
+                                            style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+
+                            // Info card
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.info_outline, color: Colors.green, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      selectedCpuCount == 1
+                                          ? 'Jugarás 1 vs 1 contra la CPU en posiciones opuestas'
+                                          : selectedCpuCount == 2
+                                              ? 'Jugarás contra 2 CPUs (3 jugadores en total)'
+                                              : 'Jugarás contra 3 CPUs (4 jugadores en total)',
+                                      style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
                           ],
                         ),
                       ),
+                    ),
 
-                      SizedBox(height: 20),
-
-                      SizedBox(
+                    // ── Botón Empezar siempre visible ────────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                      child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () {
@@ -2329,25 +2352,23 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               ),
                             );
                           },
-                          icon: Icon(Icons.play_arrow, size: 24),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 22),
                           label: Text(
                             S.of(context).startGame,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFEC7A34),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            elevation: 4,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            elevation: 3,
+                            shadowColor: const Color(0xFFEC7A34).withValues(alpha: 0.4),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             );

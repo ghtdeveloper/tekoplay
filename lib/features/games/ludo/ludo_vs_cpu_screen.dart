@@ -23,7 +23,8 @@ class LudoVsCpuScreen extends StatefulWidget {
   State<LudoVsCpuScreen> createState() => _LudoVsCpuScreenState();
 }
 
-class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderStateMixin {
+class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late LudoGameState _gameState;
   String _currentPlayer = 'yellow';
 
@@ -101,6 +102,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _gameState = LudoGameState.initial();
     _gameStartTime = DateTime.now();
     _setupActivePlayers();
@@ -147,6 +149,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _moveTimer?.cancel();
     _diceAnimationController.dispose();
     _pulseController.dispose();
@@ -154,6 +157,51 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     _turnOverlayController.dispose();
     _toastController.dispose();
     super.dispose();
+  }
+
+  // ── Lifecycle: en modo apuesta, auto-jugar si la app va a background ───────
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused &&
+        widget.matchType == 'Apuesta' &&
+        !_gameEnded &&
+        mounted) {
+      _handleBetModeBackground();
+    }
+  }
+
+  /// Cuando el usuario minimiza la app en modo apuesta, se auto-ejecuta su turno
+  /// inmediatamente para que el cronómetro no le beneficie.
+  void _handleBetModeBackground() {
+    if (_currentPlayer != 'yellow') return;
+    if (_dice1Value == 0 && _dice2Value == 0) {
+      // Aún no lanzó los dados: lanzar y auto-mover
+      _autoRollAndMove();
+    } else if (_movablePieces.isNotEmpty) {
+      // Ya lanzó pero no movió: auto-mover ahora
+      _cancelMoveTimer();
+      _autoMove();
+    }
+  }
+
+  void _autoRollAndMove() {
+    if (_gameEnded || _currentPlayer != 'yellow') return;
+    setState(() {
+      _dice1Value = _random.nextInt(6) + 1;
+      _dice2Value = _random.nextInt(6) + 1;
+      _totalDiceValue = _dice1Value + _dice2Value;
+      _canRollDice = false;
+      _hasUsedDice1 = false;
+      _hasUsedDice2 = false;
+      _updateConsecutiveDoubles(_dice1Value, _dice2Value);
+    });
+    _calculateMovablePieces();
+    if (_movablePieces.isNotEmpty) {
+      _cancelMoveTimer();
+      _autoMove();
+    } else {
+      _nextTurn();
+    }
   }
 
   Future<void> _rollDice() async {
@@ -559,6 +607,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
   void _showMovementSelectionDialog(int pieceId) {
     final options = _movablePieces.where((m) => m['pieceId'] == pieceId).toList();
     if (options.isEmpty) return;
+
+    // Si solo hay una opción de dado para esta ficha, ejecutar directamente sin diálogo
+    if (options.length == 1) {
+      _executePieceMove('yellow', pieceId, options[0]['diceValue'] as int, options[0]['diceNumber'] as int);
+      return;
+    }
 
     showDialog(
       context: context,
@@ -1309,16 +1363,64 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
     }
   }
 
+  void _showBetExitWarning() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('¿Abandonar partida?'),
+          ],
+        ),
+        content: const Text(
+          'Estás en modo apuesta. Si abandonas, perderás la apuesta automáticamente y la CPU ganará.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Seguir jugando'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _endGame(_cpuPlayers.first);
+              Future.delayed(const Duration(milliseconds: 300), () {
+                if (mounted) Navigator.of(context).pop();
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Abandonar (perder)'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final isBetMode = widget.matchType == 'Apuesta';
+    return PopScope(
+      canPop: !isBetMode || _gameEnded,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && isBetMode && !_gameEnded) _showBetExitWarning();
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFFEC7A34),
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
-          'Parchís vs ${widget.cpuCount} CPU${widget.cpuCount > 1 ? "s" : ""} - ${widget.difficulty}',
-          style: const TextStyle(color: Colors.white),
+          isBetMode
+              ? 'Parchís vs CPU — Modo Apuesta 🏆'
+              : 'Parchís vs ${widget.cpuCount} CPU${widget.cpuCount > 1 ? "s" : ""} - ${widget.difficulty}',
+          style: const TextStyle(color: Colors.white, fontSize: 15),
         ),
         elevation: 2,
       ),
@@ -1449,7 +1551,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
             ),
         ],
       ),
-    );
+    ),   // cierra Scaffold
+    );   // cierra PopScope
   }
 
   Widget _buildPlayersInfo() {
@@ -1740,7 +1843,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen> with TickerProviderSt
       },
     );
   }
-}
+}  // end _LudoVsCpuScreenState
 
 class _Coord {
   final int col;
