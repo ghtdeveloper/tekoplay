@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
@@ -71,6 +72,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   String? _opponentPhotoUrl;
 
   bool _localizationsReady = false;
+  bool _isScreenKeepOnActive = false;
 
   @override
   void initState() {
@@ -80,6 +82,25 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _loadUserCurrency();
     _loadPlayerRankings();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
+    _enableWakeLock();
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted) setState(() => _isScreenKeepOnActive = true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted) setState(() => _isScreenKeepOnActive = false);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -362,8 +383,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
 
     if (state == AppLifecycleState.paused) {
+      _disableWakeLock();
       _handleAppPause();
     } else if (state == AppLifecycleState.resumed) {
+      _enableWakeLock();
       _handleAppResume();
     }
   }
@@ -1433,6 +1456,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _gameSubscription?.cancel();
     _reconnectTimer?.cancel();
     _interstitialHelper.dispose();
+    _disableWakeLock();
     super.dispose();
   }
 

@@ -83,11 +83,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
   final FirestoreService _firestoreService = FirestoreService();
 
-  // RECORRIDO ANTIHORARIO:
-  // Pos  0: Verde  sale col=6,row=1  → baja
-  // Pos 13: Rojo   sale col=1,row=8  → va derecha
-  // Pos 26: Azul   sale col=8,row=13 → sube
-  // Pos 39: Amarillo sale col=13,row=6→ va izquierda
+
   static const List<_Coord> _boardPath = [
     _Coord(6, 1), _Coord(6, 2), _Coord(6, 3), _Coord(6, 4), _Coord(6, 5),
     _Coord(5, 6), _Coord(4, 6), _Coord(3, 6), _Coord(2, 6), _Coord(1, 6), _Coord(0, 6),
@@ -197,15 +193,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     }
   }
 
-  /// Cuando el usuario minimiza la app en modo apuesta, se auto-ejecuta su turno
-  /// inmediatamente para que el cronómetro no le beneficie.
+
   void _handleBetModeBackground() {
     if (_currentPlayer != 'yellow') return;
     if (_dice1Value == 0 && _dice2Value == 0) {
       // Aún no lanzó los dados: lanzar y auto-mover
       _autoRollAndMove();
     } else if (_movablePieces.isNotEmpty) {
-      // Ya lanzó pero no movió: auto-mover ahora
       _cancelMoveTimer();
       _autoMove();
     }
@@ -344,8 +338,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     if (mounted) setState(() => _moveTimerSeconds = 0);
   }
 
-  /// Inicia temporizador AFK para cuando el jugador no ha tirado los dados.
-  /// Si expira, auto-tira y auto-mueve.
   void _startAfkRollTimer() {
     _afkRollTimer?.cancel();
     if (!mounted || _gameEnded || _currentPlayer != 'yellow') return;
@@ -364,7 +356,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   void _autoMove() {
     if (_movablePieces.isEmpty || _gameEnded) return;
 
-    // Si estamos en selección de bonus, auto-elegir la mejor ficha
     if (_bonusSelectionActive) {
       final best = _movablePieces.reduce((a, b) {
         final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition('yellow'));
@@ -466,7 +457,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     for (int step = 1; step < diceValue; step++) {
       final newSteps = stepsFromStart + step;
-      if (newSteps > 51) break; // posiciones >= 52 son la recta final (no hay barreras enemigas ahí)
+      if (newSteps > 51) break;
       final checkPos = (startPos + newSteps) % 52;
       if (_isEnemyBarrierAt(checkPos, color)) return true;
     }
@@ -492,14 +483,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     if (_isEnemyBarrierAt(newPos, color)) return false;
 
-    // No permitir una 3ra ficha del mismo color en la misma casilla (máximo 2 = barrera)
     final sameColorCount = _gameState.getPiecesByColor(color)
         .where((p) => p != movingPiece && !p.isHome && !p.isFinished && p.position == newPos)
         .length;
     if (sameColorCount >= 2) return false;
 
-    // La casilla de salida de cada color es exclusiva:
-    // ningún enemigo puede aterrizar ahí si hay fichas del dueño
     for (final ownerColor in _activePlayers) {
       if (ownerColor == color) continue;
       final ownerStart = _getStartPosition(ownerColor);
@@ -523,7 +511,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final tapRadius = squareSize * 0.7;
 
     if (_bonusSelectionActive) {
-      // Modo bonus: el jugador toca la ficha que quiere que reciba el +20
       for (int i = 0; i < yellowPieces.length; i++) {
         final piece = yellowPieces[i];
         final hasBonusMove = _movablePieces.any((m) => m['pieceId'] == i);
@@ -666,7 +653,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final options = _movablePieces.where((m) => m['pieceId'] == pieceId).toList();
     if (options.isEmpty) return;
 
-    // Si solo hay una opción de dado para esta ficha, ejecutar directamente sin diálogo
     if (options.length == 1) {
       _executePieceMove('yellow', pieceId, options[0]['diceValue'] as int, options[0]['diceNumber'] as int);
       return;
@@ -751,7 +737,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     return _getBoardScreenPosition(piece, color, squareSize);
   }
 
-  // Debe coincidir exactamente con _getHomeStretchBoardPosition del painter
   Offset _getHomeStretchScreenPosition(String color, int position, double squareSize) {
     final si = position - 52;
     switch (color) {
@@ -824,7 +809,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     bool captured = false;
 
-    // Capturar ANTES de mover la ficha propia
     if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
@@ -856,7 +840,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
 
     if (captured) {
-      // Limpiar dados antes del bonus para que el jugador elija qué ficha mueve +20
       setState(() {
         _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0;
         _movablePieces.clear();
@@ -868,7 +851,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     _calculateMovablePieces();
 
-    // Si quedan movimientos del segundo dado, esperar selección
     if (_movablePieces.isNotEmpty) {
       if (color == 'yellow') _startMoveTimer();
       return;
@@ -925,14 +907,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       return;
     }
 
-    // Jugador humano: guardar bonusMoves para que el jugador toque la ficha
     setState(() {
       _movablePieces = bonusMoves;
       _bonusSelectionActive = true;
       _bonusHadDouble = hadDouble;
     });
     _showEventToast('🎯 ¡Comiste! Toca la ficha que quieres mover +20');
-    _startMoveTimer(); // AFK: auto-elegir si el jugador no responde
+    _startMoveTimer();
   }
 
   void _resolveTurnAfterCapture(bool hadDouble) {
@@ -999,7 +980,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         }
       });
     } else {
-      // Es el turno del jugador — iniciar temporizador AFK de tirada
       _startAfkRollTimer();
     }
   }
@@ -1158,7 +1138,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final bestPiece = best['piece'] as LudoPiece;
     final bonusPos = best['bonusPos'] as int;
 
-    // Capturar ficha enemiga si hay una sola en la posición destino
     if (bonusPos < 52 && !_isSafeForColor(bonusPos, color)) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
@@ -1234,7 +1213,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final pieces = _gameState.getPiecesByColor(color);
     final activePieces = pieces.where((p) => !p.isHome && !p.isFinished).toList();
 
-    if (activePieces.length < 2) return;
+    if (activePieces.isEmpty) return;
 
     LudoPiece? furthest;
     int maxSteps = -1;
@@ -1252,11 +1231,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     }
   }
 
-  // Posiciones de inicio en el camino exterior:
-  // Verde  = 0  (col=6, row=1)
-  // Rojo   = 13 (col=1, row=8)
-  // Azul   = 26 (col=8, row=13)
-  // Amarillo = 39 (col=13, row=6)
   int _getStartPosition(String color) {
     switch (color) {
       case 'green':  return 0;
@@ -1272,19 +1246,16 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     return safePositions.contains(position);
   }
 
-  // Devuelve true si la posición es segura para el color dado.
-  // Las casillas de salida solo son seguras para su color dueño.
+
   bool _isSafeForColor(int position, String color) {
-    // Casillas de salida: solo seguras para el dueño
     final startPositions = {
       'green': 0, 'red': 13, 'blue': 26, 'yellow': 39,
     };
     for (final entry in startPositions.entries) {
       if (position == entry.value) {
-        return entry.key == color; // segura solo para el dueño
+        return entry.key == color;
       }
     }
-    // Resto de casillas seguras: seguras para todos
     return _isSafePosition(position);
   }
 
@@ -1615,8 +1586,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
             ),
         ],
       ),
-    ),   // cierra Scaffold
-    );   // cierra PopScope
+    ),
+    );
   }
 
   Widget _buildPlayersInfo() {

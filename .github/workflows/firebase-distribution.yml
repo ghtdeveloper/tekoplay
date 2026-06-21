@@ -56,71 +56,78 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # ── 7. Build APK release ────────────────────────────────────────────────
-      - name: Build APK
+      # ── 7. Build APKs por arquitectura (arm64-v8a + armeabi-v7a) ────────────
+      # Genera dos APKs separados, mucho más pequeños que el fat APK
+      # arm64-v8a  → dispositivos modernos (95%+ de usuarios)
+      # armeabi-v7a → dispositivos antiguos de 32-bit
+      - name: Build APKs (split by ABI)
         run: |
           flutter build apk \
+            --split-per-abi \
             --release \
             --build-number=${{ github.run_number }} \
             --build-name=1.0.0
 
-      # ── 8. Subir APK a Firebase Storage (URL pública de descarga) ───────────
-      - name: Upload APK to Firebase Storage
+      # ── 8. Instalar dependencias Node (una sola vez) ─────────────────────────
+      - name: Install Node dependencies
+        run: npm install firebase-admin --save
+        working-directory: .github/scripts
+
+      # ── 9. Subir APKs a Firebase Storage con firebase-admin ─────────────────
+      - name: Upload APKs to Firebase Storage
         id: upload_storage
-        run: |
-          npm install -g firebase-tools
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node .github/scripts/upload_apks.js
 
-          # Exportar credenciales de la cuenta de servicio
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa.json
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
-
-          # Subir APK a Firebase Storage
-          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
-          STORAGE_PATH="app-updates/android/app-release.apk"
-          PROJECT_ID="tekoplay-38f7b"
-
-          firebase storage:cp \
-            "$APK_PATH" \
-            "gs://${PROJECT_ID}.firebasestorage.app/${STORAGE_PATH}" \
-            --project "$PROJECT_ID"
-
-          # Generar URL pública de descarga
-          APK_URL="https://firebasestorage.googleapis.com/v0/b/${PROJECT_ID}.firebasestorage.app/o/$(echo $STORAGE_PATH | sed 's/\//%2F/g')?alt=media"
-          echo "apk_url=$APK_URL" >> $GITHUB_OUTPUT
-          echo "✅ APK subido a Storage: $APK_URL"
-
-      # ── 9. Actualizar version en Firestore (activa el update in-app) ─────────
+      # ── 10. Actualizar versión en Firestore (activa el update in-app) ────────
       - name: Update version in Firestore
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          APK_URL: ${{ steps.upload_storage.outputs.apk_url }}
+          APK_URL: ${{ steps.upload_storage.outputs.arm64_url }}
+          APK_URL_ARM64: ${{ steps.upload_storage.outputs.arm64_url }}
+          APK_URL_ARMEABI: ${{ steps.upload_storage.outputs.armeabi_url }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: "1.0.0+${{ github.run_number }}"
           RELEASE_NOTES: |
             ${{ github.event.head_commit.message }}
             ${{ github.event.inputs.release_notes }}
-        run: |
-          cd .github/scripts
-          npm install firebase-admin --save
-          node update_version.js
+        run: node .github/scripts/update_version.js
 
-      # ── 10. Distribuir por email via Firebase App Distribution ───────────────
-      - name: Upload to Firebase App Distribution
+      # ── 11. Distribuir arm64-v8a via Firebase App Distribution (cubre 95%+) ─
+      - name: Upload arm64-v8a to Firebase App Distribution
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
           appId: ${{ secrets.FIREBASE_APP_ID }}
           serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           groups: testers
-          file: build/app/outputs/flutter-apk/app-release.apk
+          file: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           releaseNotes: |
-            Build #${{ github.run_number }} — v1.0.0
+            Build #${{ github.run_number }} — v1.0.0 [arm64-v8a]
+            Dispositivos: todos los modernos (Samsung, Pixel, Xiaomi, etc.)
             ${{ github.event.head_commit.message }}
             ${{ github.event.inputs.release_notes }}
 
-      # ── 11. Artefacto del workflow (descarga manual opcional) ────────────────
-      - name: Upload APK artifact
+      # ── 12. Distribuir armeabi-v7a (dispositivos antiguos de 32-bit) ─────────
+      - name: Upload armeabi-v7a to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: testers
+          file: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          releaseNotes: |
+            Build #${{ github.run_number }} — v1.0.0 [armeabi-v7a]
+            Dispositivos: Android antiguos de 32-bit
+            ${{ github.event.head_commit.message }}
+            ${{ github.event.inputs.release_notes }}
+
+      # ── 13. Artefactos del workflow (descarga manual) ────────────────────────
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: tekoplay-build-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
           retention-days: 15

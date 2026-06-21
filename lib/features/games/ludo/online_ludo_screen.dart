@@ -40,6 +40,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   int? _myPlayerNumber;
   LudoGameMatch? _currentRoomGame;
   StreamSubscription<LudoGameMatch?>? _gameSubscription;
+  StreamSubscription<DocumentSnapshot>? _balanceSubscription;
   int _matchmakingSeconds = 0;
   Timer? _matchmakingTimer;
   Timer? _keepAliveTimer;
@@ -164,6 +165,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _keepAliveTimer?.cancel();
     _turnTimer?.cancel();
     _gameSubscription?.cancel();
+    _balanceSubscription?.cancel();
     _pulseController.dispose();
     _diceAnimController.dispose();
     _toastController.dispose();
@@ -204,11 +206,28 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         setState(() {
           _myName = doc.name;
           _myPhotoUrl = doc.urlPhoto;
-          _userCoins = doc.coins;
-          _userDiamonds = doc.diamonds;
         });
       }
     } catch (_) {}
+    _setupBalanceListener();
+  }
+
+  void _setupBalanceListener() {
+    if (_currentUser == null) return;
+    _balanceSubscription?.cancel();
+    _balanceSubscription = _firestore
+        .collection('users')
+        .doc(_currentUser!.uid)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists && mounted) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _userCoins = data['coins'] ?? 0;
+          _userDiamonds = data['diamonds'] ?? 0;
+        });
+      }
+    });
   }
 
   Future<void> _startMatchmaking() async {
@@ -499,7 +518,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     }
 
     if (_dice1Value == 0 && _dice2Value == 0) {
-      // Awaitar el lanzamiento y luego auto-mover sin esperar otro ciclo del timer
       await _rollDice();
       await Future.delayed(const Duration(milliseconds: 1000));
       if (!mounted || _gameEnded || !_isMyTurn) return;
@@ -809,8 +827,22 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   void _applyTripleDoublesPenalty(String color) {
-    for (final p in _gameState.getPiecesByColor(color)) {
-      if (!p.isHome && !p.isFinished) p.position = -1;
+    final active = _gameState.getPiecesByColor(color)
+        .where((p) => !p.isHome && !p.isFinished)
+        .toList();
+    if (active.isEmpty) return;
+    final sp = _getStartPosition(color);
+    LudoPiece? furthest;
+    int maxSteps = -1;
+    for (final p in active) {
+      final steps = p.position >= 52
+          ? 51 + (p.position - 51)
+          : _stepsFromStart(p.position, sp);
+      if (steps > maxSteps) { maxSteps = steps; furthest = p; }
+    }
+    if (furthest != null) {
+      furthest.position = -1;
+      _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
     }
     setState(() {});
   }
@@ -846,6 +878,16 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         }
       }
     }
+
+    // Regla: doble con barrera propia → el primer movimiento debe abrir la barrera
+    if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
+      final barrIndices = _getBarreraIndices(_currentPlayer);
+      if (barrIndices.isNotEmpty) {
+        final barrMoves = _movablePieces.where((m) => barrIndices.contains(m['pieceId'])).toList();
+        if (barrMoves.isNotEmpty) _movablePieces = barrMoves;
+      }
+    }
+
     if (mounted) setState(() {});
   }
 
@@ -991,6 +1033,24 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (count >= 2) return true;
     }
     return false;
+  }
+
+  Set<int> _getBarreraIndices(String color) {
+    final pieces = _gameState.getPiecesByColor(color);
+    final inBarrera = <int>{};
+    for (int i = 0; i < pieces.length; i++) {
+      final p = pieces[i];
+      if (p.isHome || p.isFinished) continue;
+      for (int j = i + 1; j < pieces.length; j++) {
+        final q = pieces[j];
+        if (q.isHome || q.isFinished) continue;
+        if (p.position == q.position) {
+          inBarrera.add(i);
+          inBarrera.add(j);
+        }
+      }
+    }
+    return inBarrera;
   }
 
   bool _canLandOn(String color, int newPos, LudoPiece moving) {
@@ -1349,14 +1409,14 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       children: [
         Column(
           children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: LayoutBuilder(builder: (ctx, constraints) {
-                  final sz = constraints.maxWidth < constraints.maxHeight
-                      ? constraints.maxWidth : constraints.maxHeight;
-                  _boardSize = sz;
-                  return Center(
+            LayoutBuilder(
+              builder: (ctx, constraints) {
+                final sz = constraints.maxWidth - 16;
+                _boardSize = sz;
+                return SizedBox(
+                  height: sz + 16,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
                     child: GestureDetector(
                       onTapUp: (d) => _handleBoardTap(d.localPosition),
                       child: AnimatedBuilder(
@@ -1407,9 +1467,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                         },
                       ),
                     ),
-                  );
-                }),
-              ),
+                  ),
+                );
+              },
             ),
             _buildChatWidget(),
             _buildGameControls(),
@@ -2498,8 +2558,7 @@ class _DiceDotsPainter extends CustomPainter {
     }
   }
 
-  @override
-  bool shouldRepaint(_DiceDotsPainter old) => old.value != value;
+  @override  bool shouldRepaint(_DiceDotsPainter old) => old.value != value;
 }
 
 class _Coord {

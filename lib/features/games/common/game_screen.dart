@@ -205,13 +205,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
+        _audioPlayer?.resume();
         break;
       case AppLifecycleState.paused:
         _disableWakeLock();
+        _audioPlayer?.pause();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        _audioPlayer?.pause();
         break;
       case AppLifecycleState.detached:
-      case AppLifecycleState.hidden:
-      case AppLifecycleState.inactive:
         break;
     }
   }
@@ -491,10 +495,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _currentUser = user;
+          if (user != null) _isAnonymousMode = false;
         });
       }
 
       if (user != null && !_isDisposed) {
+        // Conectar listener en tiempo real tan pronto se conoce el usuario
+        _setupFirestoreWalletListener();
         final userData = await FirestoreService().getUser(user.uid);
         if (userData != null && mounted && !_isDisposed) {
           setState(() {
@@ -779,6 +786,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         ),
       );
     }
+  }
+
+  @override
+  void deactivate() {
+    // Detenemos el audio en cuanto la pantalla sale del árbol de widgets,
+    // antes de que home_screen reanude su propio player.
+    _audioPlayer?.stop();
+    super.deactivate();
   }
 
   @override
@@ -1093,10 +1108,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _showAnonymousUserDialog(BuildContext context) {
+    final screenContext = context;
     showDialog(
       context: context,
       builder:
-          (context) => Dialog(
+          (dialogCtx) => Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -1113,7 +1129,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   ),
                   SizedBox(height: 16),
                   Text(
-                    S.of(context).playingAsGuest,
+                    S.of(dialogCtx).playingAsGuest,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1122,12 +1138,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    '${S.of(context).yourTemporaryName}: $_anonymousPlayerName',
+                    '${S.of(dialogCtx).yourTemporaryName}: $_anonymousPlayerName',
                     style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                   SizedBox(height: 16),
                   Text(
-                    S.of(context).loginToAccessFeatures,
+                    S.of(dialogCtx).loginToAccessFeatures,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14),
                   ),
@@ -1136,31 +1152,33 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     children: [
                       Expanded(
                         child: TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: Text(S.of(context).continueAsGuest),
+                          onPressed: () => Navigator.of(dialogCtx).pop(),
+                          child: Text(S.of(dialogCtx).continueAsGuest),
                         ),
                       ),
                       SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () async {
+                            Navigator.of(dialogCtx).pop();
                             await Navigator.push(
-                              context,
+                              screenContext,
                               MaterialPageRoute(
                                 builder:
-                                    (context) => SettingsScreen(
+                                    (_) => SettingsScreen(
                                       onVolumeChangedLive: (newVolume) {
                                         _updateVolume(newVolume);
                                       },
                                     ),
                               ),
                             );
+                            if (mounted) await _loadCurrentUser();
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Color(0xFFEC7A34),
                             foregroundColor: Colors.white,
                           ),
-                          child: Text(S.of(context).login),
+                          child: Text(S.of(dialogCtx).login),
                         ),
                       ),
                     ],

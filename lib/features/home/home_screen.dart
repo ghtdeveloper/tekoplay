@@ -139,14 +139,18 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           _enableWakeLock();
         }
         _loadAndApplyVolume();
+        _audioPlayer.resume();
         _checkEmailVerification();
         break;
       case AppLifecycleState.paused:
         _disableWakeLock();
+        _audioPlayer.pause();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        _audioPlayer.pause();
         break;
       case AppLifecycleState.detached:
-      case AppLifecycleState.hidden:
-      case AppLifecycleState.inactive:
         break;
     }
   }
@@ -1113,6 +1117,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () async {
+              await _audioPlayer.pause();
               final _ = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -1124,6 +1129,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
               );
               _loadCurrentUser();
+              await _loadAndApplyVolume();
+              await _audioPlayer.resume();
             },
           ),
         ],
