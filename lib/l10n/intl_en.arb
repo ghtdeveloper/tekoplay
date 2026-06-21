@@ -361,5 +361,6 @@
   "GameOverProcess": "Game over. Processing results...",
   "GameOverDraw": "Draw - Refunds will be processed...",
   "recovered": "Recovered",
-  "errorResult": "Error processing result"
+  "errorResult": "Error processing result",
+   "tutorialTitle": "How to play Ludo"
 }

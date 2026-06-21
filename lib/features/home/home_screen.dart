@@ -11,6 +11,7 @@ import '../adds/Interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
+import '../../core/service/app_update_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class MainScreen extends StatefulWidget {
@@ -39,6 +40,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _startEmailVerificationCheck();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
     _enableWakeLock();
+    // Verificar actualizaciones al abrir la app (delay para no bloquear el render inicial)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) AppUpdateService.checkForUpdate(context);
+      });
+    });
   }
 
   @override
@@ -225,9 +232,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.of(context).pop();
-                        Navigator.push(
+                        await _audioPlayer.pause();
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => GameScreen(
@@ -236,6 +244,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
+                        await _loadAndApplyVolume();
+                        await _audioPlayer.resume();
                       },
                       icon: Icon(Icons.sports_esports),
                       label: Text(
@@ -258,9 +268,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.of(context).pop();
-                        Navigator.push(
+                        await _audioPlayer.pause();
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => GameScreen(
@@ -269,6 +280,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
+                        await _loadAndApplyVolume();
+                        await _audioPlayer.resume();
                       },
                       icon: Icon(Icons.monetization_on),
                       label: Text(
@@ -1293,9 +1306,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                 imagePath: 'assets/images/parchis.png',
                                 title: S.of(context).parchisShort,
                                 onTap: () {
+                                  _showGameTypeDialog(context, S.of(context).parchisShort);
                                 },
                                 size: cardSize,
-                                isEnabled: false,
+                                isEnabled: true,
                               ),
                               // Poker - Deshabilitado
                               GameCard(

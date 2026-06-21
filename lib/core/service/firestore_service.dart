@@ -262,10 +262,32 @@ class FirestoreService {
     }
   }
 
+  Future<bool> incrementUserCoins(String userId, int amount) async {
+    try {
+      await _firestore.collection(_usersCollection).doc(userId).update({
+        'coins': FieldValue.increment(amount),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> updateUserDiamonds(String userId, int newDiamonds) async {
     try {
       await _firestore.collection(_usersCollection).doc(userId).update({
         'diamonds': newDiamonds,
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> incrementUserDiamonds(String userId, int amount) async {
+    try {
+      await _firestore.collection(_usersCollection).doc(userId).update({
+        'diamonds': FieldValue.increment(amount),
       });
       return true;
     } catch (e) {

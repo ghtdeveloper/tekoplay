@@ -10,12 +10,16 @@ import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
 import 'package:tekoplay/features/games/common/ranking_screen.dart';
 import 'package:tekoplay/features/games/common/withdraw_dialog.dart';
 import 'package:tekoplay/features/games/common/withdrawal_widget.dart';
+import 'package:tekoplay/features/games/ludo/ludo_tutorial_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../core/models/ludo_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/anonymous_wallet_service.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/service/ludo_game_service.dart';
 import '../../../core/service/multiplayer_game_service.dart';
 import '../../../core/service/notification_service.dart';
 import '../../../core/service/payment_service.dart';
@@ -31,6 +35,9 @@ import '../chess/multiplayer_chess_screen.dart';
 import '../chess/online_chess_screen.dart';
 import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
+import '../ludo/ludo_vs_cpu_screen.dart';
+import '../ludo/multiplayer_ludo_screen.dart';
+import '../ludo/online_ludo_screen.dart';
 import 'game_history_screen.dart';
 
 class GameScreen extends StatefulWidget {
@@ -56,18 +63,21 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   int? _userCoins;
   String? _anonymousPlayerName;
   bool _isAnonymousMode = false;
-  late AudioPlayer _audioPlayer;
+  AudioPlayer? _audioPlayer;
   double _currentVolume = 0.5;
   bool _isDisposed = false;
   bool _isInitialized = false;
   StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
   StreamSubscription<List<MultiplayerGameMatch>>? _activeGamesSubscription;
+  StreamSubscription<List<LudoGameMatch>>? _activeLudoGamesSubscription;
+  List<LudoGameMatch> _previousActiveLudoGames = [];
   StreamSubscription<DocumentSnapshot>? _diamondsSubscription;
   final AnonymousWalletService _walletService = AnonymousWalletService();
   bool _isScreenKeepOnActive = false;
 
   String? _localizedChess;
   String? _localizedDomino;
+  String? _localizedLudo;
   String? _localizedBet;
   String? _localizedFun;
   int? _withdrawableDiamonds;
@@ -88,6 +98,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _setupWalletInfoUser();
     _localizedChess = S.of(context).chess;
     _localizedDomino = S.of(context).domino;
+    _localizedLudo = S.of(context).parchisShort;
     _localizedBet = S.of(context).bet;
     _localizedFun = S.of(context).fun;
   }
@@ -95,6 +106,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool get isChess => gameType == _localizedChess;
 
   bool get isDomino => gameType == _localizedDomino;
+
+  bool get isLudo => gameType == _localizedLudo;
 
   void _setupWalletInfoUser() {
     if (_currentUser == null) {
@@ -403,6 +416,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     try {
       if (_isDisposed) return;
       _audioPlayer = AudioPlayer();
+      final prefs = await SharedPreferences.getInstance();
+      _currentVolume = prefs.getDouble('musicVolume') ?? 0.5;
+      await _audioPlayer!.setVolume(_currentVolume);
+      await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
+      await _audioPlayer!.play(AssetSource('audio/background_music.mp3'));
       _loadCurrentUser();
       if (_isDisposed) return;
       _initializeNotifications();
@@ -435,7 +453,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     if (_isDisposed) return;
     try {
       _currentVolume = newVolume;
-      await _audioPlayer.setVolume(newVolume);
+      await _audioPlayer?.setVolume(newVolume);
       if (mounted) setState(() {});
     } catch (e) {
       if (kDebugMode) {
@@ -550,6 +568,27 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               }
             },
           );
+
+      _activeLudoGamesSubscription?.cancel();
+      _activeLudoGamesSubscription = LudoGameService()
+          .getActiveGames(_currentUser!.uid)
+          .handleError((error) {
+            if (kDebugMode) {
+              print('Error en stream de juegos Ludo: $error');
+            }
+          })
+          .listen(
+            (games) {
+              if (mounted && !_isDisposed) {
+                _handleNewActiveLudoGames(games);
+              }
+            },
+            onError: (error) {
+              if (kDebugMode) {
+                print('Error en subscription de juegos Ludo: $error');
+              }
+            },
+          );
     } catch (e) {
       if (kDebugMode) {
         print('Error configurando streams: $e');
@@ -584,6 +623,31 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       }
     }
     _previousActiveGames = List.from(currentGames);
+  }
+
+  void _handleNewActiveLudoGames(List<LudoGameMatch> currentGames) {
+    final newGames = currentGames.where((game) {
+      return !_previousActiveLudoGames.any((prev) => prev.id == game.id);
+    }).toList();
+
+    for (final newGame in newGames) {
+      if (newGame.hostId == _currentUser!.uid &&
+          newGame.status == 'active' &&
+          newGame.guest2Id != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MultiplayerLudoScreen(
+              gameId: newGame.id,
+              playerNumber: 1,
+              matchType: newGame.currencyType,
+            ),
+          ),
+        );
+        break;
+      }
+    }
+    _previousActiveLudoGames = List.from(currentGames);
   }
 
   void _showCoinPurchaseDialog() {
@@ -630,6 +694,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         if (success) {
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
+          } else {
+            if (mounted && !_isDisposed) {
+              setState(() { _userCoins = (_userCoins ?? 0) + coins; });
+            }
           }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -683,7 +751,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
           } else {
-            // Para usuarios autenticados, el listener de Firestore se encargará
+            if (mounted && !_isDisposed) {
+              setState(() { _userDiamonds = (_userDiamonds ?? 0) + diamonds; });
+            }
           }
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -718,9 +788,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _isDisposed = true;
     _invitationsSubscription?.cancel();
     _activeGamesSubscription?.cancel();
+    _activeLudoGamesSubscription?.cancel();
     _diamondsSubscription?.cancel();
-    _audioPlayer.dispose();
+    _audioPlayer?.dispose();
     _previousActiveGames.clear();
+    _previousActiveLudoGames.clear();
     if (_isAnonymousMode) {
       try {
         AuthService().disableAnonymousMode();
@@ -1575,17 +1647,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                   Navigator.push(
                                                     context,
                                                     MaterialPageRoute(
-                                                      builder:
-                                                          (
-                                                            context,
-                                                          ) => MultiplayerChessScreen(
-                                                            gameId:
-                                                                result['gameId'],
-                                                            isHost: false,
-                                                            matchType:
-                                                                widget
-                                                                    .matchType,
-                                                          ),
+                                                      builder: (context) => result['isLudo'] == true
+                                                          ? MultiplayerLudoScreen(
+                                                              gameId: result['gameId'],
+                                                              playerNumber: result['playerNumber'] ?? 2,
+                                                              matchType: result['matchType'] ?? widget.matchType,
+                                                            )
+                                                          : MultiplayerChessScreen(
+                                                              gameId: result['gameId'],
+                                                              isHost: false,
+                                                              matchType: widget.matchType,
+                                                            ),
                                                     ),
                                                   );
                                                 } else {
@@ -1969,7 +2041,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         ),
       );
     }
+    else if (isLudo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LudoTutorialScreen(),
+        ),
+      );
+    }
   }
+
 
   void _showComputerGameDialog(BuildContext context) {
     if (isChess) {
@@ -1989,7 +2070,306 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     } else if (isDomino) {
       _showDominoCpuDialog(context);
     }
+    else if (isLudo) {
+      _showLudoCpuDialog(context);
+    }
   }
+
+  void _showLudoCpuDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final isBet = widget.matchType == 'Apuesta';
+        // En modo apuesta solo existe dificultad máxima para que la CPU gane
+        String selectedDifficulty = isBet ? S.of(context).difficult : S.of(context).normal;
+        int selectedCpuCount = 1;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final screenHeight = MediaQuery.of(context).size.height;
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: screenHeight * 0.82),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Header fijo ──────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEC7A34).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.casino, size: 28, color: Color(0xFFEC7A34)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              S.of(context).playVsComputer,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.black54),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const Divider(height: 20),
+
+                    // ── Contenido scrollable ─────────────────────────────
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Selector de CPUs
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withValues(alpha: 0.07),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.people, color: Color(0xFFEC7A34), size: 18),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'Cantidad de oponentes CPU',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [1, 2, 3].map((count) {
+                                      final isSelected = selectedCpuCount == count;
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          child: GestureDetector(
+                                            onTap: () => setState(() => selectedCpuCount = count),
+                                            child: AnimatedContainer(
+                                              duration: const Duration(milliseconds: 180),
+                                              padding: const EdgeInsets.symmetric(vertical: 10),
+                                              decoration: BoxDecoration(
+                                                color: isSelected ? const Color(0xFFEC7A34) : Colors.white,
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: isSelected ? const Color(0xFFEC7A34) : Colors.grey.shade300,
+                                                  width: 2,
+                                                ),
+                                                boxShadow: isSelected
+                                                    ? [BoxShadow(color: const Color(0xFFEC7A34).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))]
+                                                    : [],
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  Icon(Icons.smart_toy,
+                                                      color: isSelected ? Colors.white : Colors.grey.shade400, size: 22),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    '$count CPU${count > 1 ? 's' : ''}',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isSelected ? Colors.white : Colors.black87,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    count == 1 ? '(1 vs 1)' : count == 2 ? '(3 jugadores)' : '(4 jugadores)',
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      color: isSelected ? Colors.white70 : Colors.grey.shade500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            // Selector de dificultad (oculto en modo apuesta — siempre Difícil)
+                            if (!isBet) ...[
+                              Container(
+                                padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.speed, color: Color(0xFFEC7A34), size: 18),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'Dificultad',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    ...[
+                                      S.of(context).veryEasy,
+                                      S.of(context).easy,
+                                      S.of(context).normal,
+                                      S.of(context).difficult,
+                                    ].map((level) => RadioListTile<String>(
+                                      title: Text(level, style: const TextStyle(fontSize: 14)),
+                                      value: level,
+                                      groupValue: selectedDifficulty,
+                                      dense: true,
+                                      visualDensity: const VisualDensity(vertical: -2),
+                                      contentPadding: EdgeInsets.zero,
+                                      activeColor: const Color(0xFFEC7A34),
+                                      onChanged: (v) => setState(() => selectedDifficulty = v!),
+                                    )),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ] else ...[
+                              // Badge informativo en modo apuesta
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.psychology, color: Colors.red, size: 18),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Dificultad: Máxima',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red),
+                                          ),
+                                          Text(
+                                            'En modo apuesta la CPU juega al máximo nivel.',
+                                            style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+
+                            // Info card
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.info_outline, color: Colors.green, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      selectedCpuCount == 1
+                                          ? 'Jugarás 1 vs 1 contra la CPU en posiciones opuestas'
+                                          : selectedCpuCount == 2
+                                              ? 'Jugarás contra 2 CPUs (3 jugadores en total)'
+                                              : 'Jugarás contra 3 CPUs (4 jugadores en total)',
+                                      style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // ── Botón Empezar siempre visible ────────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => LudoVsCpuScreen(
+                                  difficulty: selectedDifficulty,
+                                  matchType: widget.matchType,
+                                  cpuCount: selectedCpuCount,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                          label: Text(
+                            S.of(context).startGame,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEC7A34),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            elevation: 3,
+                            shadowColor: const Color(0xFFEC7A34).withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+
 
   void _showChessCpuDialog(BuildContext context) {
     showDialog(
@@ -2213,6 +2593,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         context,
         MaterialPageRoute(
           builder: (context) => OnlineChessScreen(matchType: matchType),
+        ),
+      );
+    } else if (isLudo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OnlineLudoScreen(matchType: matchType),
         ),
       );
     } else if (isDomino) {

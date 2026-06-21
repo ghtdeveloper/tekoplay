@@ -552,13 +552,14 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   }
 
   void _showSignUpDialog(BuildContext context) {
+    final screenContext = context;
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     final nameController = TextEditingController();
     bool isLoading = false;
 
     showDialog(
-      context: context,
+      context: screenContext,
       barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
@@ -680,30 +681,34 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                                 _currentPhotoUrl = null;
                               });
 
-                              _showEmailVerificationSuccessDialog(context);
+                              if (screenContext.mounted) {
+                                _showEmailVerificationSuccessDialog(screenContext);
+                              }
                             } else {
-                              ScaffoldMessenger.of(
-                                context,
-                              ).showSnackBar(
+                              if (screenContext.mounted) {
+                                ScaffoldMessenger.of(screenContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      S.of(screenContext).emailAlreadyRegistered,
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            Navigator.of(context).pop();
+                            if (screenContext.mounted) {
+                              ScaffoldMessenger.of(screenContext).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    S.of(context).emailAlreadyRegistered,
+                                    S.of(screenContext).errorCreatingAccount,
                                   ),
                                   backgroundColor: Colors.red,
                                 ),
                               );
                             }
-                          } catch (e) {
-                            if (!mounted) return;
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  S.of(context).errorCreatingAccount,
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
                           }
                         },
                         style: ElevatedButton.styleFrom(
@@ -746,12 +751,13 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   }
 
   void _showLogInDialog(BuildContext context) {
+    final screenContext = context;
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     bool isLoading = false;
 
     showDialog(
-      context: context,
+      context: screenContext,
       barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
@@ -879,16 +885,16 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                                 _currentUser = user;
                                 _isEmailVerified = true;
                               });
-                              ScaffoldMessenger.of(
-                                context,
-                              ).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    "${S.of(context).welcome} ${user.displayName ?? user.email}",
+                              if (screenContext.mounted) {
+                                ScaffoldMessenger.of(screenContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      "${S.of(screenContext).welcome} ${user.displayName ?? user.email}",
+                                    ),
+                                    backgroundColor: Colors.green,
                                   ),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                                );
+                              }
                             } else {
                               final currentUser = AuthService().getCurrentUser();
                               if (currentUser != null && !currentUser.emailVerified) {
@@ -896,29 +902,33 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                                   _currentUser = currentUser;
                                   _isEmailVerified = false;
                                 });
-                                _showEmailVerificationDialog(context);
+                                if (screenContext.mounted) {
+                                  _showEmailVerificationDialog(screenContext);
+                                }
                               } else {
-                                ScaffoldMessenger.of(
-                                  context,
-                                ).showSnackBar(
-                                  SnackBar(
-                                    content: Text(S.of(context).invalidCredentials),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
+                                if (screenContext.mounted) {
+                                  ScaffoldMessenger.of(screenContext).showSnackBar(
+                                    SnackBar(
+                                      content: Text(S.of(screenContext).invalidCredentials),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
                               }
                             }
                           } catch (e) {
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  S.of(context).errorSignInEmail,
+                            if (screenContext.mounted) {
+                              ScaffoldMessenger.of(screenContext).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    S.of(screenContext).errorSignInEmail,
+                                  ),
+                                  backgroundColor: Colors.red,
                                 ),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
+                              );
+                            }
                           }
                         },
                         style: ElevatedButton.styleFrom(
