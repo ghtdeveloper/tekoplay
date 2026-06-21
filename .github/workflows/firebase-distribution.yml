@@ -79,7 +79,18 @@ jobs:
           echo "${{ secrets.FIREBASE_OPTIONS_DART }}" | base64 --decode > lib/firebase_options.dart
           echo "${{ secrets.ENV_FILE }}"              | base64 --decode > .env
 
-      # ── 7. Dependencias ──────────────────────────────────────────────────────
+      # ── 7. Leer versión desde pubspec.yaml ──────────────────────────────────
+      # Para cambiar versión: edita "version: X.Y.Z+N" en pubspec.yaml
+      # El build number se sobreescribe con github.run_number (auto-incremental)
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          echo "name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "full=$VERSION_NAME+${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION_NAME (build ${{ github.run_number }})"
+
+      # ── 8. Dependencias ──────────────────────────────────────────────────────
       - name: Flutter pub get
         run: flutter pub get
 
@@ -87,7 +98,7 @@ jobs:
         run: npm install firebase-admin --save
         working-directory: .github/scripts
 
-      # ── 8. Build APKs por arquitectura ───────────────────────────────────────
+      # ── 9. Build APKs por arquitectura ───────────────────────────────────────
       # arm64-v8a  → dispositivos modernos (95%+ de usuarios reales)
       # armeabi-v7a → dispositivos antiguos de 32-bit
       - name: Build APKs (split by ABI)
@@ -96,7 +107,7 @@ jobs:
             --split-per-abi \
             --release \
             --build-number=${{ github.run_number }} \
-            --build-name=1.0.0
+            --build-name=${{ steps.version.outputs.name }}
 
       # ── 9. Subir APKs a Firebase Storage ────────────────────────────────────
       - name: Upload APKs to Firebase Storage
@@ -113,7 +124,7 @@ jobs:
           APK_URL_ARM64:   ${{ steps.upload_storage.outputs.arm64_url }}
           APK_URL_ARMEABI: ${{ steps.upload_storage.outputs.armeabi_url }}
           VERSION_CODE:    ${{ github.run_number }}
-          VERSION_NAME:    "1.0.0+${{ github.run_number }}"
+          VERSION_NAME:    ${{ steps.version.outputs.full }}
           RELEASE_NOTES: |
             ${{ github.event.head_commit.message }}
             ${{ github.event.inputs.release_notes }}
@@ -125,10 +136,10 @@ jobs:
         with:
           appId: ${{ secrets.FIREBASE_APP_ID }}
           serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          groups: testers
+          groups: tester-tekoplay
           file: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           releaseNotes: |
-            Build #${{ github.run_number }} — v1.0.0 [arm64-v8a]
+            Build #${{ github.run_number }} — v${{ steps.version.outputs.full }} [arm64-v8a]
             Dispositivos: Samsung, Pixel, Xiaomi y cualquier Android moderno
             ${{ github.event.head_commit.message }}
             ${{ github.event.inputs.release_notes }}
@@ -139,10 +150,10 @@ jobs:
         with:
           appId: ${{ secrets.FIREBASE_APP_ID }}
           serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          groups: testers
+          groups: tester-tekoplay
           file: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
           releaseNotes: |
-            Build #${{ github.run_number }} — v1.0.0 [armeabi-v7a]
+            Build #${{ github.run_number }} — v${{ steps.version.outputs.full }} [armeabi-v7a]
             Dispositivos: Android antiguos de 32-bit
             ${{ github.event.head_commit.message }}
             ${{ github.event.inputs.release_notes }}
