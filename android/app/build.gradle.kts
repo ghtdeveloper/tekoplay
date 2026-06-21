@@ -46,16 +46,6 @@ android {
         }
     }
 
-    // Genera un APK por arquitectura — el fat APK baja de ~500MB a ~120-150MB por ABI
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "armeabi-v7a")  // las únicas que importan en dispositivos reales
-            isUniversalApk = false
-        }
-    }
-
     aaptOptions {
         noCompress += "stockfish"
     }
