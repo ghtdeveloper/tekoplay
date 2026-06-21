@@ -368,11 +368,24 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Future<void> _applyTripleDoublesPenalty() async {
-    for (final color in _activePlayers) {
-      final pieces = _gameState.getPiecesByColor(color);
-      for (final p in pieces) {
-        if (!p.isHome && !p.isFinished) p.position = -1;
-      }
+    final pieces = _gameState.getPiecesByColor(_myColor);
+    final active = pieces.where((p) => !p.isHome && !p.isFinished).toList();
+    if (active.isEmpty) {
+      await _syncGameState(advanceTurn: true);
+      return;
+    }
+    final sp = _getStartPosition(_myColor);
+    LudoPiece? furthest;
+    int maxSteps = -1;
+    for (final p in active) {
+      final steps = p.position >= 52
+          ? 51 + (p.position - 51)
+          : _stepsFromStart(p.position, sp);
+      if (steps > maxSteps) { maxSteps = steps; furthest = p; }
+    }
+    if (furthest != null) {
+      furthest.position = -1;
+      _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
     }
     await _syncGameState(advanceTurn: true);
   }
@@ -408,6 +421,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         }
       }
     }
+
+    // Regla: doble con barrera propia → el primer movimiento debe abrir la barrera
+    if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
+      final barrIndices = _getBarreraIndices(_myColor);
+      if (barrIndices.isNotEmpty) {
+        final barrMoves = _movablePieces.where((m) => barrIndices.contains(m['pieceId'])).toList();
+        if (barrMoves.isNotEmpty) _movablePieces = barrMoves;
+      }
+    }
+
     if (mounted) setState(() {});
   }
 
@@ -716,6 +739,25 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (count >= 2) return true;
     }
     return false;
+  }
+
+  /// Devuelve los índices de fichas del color dado que forman una barrera propia.
+  Set<int> _getBarreraIndices(String color) {
+    final pieces = _gameState.getPiecesByColor(color);
+    final inBarrera = <int>{};
+    for (int i = 0; i < pieces.length; i++) {
+      final p = pieces[i];
+      if (p.isHome || p.isFinished) continue;
+      for (int j = i + 1; j < pieces.length; j++) {
+        final q = pieces[j];
+        if (q.isHome || q.isFinished) continue;
+        if (p.position == q.position) {
+          inBarrera.add(i);
+          inBarrera.add(j);
+        }
+      }
+    }
+    return inBarrera;
   }
 
   bool _canLandOn(String color, int newPos, LudoPiece moving) {
@@ -1138,15 +1180,14 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           children: [
             Column(
               children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: LayoutBuilder(builder: (ctx, constraints) {
-                      final sz = constraints.maxWidth < constraints.maxHeight
-                          ? constraints.maxWidth
-                          : constraints.maxHeight;
-                      _boardSize = sz;
-                      return Center(
+                LayoutBuilder(
+                  builder: (ctx, constraints) {
+                    final sz = constraints.maxWidth - 16;
+                    _boardSize = sz;
+                    return SizedBox(
+                      height: sz + 16,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
                         child: GestureDetector(
                           onTapUp: (d) => _handleBoardTap(d.localPosition),
                           child: AnimatedBuilder(
@@ -1196,9 +1237,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                             },
                           ),
                         ),
-                      );
-                    }),
-                  ),
+                      ),
+                    );
+                  },
                 ),
                 _buildChatWidget(),
                 _buildControls(),

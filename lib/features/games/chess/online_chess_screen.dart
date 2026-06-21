@@ -76,6 +76,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   MultiplayerGameMatch? _currentGame;
   StreamSubscription<MultiplayerGameMatch?>? _gameSubscription;
   StreamSubscription<DocumentSnapshot>? _betNegotiationSubscription;
+  StreamSubscription<DocumentSnapshot>? _balanceSubscription;
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
   final FirestoreService _firestoreService = FirestoreService();
@@ -189,28 +190,28 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   Future<void> _loadUserCurrency() async {
     if (currentUser == null) return;
-    try {
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUser!.uid)
-              .get();
-      if (userDoc.exists) {
-        final userData = userDoc.data() as Map<String, dynamic>;
+    _setupBalanceListener();
+  }
+
+  void _setupBalanceListener() {
+    if (currentUser == null) return;
+    _balanceSubscription?.cancel();
+    _balanceSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser!.uid)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists && mounted) {
+        final data = doc.data() as Map<String, dynamic>;
         setState(() {
-          _userDiamonds = userData['diamonds'] ?? 0;
-          _userCoins = userData['coins'] ?? 0;
+          _userDiamonds = data['diamonds'] ?? 0;
+          _userCoins = data['coins'] ?? 0;
         });
       }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error loading user currency: $e');
-      }
-      setState(() {
-        _userDiamonds = 0;
-        _userCoins = 0;
-      });
-    }
+    }, onError: (e) {
+      if (kDebugMode) print('Error loading user currency: $e');
+      if (mounted) setState(() { _userDiamonds = 0; _userCoins = 0; });
+    });
   }
 
   Future<void> _setupStockfish() async {
@@ -309,6 +310,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _gameSubscription?.cancel();
     _botMoveTimer?.cancel();
     _betNegotiationSubscription?.cancel();
+    _balanceSubscription?.cancel();
     if (_isStockfishReady && _stockfish != null) {
       _stockfish!.stdin = "quit";
     }
