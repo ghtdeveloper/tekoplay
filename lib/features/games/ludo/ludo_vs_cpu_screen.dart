@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/ludo_game_match.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
@@ -57,6 +58,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   int _moveTimerSeconds = 0;
   static const int _moveTimeoutSeconds = 15;
 
+  Timer? _afkRollTimer;
+  static const int _afkRollTimeoutSeconds = 15;
+
   late AnimationController _diceAnimationController;
   late Animation<double> _diceRotation;
   bool _isRollingDice = false;
@@ -103,6 +107,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _enableWakeLock();
     _gameState = LudoGameState.initial();
     _gameStartTime = DateTime.now();
     _setupActivePlayers();
@@ -127,6 +132,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     _toastController = AnimationController(duration: const Duration(milliseconds: 300), vsync: this);
     _toastAnim = CurvedAnimation(parent: _toastController, curve: Curves.easeOut);
+
+    // Yellow comienza: iniciar temporizador AFK de tirada
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startAfkRollTimer());
   }
 
   void _setupActivePlayers() {
@@ -150,7 +158,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _disableWakeLock();
     _moveTimer?.cancel();
+    _afkRollTimer?.cancel();
     _diceAnimationController.dispose();
     _pulseController.dispose();
     _bounceController.dispose();
@@ -159,9 +169,26 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     super.dispose();
   }
 
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) await WakelockPlus.enable();
+    } catch (_) {}
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) await WakelockPlus.disable();
+    } catch (_) {}
+  }
+
   // ── Lifecycle: en modo apuesta, auto-jugar si la app va a background ───────
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _enableWakeLock();
+    } else if (state == AppLifecycleState.paused) {
+      _disableWakeLock();
+    }
     if (state == AppLifecycleState.paused &&
         widget.matchType == 'Apuesta' &&
         !_gameEnded &&
@@ -206,6 +233,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
   Future<void> _rollDice() async {
     if (!_canRollDice || _gameEnded || _currentPlayer != 'yellow' || _isRollingDice) return;
+    _cancelAfkRollTimer();
 
     setState(() {
       _isRollingDice = true;
@@ -316,8 +344,38 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     if (mounted) setState(() => _moveTimerSeconds = 0);
   }
 
+  /// Inicia temporizador AFK para cuando el jugador no ha tirado los dados.
+  /// Si expira, auto-tira y auto-mueve.
+  void _startAfkRollTimer() {
+    _afkRollTimer?.cancel();
+    if (!mounted || _gameEnded || _currentPlayer != 'yellow') return;
+    _afkRollTimer = Timer(const Duration(seconds: _afkRollTimeoutSeconds), () {
+      if (mounted && !_gameEnded && _currentPlayer == 'yellow' && _canRollDice) {
+        _autoRollAndMove();
+      }
+    });
+  }
+
+  void _cancelAfkRollTimer() {
+    _afkRollTimer?.cancel();
+    _afkRollTimer = null;
+  }
+
   void _autoMove() {
     if (_movablePieces.isEmpty || _gameEnded) return;
+
+    // Si estamos en selección de bonus, auto-elegir la mejor ficha
+    if (_bonusSelectionActive) {
+      final best = _movablePieces.reduce((a, b) {
+        final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition('yellow'));
+        final stB = _stepsFromStart((b['piece'] as LudoPiece).position, _getStartPosition('yellow'));
+        return stA >= stB ? a : b;
+      });
+      setState(() { _bonusSelectionActive = false; _movablePieces.clear(); });
+      _applyBonusTopiece('yellow', best['piece'] as LudoPiece, best['bonusPos'] as int, _bonusHadDouble);
+      return;
+    }
+
     final best = _movablePieces.reduce((a, b) {
       final pa = a['piece'] as LudoPiece;
       final pb = b['piece'] as LudoPiece;
@@ -824,6 +882,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     if (hadDouble) {
       setState(() => _canRollDice = true);
+      if (color == 'yellow') _startAfkRollTimer();
     } else {
       Future.delayed(const Duration(milliseconds: 800), () {
         if (!_gameEnded) _nextTurn();
@@ -873,11 +932,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       _bonusHadDouble = hadDouble;
     });
     _showEventToast('🎯 ¡Comiste! Toca la ficha que quieres mover +20');
+    _startMoveTimer(); // AFK: auto-elegir si el jugador no responde
   }
 
   void _resolveTurnAfterCapture(bool hadDouble) {
     if (hadDouble) {
       setState(() => _canRollDice = true);
+      if (_currentPlayer == 'yellow') _startAfkRollTimer();
     } else {
       Future.delayed(const Duration(milliseconds: 800), () {
         if (!_gameEnded) _nextTurn();
@@ -937,6 +998,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
           _playCpuTurn();
         }
       });
+    } else {
+      // Es el turno del jugador — iniciar temporizador AFK de tirada
+      _startAfkRollTimer();
     }
   }
 

@@ -15,7 +15,7 @@ import 'ludo_board_painter.dart';
 
 class MultiplayerLudoScreen extends StatefulWidget {
   final String gameId;
-  final int playerNumber; // 1–4: which seat I occupy
+  final int playerNumber;
   final String matchType;
 
   const MultiplayerLudoScreen({
@@ -32,21 +32,18 @@ class MultiplayerLudoScreen extends StatefulWidget {
 class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
 
-  // ── Firebase ───────────────────────────────────────────────────────────────
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirestoreService _firestoreService = FirestoreService();
   final LudoGameService _gameService = LudoGameService();
   User? get _currentUser => FirebaseAuth.instance.currentUser;
 
-  // ── Game state ─────────────────────────────────────────────────────────────
   LudoGameMatch? _currentGame;
   StreamSubscription<LudoGameMatch?>? _gameSubscription;
   LudoGameState _gameState = LudoGameState.initial();
   String _myColor = 'yellow';
-  String _currentTurn = 'player1'; // 'player1' … 'player4'
+  String _currentTurn = 'player1';
   bool get _isMyTurn => _currentTurn == 'player${widget.playerNumber}';
 
-  // ── Dice ───────────────────────────────────────────────────────────────────
   int _dice1Value = 0;
   int _dice2Value = 0;
   bool _hasUsedDice1 = false;
@@ -55,21 +52,20 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   int _consecutiveDoubles = 0;
   final Random _random = Random();
 
-  // ── Piece selection ────────────────────────────────────────────────────────
+
   List<Map<String, dynamic>> _movablePieces = [];
   int? _selectedPieceId;
   final List<int> _validMovePositions = [];
   bool _bonusSelectionActive = false;
   bool _bonusHadDouble = false;
-  List<Map<String, dynamic>> _pendingBonusMoves = [];
+  final List<Map<String, dynamic>> _pendingBonusMoves = [];
 
-  // ── Board ──────────────────────────────────────────────────────────────────
   double _boardSize = 0;
   List<String> _activePlayers = ['yellow', 'red', 'green', 'blue'];
 
-  // ── UI ─────────────────────────────────────────────────────────────────────
   bool _gameEnded = false;
   bool _hasUserExited = false;
+  bool _hasDeductedEntryFee = false;
   DateTime? _gameStartTime;
   bool _isScreenKeepOnActive = false;
 
@@ -79,7 +75,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   bool _showTurnBanner = false;
   Color _turnBannerColor = Colors.orange;
 
-  // ── Animations ─────────────────────────────────────────────────────────────
   late AnimationController _pulseController;
   late AnimationController _diceAnimController;
   late Animation<double> _diceRotation;
@@ -88,12 +83,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   late AnimationController _bannerController;
   late Animation<double> _bannerAnim;
 
-  // ── Turn timer ─────────────────────────────────────────────────────────────
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
   static const int _turnTimeoutSeconds = 30;
 
-  // ── Board path (anti-clockwise) ────────────────────────────────────────────
+
   static const List<_Coord> _boardPath = [
     _Coord(6, 1), _Coord(6, 2), _Coord(6, 3), _Coord(6, 4), _Coord(6, 5),
     _Coord(5, 6), _Coord(4, 6), _Coord(3, 6), _Coord(2, 6), _Coord(1, 6), _Coord(0, 6),
@@ -109,7 +103,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _Coord(7, 0), _Coord(6, 0),
   ];
 
-  // ──────────────────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -181,7 +174,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     } catch (_) {}
   }
 
-  // ── Initialization ─────────────────────────────────────────────────────────
   void _initializeGame() {
     _gameSubscription = _gameService
         .getGameStream(widget.gameId)
@@ -201,7 +193,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _setupActivePlayers(game);
     }
 
-    // Sync game state from Firestore (all fields arrive atomically in the snapshot)
     final prevTurn = _currentTurn;
     final newTurn = game.currentTurn;
     final turnChangedToMe = newTurn != prevTurn && newTurn == 'player${widget.playerNumber}';
@@ -210,28 +201,21 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     setState(() {
       _gameState = game.gameState;
       _currentTurn = newTurn;
-      // Sync dice from snapshot when:
-      //  • It's not my turn (always show opponent's dice), OR
-      //  • The turn just switched to me (reset stale dice values)
       if (!isMyTurnNow || turnChangedToMe) {
         _dice1Value = game.dice1;
         _dice2Value = game.dice2;
         _hasUsedDice1 = game.hasUsedDice1;
         _hasUsedDice2 = game.hasUsedDice2;
       }
-      // If it's already been my turn: keep local dice state so Firestore
-      // round-trips don't flicker/overwrite values we just rolled.
     });
 
     if (isMyTurnNow) _calculateMovablePieces();
 
-    // Show banner when turn changes to mine
     if (prevTurn != _currentTurn && _isMyTurn && !_gameEnded) {
       _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
       _startTurnTimer();
     }
 
-    // Game ended check
     if (!_gameEnded && game.isFinished) {
       _gameEnded = true;
       _turnTimer?.cancel();
@@ -243,7 +227,19 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _handleAbandon(game);
     }
 
-    // Detect when Cloud Function distributes rewards → refresh user balance
+    // Descontar cuota de entrada cuando la partida se activa (una sola vez por jugador)
+    if (!_hasDeductedEntryFee && game.isActive && _currentUser != null) {
+      _hasDeductedEntryFee = true;
+      final betAmt = game.betAmount ?? (game.currencyType == 'diamonds' ? 25 : 100);
+      if (betAmt > 0) {
+        if (game.currencyType == 'diamonds') {
+          _firestoreService.incrementUserDiamonds(_currentUser!.uid, -betAmt);
+        } else {
+          _firestoreService.incrementUserCoins(_currentUser!.uid, -betAmt);
+        }
+      }
+    }
+
     if (prevGame != null && !prevGame.rewardsDistributed && game.rewardsDistributed) {
       if (kDebugMode) print('💰 [Ludo] Recompensas distribuidas por Cloud Function');
       Future.delayed(const Duration(seconds: 1), () {
@@ -268,7 +264,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (game.player4Color != null) _activePlayers.add(game.player4Color!);
   }
 
-  // ── Turn timer ─────────────────────────────────────────────────────────────
   void _startTurnTimer() {
     _turnTimer?.cancel();
     setState(() => _turnTimerSeconds = _turnTimeoutSeconds);
@@ -282,9 +277,25 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     });
   }
 
-  void _autoAction() {
+  Future<void> _autoAction() async {
+    if (!mounted || _gameEnded || !_isMyTurn) return;
+
+    // Si hay selección de bonus activa, auto-elegir la primera opción
+    if (_bonusSelectionActive && _pendingBonusMoves.isNotEmpty) {
+      final m = _pendingBonusMoves.first;
+      _executeBonusMove(m['pieceId'] as int, m['bonusPos'] as int);
+      return;
+    }
+
     if (_dice1Value == 0 && _dice2Value == 0) {
-      _rollDice();
+      // Awaitar el lanzamiento y luego auto-mover sin esperar otro ciclo del timer
+      await _rollDice();
+      await Future.delayed(const Duration(milliseconds: 1000));
+      if (!mounted || _gameEnded || !_isMyTurn) return;
+      if (_movablePieces.isNotEmpty) {
+        final m = _movablePieces.first;
+        _executePieceMove(_myColor, m['pieceId'] as int, m['diceValue'] as int, m['diceNumber'] as int);
+      }
     } else if (_movablePieces.isNotEmpty) {
       final m = _movablePieces.first;
       _executePieceMove(_myColor, m['pieceId'] as int, m['diceValue'] as int, m['diceNumber'] as int);
@@ -293,10 +304,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
   }
 
-  // ── Dice roll ──────────────────────────────────────────────────────────────
   Future<void> _rollDice() async {
     if (!_isMyTurn || _gameEnded || _isRollingDice) return;
-    if (_dice1Value != 0 || _dice2Value != 0) return; // already rolled
+    if (_dice1Value != 0 || _dice2Value != 0) return;
 
     setState(() { _isRollingDice = true; });
     _diceAnimController.repeat();
@@ -331,7 +341,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _isRollingDice = false;
     });
 
-    // Persist dice to Firestore so opponents see them
     await _syncDiceToFirestore(d1, d2, false, false);
 
     _calculateMovablePieces();
@@ -339,6 +348,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _showEventToast('Sin movimientos válidos. Turno perdido.');
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) await _advanceTurn();
+    } else {
+      _startTurnTimer();
     }
   }
 
@@ -357,7 +368,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Future<void> _applyTripleDoublesPenalty() async {
-    // Send all on-board pieces back home
     for (final color in _activePlayers) {
       final pieces = _gameState.getPiecesByColor(color);
       for (final p in pieces) {
@@ -367,7 +377,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     await _syncGameState(advanceTurn: true);
   }
 
-  // ── Movable-piece calculation ──────────────────────────────────────────────
   void _calculateMovablePieces() {
     _movablePieces.clear();
     final pieces = _gameState.getPiecesByColor(_myColor);
@@ -411,10 +420,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return _canLandOn(_myColor, np, piece);
   }
 
-  // ── Board tap ──────────────────────────────────────────────────────────────
   void _handleBoardTap(Offset local) {
     if (!_isMyTurn || _gameEnded || _boardSize == 0) return;
-    if (_dice1Value == 0 && _dice2Value == 0) return;
+    if (_dice1Value == 0 && _dice2Value == 0 && !_bonusSelectionActive) return;
 
     final sq = _boardSize / 15;
     final tapR = sq * 0.7;
@@ -500,7 +508,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     );
   }
 
-  // ── Piece movement ─────────────────────────────────────────────────────────
   void _executePieceMove(String color, int pieceId, int diceValue, int diceNumber) {
     if (color != _myColor || _gameEnded) return;
     _turnTimer?.cancel();
@@ -598,7 +605,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _bonusHadDouble = hadDouble;
     _showEventToast('¡Capturaste! Elige una ficha para el bonus +20', color: Colors.green);
 
-    // Populate movable pieces for highlighting
     _movablePieces = _pendingBonusMoves.map((m) => {
       ...m, 'diceValue': 20, 'diceNumber': 0,
     }).toList();
@@ -669,7 +675,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return 'player1';
   }
 
-  // ── Game logic helpers ─────────────────────────────────────────────────────
   int? _calculateNewPosition(LudoPiece piece, int diceValue, String color) {
     if (piece.isHome) return _getStartPosition(color);
     if (piece.position >= 52) {
@@ -763,13 +768,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   bool _isSafeForColor(int pos, String color) {
-    // Solo las casillas estrella son seguras (dos colores pueden coexistir).
-    // Las posiciones de salida (0,13,26,39) NO son seguras: la captura ya está
-    // impedida en _canLandOn cuando el dueño tiene fichas ahí.
     return const {4, 8, 17, 21, 30, 34, 43, 47}.contains(pos);
   }
 
-  // ── Screen positions ───────────────────────────────────────────────────────
   Offset? _getPieceScreenPosition(LudoPiece piece, String color, double sq) {
     if (piece.isHome) return _getHomeScreenPos(color, piece.id, sq);
     if (piece.isFinished) return null;
@@ -819,13 +820,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return positions[id];
   }
 
-  // ── Game end ───────────────────────────────────────────────────────────────
   void _endGame(String winnerColor) {
     if (_gameEnded) return;
     setState(() => _gameEnded = true);
     _turnTimer?.cancel();
 
-    // Mark game as finished in Firestore so the Cloud Function distributes rewards
     _firestore.collection('ludo_games').doc(widget.gameId).update({
       'status': 'finished',
       'winnerId': _currentUser?.uid,
@@ -857,7 +856,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       });
       _showEndDialog('Un jugador abandonó. ¡Ganaste! 🎉', game);
     } else {
-      // The stream confirmed we abandoned — record loss if not already done
       if (!_hasUserExited) {
         _recordResult(GameResultModel.loss).then((_) {
           _reloadUserCurrency();
@@ -1056,7 +1054,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
-  // ── Toast / Banner ─────────────────────────────────────────────────────────
+
   void _showEventToast(String msg, {Color color = Colors.orange}) {
     if (!mounted) return;
     setState(() { _toastMessage = msg; _showToast = true; });
@@ -1087,7 +1085,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     });
   }
 
-  // ── Colors / names ─────────────────────────────────────────────────────────
   Color _getPlayerColor(String color) {
     switch (color) {
       case 'yellow': return const Color(0xFFFFD700);
@@ -1108,7 +1105,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -1142,7 +1138,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           children: [
             Column(
               children: [
-                _buildPlayersInfo(),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
@@ -1166,31 +1161,37 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                               final currentColor = _currentGame != null
                                   ? _colorForCurrentTurn()
                                   : _myColor;
-                              return Container(
-                                width: sz, height: sz,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _getPlayerColor(currentColor).withValues(alpha: 0.35),
-                                      blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                              return Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    width: sz, height: sz,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: _getPlayerColor(currentColor).withValues(alpha: 0.35),
+                                          blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                                        ),
+                                        BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                                      ],
                                     ),
-                                    BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
-                                  ],
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: CustomPaint(
-                                    painter: LudoBoardPainter(
-                                      gameState: _gameState,
-                                      highlightedPieceColor: _isMyTurn ? _myColor : null,
-                                      highlightedPieceId: _selectedPieceId,
-                                      validMovePositions: _validMovePositions,
-                                      pulseValue: _pulseController.value,
-                                      movableKeys: movableKeys,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: CustomPaint(
+                                        painter: LudoBoardPainter(
+                                          gameState: _gameState,
+                                          highlightedPieceColor: _isMyTurn ? _myColor : null,
+                                          highlightedPieceId: _selectedPieceId,
+                                          validMovePositions: _validMovePositions,
+                                          pulseValue: _pulseController.value,
+                                          movableKeys: movableKeys,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                  _buildBoardPlayerLabels(sz),
+                                ],
                               );
                             },
                           ),
@@ -1199,11 +1200,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                     }),
                   ),
                 ),
+                _buildChatWidget(),
                 _buildControls(),
                 const BannerAdWidget(),
               ],
             ),
-            // Turn banner
             if (_showTurnBanner)
               Positioned(
                 top: 90, left: 0, right: 0,
@@ -1235,7 +1236,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                   ),
                 ),
               ),
-            // Toast
             if (_showToast)
               Positioned(
                 bottom: 120, left: 20, right: 20,
@@ -1278,7 +1278,59 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
   }
 
-  // ── Players info bar ───────────────────────────────────────────────────────
+  Widget _buildBoardPlayerLabels(double sz) {
+    if (_currentGame == null) return const SizedBox.shrink();
+    final activeColor = _colorForCurrentTurn();
+    const pad = 8.0;
+
+    final colorNames = <String, String>{};
+    void addPlayer(int n, String? color, String? name) {
+      if (color == null) return;
+      colorNames[color] = (n == widget.playerNumber) ? 'Tú' : (name ?? 'J$n').split(' ').first;
+    }
+    addPlayer(1, _currentGame!.player1Color, _currentGame!.hostName);
+    addPlayer(2, _currentGame!.player2Color, _currentGame!.guest2Name);
+    addPlayer(3, _currentGame!.player3Color, _currentGame!.guest3Name);
+    addPlayer(4, _currentGame!.player4Color, _currentGame!.guest4Name);
+
+    Widget lbl(String color, {double? top, double? bottom, double? left, double? right}) {
+      final name = colorNames[color];
+      if (name == null) return const SizedBox.shrink();
+      final pc = _getPlayerColor(color);
+      final isActive = color == activeColor;
+      final isMe = name == 'Tú';
+      return Positioned(
+        top: top, bottom: bottom, left: left, right: right,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: isActive ? pc.withValues(alpha: 0.90) : Colors.black.withValues(alpha: 0.50),
+            borderRadius: BorderRadius.circular(12),
+            border: isMe ? Border.all(color: Colors.white, width: 1.5) : null,
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4)],
+          ),
+          child: Text(
+            name,
+            style: TextStyle(
+              color: Colors.white, fontSize: 11,
+              fontWeight: (isMe || isActive) ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: sz, height: sz,
+      child: Stack(children: [
+        lbl('green',  top: pad,    left: pad),
+        lbl('yellow', top: pad,    right: pad),
+        lbl('red',    bottom: pad, left: pad),
+        lbl('blue',   bottom: pad, right: pad),
+      ]),
+    );
+  }
+
   Widget _buildPlayersInfo() {
     if (_currentGame == null) {
       return const SizedBox(height: 50,
@@ -1290,12 +1342,15 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       players.add({'n': n, 'id': id, 'name': name ?? 'Jugador', 'photo': photo, 'color': color});
     }
     add(1, _currentGame!.hostId, _currentGame!.hostName, _currentGame!.hostPhotoUrl, _currentGame!.player1Color);
-    if (_currentGame!.guest2Id != null)
+    if (_currentGame!.guest2Id != null) {
       add(2, _currentGame!.guest2Id, _currentGame!.guest2Name, _currentGame!.guest2PhotoUrl, _currentGame!.player2Color ?? 'red');
-    if (_currentGame!.guest3Id != null)
+    }
+    if (_currentGame!.guest3Id != null) {
       add(3, _currentGame!.guest3Id, _currentGame!.guest3Name, _currentGame!.guest3PhotoUrl, _currentGame!.player3Color ?? 'blue');
-    if (_currentGame!.guest4Id != null)
+    }
+    if (_currentGame!.guest4Id != null) {
       add(4, _currentGame!.guest4Id, _currentGame!.guest4Name, _currentGame!.guest4PhotoUrl, _currentGame!.player4Color ?? 'green');
+    }
 
     return Container(
       height: 56,
@@ -1344,7 +1399,67 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     );
   }
 
-  // ── Controls ───────────────────────────────────────────────────────────────
+  // ── Chat placeholder — implementación completa próximamente ─────────────────
+  Widget _buildChatWidget() {
+    const quickEmojis = ['😂', '😤', '💀', '🫡', '🔥', '😈', '👑', '🤡'];
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: 32,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                itemCount: quickEmojis.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 4),
+                itemBuilder: (_, i) => Material(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: null, // TODO: enviar emoji al chat
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      child: Text(quickEmojis[i], style: const TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: null, // TODO: abrir chat completo
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEC7A34).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFEC7A34).withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.chat_bubble_outline, size: 14, color: Color(0xFFEC7A34)),
+                  SizedBox(width: 4),
+                  Text('Chat', style: TextStyle(fontSize: 12, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+
   Widget _buildControls() {
     final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice;
     final isOpponentTurn = !_isMyTurn && !_gameEnded;
@@ -1355,12 +1470,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       color: Colors.white,
       child: Row(
         children: [
-          // Dice display
           _buildDiceWidget(_dice1Value, _hasUsedDice1),
           const SizedBox(width: 8),
           _buildDiceWidget(_dice2Value, _hasUsedDice2),
           const SizedBox(width: 12),
-          // Turn info / Roll button
           Expanded(
             child: isOpponentTurn
                 ? _buildWaitingIndicator(currentColor)
@@ -1370,7 +1483,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                         ? _buildSelectPieceHint()
                         : const SizedBox.shrink(),
           ),
-          // Timer
           if (_isMyTurn && !_gameEnded && _turnTimerSeconds > 0)
             _buildTimer(),
         ],
@@ -1463,7 +1575,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 }
 
-// ── Dice dots painter ────────────────────────────────────────────────────────
+
 class DiceDotsPainter extends CustomPainter {
   final int value;
   DiceDotsPainter(this.value);
@@ -1496,7 +1608,6 @@ class DiceDotsPainter extends CustomPainter {
   bool shouldRepaint(DiceDotsPainter old) => old.value != value;
 }
 
-// ── Helper class ──────────────────────────────────────────────────────────────
 class _Coord {
   final int col;
   final int row;

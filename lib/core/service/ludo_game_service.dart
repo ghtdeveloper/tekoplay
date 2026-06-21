@@ -517,19 +517,28 @@ class LudoGameService {
   /// Buscar partidas disponibles para matchmaking
   Future<List<LudoGameMatch>> findWaitingGames({
     required int numberOfPlayers,
+    String? currencyType,
   }) async {
     try {
-      final query = await _firestore
+      // Sin orderBy para evitar requerir índice compuesto en Firestore
+      var query = _firestore
           .collection(_gamesCollection)
           .where('status', isEqualTo: 'waiting')
-          .where('gameSettings.numberOfPlayers', isEqualTo: numberOfPlayers)
-          .orderBy('createdAt', descending: false)
-          .limit(10)
-          .get();
+          .limit(20);
 
-      return query.docs
+      final snapshot = await query.get();
+      final results = snapshot.docs
           .map((doc) => LudoGameMatch.fromFirestore(doc))
+          .where((g) {
+            if ((g.gameSettings?['numberOfPlayers'] ?? 4) != numberOfPlayers) return false;
+            if (currencyType != null && g.currencyType != currencyType) return false;
+            return true;
+          })
           .toList();
+
+      // Ordenar por creación (más antiguo primero) en el cliente
+      results.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return results.take(10).toList();
     } catch (e) {
       if (kDebugMode) {
         print('Error finding waiting games: $e');

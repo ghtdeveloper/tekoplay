@@ -902,9 +902,9 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
         });
 
         console.log(`\n✅ [Ludo ${gameId}] Distribución completada:`);
-        console.log(`   Host:  ${hostDiamonds} + ${hostReward} = ${hostNewDiamonds} 💎 (net: ${hostNetGain})`);
-        console.log(`   Guest: ${guestDiamonds} + ${guestReward} = ${guestNewDiamonds} 💎 (net: ${guestNetGain})`);
-        console.log(`   Casa:  ${houseCommission} 💎\n`);
+        console.log(`   Host:  ${hostBalance} + ${hostReward} = ${hostNewBalance} (net: ${hostNetGain})`);
+        console.log(`   Guest: ${guestBalance} + ${guestReward} = ${guestNewBalance} (net: ${guestNetGain})`);
+        console.log(`   Casa:  ${houseCommission}\n`);
       });
 
       return null;

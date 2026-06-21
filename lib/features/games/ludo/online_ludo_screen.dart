@@ -28,17 +28,14 @@ class OnlineLudoScreen extends StatefulWidget {
 class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
 
-  // ── Firebase ───────────────────────────────────────────────────────────────
   final LudoGameService _gameService = LudoGameService();
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   User? get _currentUser => FirebaseAuth.instance.currentUser;
 
-  // ── Screen state ───────────────────────────────────────────────────────────
   _LudoOnlineState _screenState = _LudoOnlineState.playerCountSelection;
   int _selectedPlayerCount = 2;
 
-  // ── Matchmaking ────────────────────────────────────────────────────────────
   String? _activeGameId;
   int? _myPlayerNumber;
   LudoGameMatch? _currentRoomGame;
@@ -49,16 +46,13 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   bool _isSearching = false;
   bool _navigated = false;
 
-  // ── User info ──────────────────────────────────────────────────────────────
   String? _myName;
   String? _myPhotoUrl;
   int? _userCoins;
   int? _userDiamonds;
 
-  // ── Bot / Game (gameActive state) ──────────────────────────────────────────
   bool _isPlayingAgainstBot = false;
 
-  // Fake bot profiles
   static const List<Map<String, String>> _botProfiles = [
     {'name': 'Carlos_MX99',   'emoji': '😎'},
     {'name': 'luisR_2024',    'emoji': '🎮'},
@@ -73,12 +67,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   String _opponentName   = '';
   String _opponentEmoji  = '🎮';
 
-  // ── Ludo game state ────────────────────────────────────────────────────────
   LudoGameState _gameState = LudoGameState.initial();
   String _myColor   = 'yellow';
   String _botColor  = 'red';
   List<String> _activePlayers = ['yellow', 'red'];
-  String _currentPlayer = 'yellow'; // which color's turn
+  String _currentPlayer = 'yellow';
   bool get _isMyTurn => _currentPlayer == _myColor;
 
   int _dice1Value = 0;
@@ -234,20 +227,21 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (!mounted) { t.cancel(); return; }
       setState(() => _matchmakingSeconds++);
 
-      if (_matchmakingSeconds % 5 == 0 && !_isPlayingAgainstBot) {
-        if (_screenState == _LudoOnlineState.waitingRoom ||
-            _screenState == _LudoOnlineState.gameActive ||
-            _navigated) {
-          t.cancel();
-          return;
-        }
+      if (_screenState == _LudoOnlineState.gameActive || _navigated) {
+        t.cancel();
+        return;
+      }
+
+      if (_matchmakingSeconds % 5 == 0 && !_isPlayingAgainstBot &&
+          _screenState == _LudoOnlineState.matchmaking) {
         _tryJoinExistingGame();
       }
 
-      const int maxWait = 20;
+      const int maxWait = 30;
       if (_matchmakingSeconds >= maxWait &&
           !_isPlayingAgainstBot &&
-          _screenState == _LudoOnlineState.matchmaking &&
+          (_screenState == _LudoOnlineState.matchmaking ||
+           _screenState == _LudoOnlineState.waitingRoom) &&
           !_navigated) {
         t.cancel();
         _startBotGame();
@@ -260,7 +254,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   Future<void> _tryJoinExistingGame() async {
     if (_screenState != _LudoOnlineState.matchmaking || _isPlayingAgainstBot) return;
     try {
-      final waiting = await _gameService.findWaitingGames(numberOfPlayers: _selectedPlayerCount);
+      final ct = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
+      final waiting = await _gameService.findWaitingGames(
+        numberOfPlayers: _selectedPlayerCount,
+        currencyType: ct,
+      );
       final eligible = waiting.where((g) {
         return g.gameSettings?['isOnlineMatchmaking'] == true &&
             DateTime.now().difference(g.createdAt).inSeconds < 120 &&
@@ -276,7 +274,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   Future<void> _findOrCreateGame() async {
     try {
-      final waiting = await _gameService.findWaitingGames(numberOfPlayers: _selectedPlayerCount);
+      final ct = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
+      final waiting = await _gameService.findWaitingGames(
+        numberOfPlayers: _selectedPlayerCount,
+        currencyType: ct,
+      );
       final eligible = waiting.where((g) {
         return g.gameSettings?['isOnlineMatchmaking'] == true &&
             DateTime.now().difference(g.createdAt).inSeconds < 120 &&
@@ -309,7 +311,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (gameId == null || !mounted) return;
       _activeGameId = gameId;
       _myPlayerNumber = 1;
-      _matchmakingTimer?.cancel();
       setState(() => _screenState = _LudoOnlineState.waitingRoom);
       _listenToRoomGame(gameId);
       _startKeepAlive(gameId);
@@ -401,7 +402,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     }
   }
 
-  // ── BOT GAME ───────────────────────────────────────────────────────────────
   void _startBotGame() {
     if (_isPlayingAgainstBot || _navigated) return;
     if (_screenState == _LudoOnlineState.gameActive) return;
@@ -447,8 +447,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _consecutiveDoubles = 0;
       _movablePieces.clear();
       _screenState = _LudoOnlineState.gameActive;
-      if (isBet) _userDiamonds = (_userDiamonds ?? 0) - cost;
-      else _userCoins = (_userCoins ?? 0) - cost;
+      if (isBet) {
+        _userDiamonds = (_userDiamonds ?? 0) - cost;
+      } else {
+        _userCoins = (_userCoins ?? 0) - cost;
+      }
     });
 
     _enableWakeLock();
@@ -486,9 +489,25 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     });
   }
 
-  void _autoAction() {
+  Future<void> _autoAction() async {
+    if (!mounted || _gameEnded || !_isMyTurn) return;
+
+    if (_bonusSelectionActive && _pendingBonusMoves.isNotEmpty) {
+      final m = _pendingBonusMoves.first;
+      _executeBonusMove(_myColor, m['pieceId'] as int, m['bonusPos'] as int, _bonusHadDouble);
+      return;
+    }
+
     if (_dice1Value == 0 && _dice2Value == 0) {
-      _rollDice();
+      // Awaitar el lanzamiento y luego auto-mover sin esperar otro ciclo del timer
+      await _rollDice();
+      await Future.delayed(const Duration(milliseconds: 1000));
+      if (!mounted || _gameEnded || !_isMyTurn) return;
+      if (_movablePieces.isNotEmpty) {
+        final m = _movablePieces.first;
+        _executePieceMove(_myColor, m['pieceId'] as int,
+            m['diceValue'] as int, m['diceNumber'] as int);
+      }
     } else if (_movablePieces.isNotEmpty) {
       final m = _movablePieces.first;
       _executePieceMove(_myColor, m['pieceId'] as int,
@@ -1079,7 +1098,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _turnTimer?.cancel();
     final isWin = winnerColor == _myColor;
 
-    // Credit prize to winner
     if (isWin && _currentUser != null) {
       final isBet = widget.matchType == 'Apuesta';
       final betAmount = isBet ? 25 : 100;
@@ -1201,8 +1219,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     }
 
     setState(() {
-      if (isBet) _userDiamonds = (_userDiamonds ?? 0) - cost;
-      else _userCoins = (_userCoins ?? 0) - cost;
+      if (isBet) {
+        _userDiamonds = (_userDiamonds ?? 0) - cost;
+      } else {
+        _userCoins = (_userCoins ?? 0) - cost;
+      }
       _gameState = LudoGameState.initial();
       _currentPlayer = 'yellow';
       _dice1Value = 0; _dice2Value = 0;
@@ -1296,7 +1317,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                     ],
                   ),
                 );
-                if (confirm == true) _endGame(_botColor); // bot wins on abandon
+                if (confirm == true) _endGame(_botColor);
               },
             ),
         ],
@@ -1328,7 +1349,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       children: [
         Column(
           children: [
-            _buildGamePlayersBar(),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
@@ -1353,30 +1373,36 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                               movableKeys.add('$_myColor-${m['pieceId']}');
                             }
                           }
-                          return Container(
-                            width: sz, height: sz,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.35),
-                                  blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: sz, height: sz,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.35),
+                                      blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: CustomPaint(
-                                painter: LudoBoardPainter(
-                                  gameState: _gameState,
-                                  highlightedPieceColor: _isMyTurn ? _myColor : null,
-                                  highlightedPieceId: _selectedPieceId,
-                                  validMovePositions: _validMovePositions,
-                                  pulseValue: _pulseController.value,
-                                  movableKeys: movableKeys,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: CustomPaint(
+                                    painter: LudoBoardPainter(
+                                      gameState: _gameState,
+                                      highlightedPieceColor: _isMyTurn ? _myColor : null,
+                                      highlightedPieceId: _selectedPieceId,
+                                      validMovePositions: _validMovePositions,
+                                      pulseValue: _pulseController.value,
+                                      movableKeys: movableKeys,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              _buildBoardPlayerLabels(sz),
+                            ],
                           );
                         },
                       ),
@@ -1385,6 +1411,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                 }),
               ),
             ),
+            _buildChatWidget(),
             _buildGameControls(),
           ],
         ),
@@ -1441,6 +1468,51 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildBoardPlayerLabels(double sz) {
+    const pad = 8.0;
+    final colorNames = <String, String>{
+      _myColor: 'Tú',
+      _botColor: _opponentName.isEmpty ? 'Bot' : _opponentName.split(' ').first,
+    };
+
+    Widget lbl(String color, {double? top, double? bottom, double? left, double? right}) {
+      final name = colorNames[color];
+      if (name == null) return const SizedBox.shrink();
+      final pc = _getPlayerColor(color);
+      final isActive = color == _currentPlayer;
+      final isMe = color == _myColor;
+      return Positioned(
+        top: top, bottom: bottom, left: left, right: right,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: isActive ? pc.withValues(alpha: 0.90) : Colors.black.withValues(alpha: 0.50),
+            borderRadius: BorderRadius.circular(12),
+            border: isMe ? Border.all(color: Colors.white, width: 1.5) : null,
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4)],
+          ),
+          child: Text(
+            name,
+            style: TextStyle(
+              color: Colors.white, fontSize: 11,
+              fontWeight: (isMe || isActive) ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: sz, height: sz,
+      child: Stack(children: [
+        lbl('green',  top: pad,    left: pad),
+        lbl('yellow', top: pad,    right: pad),
+        lbl('red',    bottom: pad, left: pad),
+        lbl('blue',   bottom: pad, right: pad),
+      ]),
     );
   }
 
@@ -1575,6 +1647,66 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     );
   }
 
+  Widget _buildChatWidget() {
+    const quickEmojis = ['😂', '😤', '💀', '🫡', '🔥', '😈', '👑', '🤡'];
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: 32,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                itemCount: quickEmojis.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 4),
+                itemBuilder: (_, i) => Material(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: null, // TODO: enviar emoji al chat
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      child: Text(quickEmojis[i], style: const TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEC7A34).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFEC7A34).withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.chat_bubble_outline, size: 14, color: Color(0xFFEC7A34)),
+                  SizedBox(width: 4),
+                  Text('Chat', style: TextStyle(fontSize: 12, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGameControls() {
     final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice;
     return Container(
@@ -1678,7 +1810,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       child: Column(
         children: [
           const SizedBox(height: 16),
-          // Header card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
