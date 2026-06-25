@@ -255,6 +255,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _matchmakingSeconds = 0;
       _screenState = _LudoOnlineState.matchmaking;
     });
+    _enableWakeLock();
 
     _matchmakingTimer = Timer.periodic(const Duration(seconds: 2), (t) {
       if (!mounted) { t.cancel(); return; }
@@ -265,21 +266,21 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         return;
       }
 
-      if (!_isPlayingAgainstBot &&
-          (_screenState == _LudoOnlineState.matchmaking ||
-           _screenState == _LudoOnlineState.waitingRoom)) {
-        _tryJoinExistingGame();
-      }
-
-      const int maxWait = 15;
+      const int maxWait = 30;
       if (_matchmakingSeconds >= maxWait &&
           !_isPlayingAgainstBot &&
-          !_isJoiningGame &&
           (_screenState == _LudoOnlineState.matchmaking ||
            _screenState == _LudoOnlineState.waitingRoom) &&
           !_navigated) {
         t.cancel();
         _startBotGame();
+        return;
+      }
+
+      if (!_isPlayingAgainstBot &&
+          (_screenState == _LudoOnlineState.matchmaking ||
+           _screenState == _LudoOnlineState.waitingRoom)) {
+        _tryJoinExistingGame();
       }
     });
 
