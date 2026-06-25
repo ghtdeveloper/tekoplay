@@ -35,6 +35,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   _LudoOnlineState _screenState = _LudoOnlineState.playerCountSelection;
   int _selectedPlayerCount = 2;
+  int? _selectedBetAmount;
+
+  static const List<int> _betOptions = [10, 20, 50, 100, 250, 500, 1000, 5000, 10000];
 
   String? _activeGameId;
   int? _myPlayerNumber;
@@ -46,6 +49,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   Timer? _keepAliveTimer;
   bool _isSearching = false;
   bool _navigated = false;
+  bool _isJoiningGame = false;
 
   String? _myName;
   String? _myPhotoUrl;
@@ -93,7 +97,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   double _boardSize = 0;
   DateTime? _gameStartTime;
   bool _isScreenKeepOnActive = false;
-  final bool _isBotThinking = false;
+  bool _isBotThinking = false;
+  bool _botExecuting = false;
+  Timer? _botSafetyTimer;
 
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
@@ -164,6 +170,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _matchmakingTimer?.cancel();
     _keepAliveTimer?.cancel();
     _turnTimer?.cancel();
+    _botSafetyTimer?.cancel();
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
     _pulseController.dispose();
@@ -233,8 +240,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   Future<void> _startMatchmaking() async {
     if (_currentUser == null || _isSearching) return;
     final isBet = widget.matchType == 'Apuesta';
+    if (isBet && _selectedBetAmount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona el monto de la apuesta antes de buscar partida.')),
+      );
+      return;
+    }
     final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
-    if (balance < (isBet ? 25 : 100)) { _showInsufficientFundsDialog(); return; }
+    final minRequired = isBet ? _selectedBetAmount! : 100;
+    if (balance < minRequired) { _showInsufficientFundsDialog(); return; }
 
     setState(() {
       _isSearching = true;
@@ -242,23 +256,25 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _screenState = _LudoOnlineState.matchmaking;
     });
 
-    _matchmakingTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+    _matchmakingTimer = Timer.periodic(const Duration(seconds: 2), (t) {
       if (!mounted) { t.cancel(); return; }
-      setState(() => _matchmakingSeconds++);
+      setState(() => _matchmakingSeconds += 2);
 
       if (_screenState == _LudoOnlineState.gameActive || _navigated) {
         t.cancel();
         return;
       }
 
-      if (_matchmakingSeconds % 5 == 0 && !_isPlayingAgainstBot &&
-          _screenState == _LudoOnlineState.matchmaking) {
+      if (!_isPlayingAgainstBot &&
+          (_screenState == _LudoOnlineState.matchmaking ||
+           _screenState == _LudoOnlineState.waitingRoom)) {
         _tryJoinExistingGame();
       }
 
-      const int maxWait = 30;
+      const int maxWait = 15;
       if (_matchmakingSeconds >= maxWait &&
           !_isPlayingAgainstBot &&
+          !_isJoiningGame &&
           (_screenState == _LudoOnlineState.matchmaking ||
            _screenState == _LudoOnlineState.waitingRoom) &&
           !_navigated) {
@@ -271,24 +287,47 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   Future<void> _tryJoinExistingGame() async {
-    if (_screenState != _LudoOnlineState.matchmaking || _isPlayingAgainstBot) return;
+    if (_isPlayingAgainstBot || _navigated || _isJoiningGame) return;
+    final isSearching = _screenState == _LudoOnlineState.matchmaking ||
+        _screenState == _LudoOnlineState.waitingRoom;
+    if (!isSearching) return;
+
+    _isJoiningGame = true;
     try {
       final ct = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
       final waiting = await _gameService.findWaitingGames(
         numberOfPlayers: _selectedPlayerCount,
         currencyType: ct,
       );
+      final myUid = _currentUser?.uid ?? '';
       final eligible = waiting.where((g) {
-        return g.gameSettings?['isOnlineMatchmaking'] == true &&
-            DateTime.now().difference(g.createdAt).inSeconds < 120 &&
-            g.playerCount < _selectedPlayerCount &&
-            g.hostId != (_currentUser?.uid ?? '');
+        if (g.gameSettings?['isOnlineMatchmaking'] != true) return false;
+        if (DateTime.now().difference(g.createdAt).inSeconds >= 120) return false;
+        if (g.playerCount >= _selectedPlayerCount) return false;
+        if (g.hostId == myUid) return false;
+        if (_activeGameId != null && g.id == _activeGameId) return false;
+        if (ct == 'diamonds' && _selectedBetAmount != null && g.betAmount != _selectedBetAmount) return false;
+        return true;
       }).toList();
-      if (eligible.isNotEmpty && mounted &&
-          _screenState == _LudoOnlineState.matchmaking) {
-        await _joinGame(eligible.first);
+
+      if (eligible.isEmpty || !mounted || _navigated || _isPlayingAgainstBot) return;
+
+      if (_screenState == _LudoOnlineState.waitingRoom && _activeGameId != null) {
+        _gameSubscription?.cancel();
+        _keepAliveTimer?.cancel();
+        _firestore.collection('ludo_games').doc(_activeGameId).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+        _activeGameId = null;
+        setState(() => _screenState = _LudoOnlineState.matchmaking);
       }
-    } catch (_) {}
+
+      await _joinGame(eligible.first);
+    } catch (_) {
+    } finally {
+      _isJoiningGame = false;
+    }
   }
 
   Future<void> _findOrCreateGame() async {
@@ -299,10 +338,12 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         currencyType: ct,
       );
       final eligible = waiting.where((g) {
-        return g.gameSettings?['isOnlineMatchmaking'] == true &&
-            DateTime.now().difference(g.createdAt).inSeconds < 120 &&
-            g.playerCount < _selectedPlayerCount &&
-            g.hostId != (_currentUser?.uid ?? '');
+        if (g.gameSettings?['isOnlineMatchmaking'] != true) return false;
+        if (DateTime.now().difference(g.createdAt).inSeconds >= 120) return false;
+        if (g.playerCount >= _selectedPlayerCount) return false;
+        if (g.hostId == (_currentUser?.uid ?? '')) return false;
+        if (ct == 'diamonds' && _selectedBetAmount != null && g.betAmount != _selectedBetAmount) return false;
+        return true;
       }).toList();
 
       if (eligible.isNotEmpty) {
@@ -324,6 +365,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         hostName: _myName ?? 'Jugador',
         hostPhotoUrl: _myPhotoUrl,
         currencyType: widget.matchType == 'Apuesta' ? 'diamonds' : 'coins',
+        betAmount: widget.matchType == 'Apuesta' ? _selectedBetAmount : null,
         numberOfPlayers: _selectedPlayerCount,
         isOnlineMatchmaking: true,
       );
@@ -434,9 +476,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _keepAliveTimer?.cancel();
     _gameSubscription?.cancel();
 
-    // Deduct entry cost
     final isBet = widget.matchType == 'Apuesta';
-    final cost = isBet ? 25 : 100;
+    final cost = isBet ? (_selectedBetAmount ?? 25) : 100;
     if (_currentUser != null) {
       if (isBet) {
         _firestoreService.incrementUserDiamonds(_currentUser!.uid, -cost);
@@ -709,7 +750,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (color == _myColor) {
         _startTurnTimer();
       } else {
-        _scheduleBotMove();
+        Future.delayed(Duration(milliseconds: 400 + _random.nextInt(400)), _executeBotBestMove);
       }
       return;
     }
@@ -723,9 +764,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (color == _myColor) {
         _startTurnTimer();
       } else {
+        _clearBotExecution();
         _scheduleBotMove();
       }
     } else {
+      if (color != _myColor) _clearBotExecution();
       _nextTurn();
     }
   }
@@ -748,9 +791,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         if (color == _myColor) {
           _startTurnTimer();
         } else {
+          _clearBotExecution();
           _scheduleBotMove();
         }
       } else {
+        if (color != _myColor) _clearBotExecution();
         _nextTurn();
       }
       return;
@@ -797,9 +842,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (color == _myColor) {
         _startTurnTimer();
       } else {
+        _clearBotExecution();
         _scheduleBotMove();
       }
     } else {
+      if (color != _myColor) _clearBotExecution();
       _nextTurn();
     }
   }
@@ -878,8 +925,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         }
       }
     }
-
-    // Regla: doble con barrera propia → el primer movimiento debe abrir la barrera
+    
     if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
       final barrIndices = _getBarreraIndices(_currentPlayer);
       if (barrIndices.isNotEmpty) {
@@ -900,10 +946,35 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     return _canLandOn(_currentPlayer, np, piece);
   }
 
+  void _clearBotExecution() {
+    _botSafetyTimer?.cancel();
+    _botExecuting = false;
+  }
+
   void _scheduleBotMove() {
     if (_gameEnded || !_isPlayingAgainstBot || _currentPlayer != _botColor) return;
-    final thinkTime = 800 + _random.nextInt(1200);
-    Future.delayed(Duration(milliseconds: thinkTime), _executeBotTurn);
+    if (_botExecuting) return; // Prevent concurrent bot executions
+    _botExecuting = true;
+    setState(() => _isBotThinking = true);
+    // Safety timer: if bot gets stuck, force next turn after 6s
+    _botSafetyTimer?.cancel();
+    _botSafetyTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted && !_gameEnded && _currentPlayer == _botColor) {
+        _botExecuting = false;
+        _dice1Value = 0;
+        _dice2Value = 0;
+        _hasUsedDice1 = false;
+        _hasUsedDice2 = false;
+        _movablePieces.clear();
+        setState(() => _isBotThinking = false);
+        _nextTurn();
+      }
+    });
+    final thinkTime = 600 + _random.nextInt(800);
+    Future.delayed(Duration(milliseconds: thinkTime), () {
+      if (mounted) setState(() => _isBotThinking = false);
+      _executeBotTurn();
+    });
   }
 
   Future<void> _executeBotTurn() async {
@@ -949,7 +1020,21 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   Future<void> _executeBotBestMove() async {
-    if (_movablePieces.isEmpty || _gameEnded || _currentPlayer != _botColor) return;
+    if (_gameEnded || _currentPlayer != _botColor) return;
+    _calculateMovablePieces();
+    if (_movablePieces.isEmpty) {
+      final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
+      _dice1Value = 0; _dice2Value = 0;
+      _hasUsedDice1 = false; _hasUsedDice2 = false;
+      setState(() {});
+      _clearBotExecution();
+      if (hadDouble) {
+        _scheduleBotMove();
+      } else {
+        _nextTurn();
+      }
+      return;
+    }
 
     int bestScore = -1;
     Map<String, dynamic>? bestMove;
@@ -1156,6 +1241,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (_gameEnded) return;
     setState(() => _gameEnded = true);
     _turnTimer?.cancel();
+    _botSafetyTimer?.cancel();
     final isWin = winnerColor == _myColor;
 
     if (isWin && _currentUser != null) {
@@ -1266,7 +1352,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   void _restartBotGame() {
     final isBet = widget.matchType == 'Apuesta';
-    final cost = isBet ? 25 : 100;
+    final cost = isBet ? (_selectedBetAmount ?? 25) : 100;
     final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
     if (balance < cost) { _showInsufficientFundsDialog(); return; }
 
@@ -1337,17 +1423,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       default:       return Colors.grey;
     }
   }
-
-  String _getColorName(String color) {
-    switch (color) {
-      case 'yellow': return 'Amarillo';
-      case 'green':  return 'Verde';
-      case 'red':    return 'Rojo';
-      case 'blue':   return 'Azul';
-      default:       return color;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1366,9 +1441,23 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                   context: context,
                   builder: (ctx) => AlertDialog(
                     title: const Text('¿Abandonar?'),
-                    content: const Text('¿Seguro que quieres abandonar la partida?'),
+                    content: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.warning, color: Colors.orange, size: 48),
+                        SizedBox(height: 16),
+                        Text(
+                          '¿Seguro que quieres abandonar la partida?\n\nSi abandonas, se contará como una derrota y perderás lo apostado.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ],
+                    ),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Continuar jugando', style: TextStyle(color: Colors.green)),
+                      ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
                         style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -1576,137 +1665,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     );
   }
 
-  Widget _buildGamePlayersBar() {
-    return Container(
-      height: 56, color: Colors.white,
-      child: Row(
-        children: [
-          Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              decoration: BoxDecoration(
-                color: _isMyTurn ? _getPlayerColor(_myColor).withValues(alpha: 0.08) : Colors.transparent,
-                border: _isMyTurn
-                    ? Border(bottom: BorderSide(color: _getPlayerColor(_myColor), width: 3))
-                    : null,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                children: [
-                  Container(
-                    width: 22, height: 22,
-                    decoration: BoxDecoration(
-                      color: _getPlayerColor(_myColor), shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Tú (${_getColorName(_myColor)})',
-                      style: TextStyle(
-                        fontSize: 13, fontWeight: _isMyTurn ? FontWeight.bold : FontWeight.normal,
-                        color: _isMyTurn ? _getPlayerColor(_myColor) : Colors.grey.shade700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (_isMyTurn && !_gameEnded)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: SizedBox(
-                        width: 30, height: 30,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              value: _turnTimerSeconds / _turnTimeoutSeconds,
-                              strokeWidth: 3,
-                              backgroundColor: Colors.grey.shade200,
-                              valueColor: AlwaysStoppedAnimation(
-                                _turnTimerSeconds > 10
-                                    ? _getPlayerColor(_myColor)
-                                    : _turnTimerSeconds > 5
-                                        ? Colors.orange
-                                        : Colors.red,
-                              ),
-                            ),
-                            Text(
-                              '$_turnTimerSeconds',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: _turnTimerSeconds > 10
-                                    ? _getPlayerColor(_myColor)
-                                    : _turnTimerSeconds > 5
-                                        ? Colors.orange
-                                        : Colors.red,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          Container(width: 1, height: 30, color: Colors.grey.shade200),
-          Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              decoration: BoxDecoration(
-                color: !_isMyTurn ? _getPlayerColor(_botColor).withValues(alpha: 0.08) : Colors.transparent,
-                border: !_isMyTurn
-                    ? Border(bottom: BorderSide(color: _getPlayerColor(_botColor), width: 3))
-                    : null,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                children: [
-                  Container(
-                    width: 22, height: 22,
-                    decoration: BoxDecoration(
-                      color: _getPlayerColor(_botColor), shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: Center(
-                      child: Text(_opponentEmoji,
-                          style: const TextStyle(fontSize: 12)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      _opponentName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: !_isMyTurn ? FontWeight.bold : FontWeight.normal,
-                        color: !_isMyTurn ? _getPlayerColor(_botColor) : Colors.grey.shade700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (!_isMyTurn && _isBotThinking)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: SizedBox(
-                        width: 12, height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: _getPlayerColor(_botColor),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildChatWidget() {
     const quickEmojis = ['😂', '😤', '💀', '🫡', '🔥', '😈', '👑', '🤡'];
     return Container(
@@ -1864,6 +1822,79 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     );
   }
 
+  Widget _buildBetSelection() {
+    final balance = _userDiamonds ?? 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        const Text('¿Cuánto quieres apostar?',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        const Text('Elige el monto de diamantes para esta partida',
+            style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.amber.shade200),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _betOptions.map((amount) {
+              final isSelected = _selectedBetAmount == amount;
+              final canAfford = balance >= amount;
+              return GestureDetector(
+                onTap: canAfford ? () => setState(() => _selectedBetAmount = amount) : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.amber.shade600
+                        : (canAfford ? Colors.white : Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? Colors.amber.shade700 : Colors.grey.shade300,
+                      width: isSelected ? 2 : 1,
+                    ),
+                    boxShadow: isSelected
+                        ? [BoxShadow(color: Colors.amber.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2))]
+                        : [],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.diamond,
+                          color: isSelected
+                              ? Colors.white
+                              : (canAfford ? Colors.amber.shade600 : Colors.grey.shade400),
+                          size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        amount.toString(),
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : (canAfford ? Colors.black87 : Colors.grey.shade500),
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPlayerCountSelection() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1956,7 +1987,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
           const SizedBox(height: 28),
 
-          if (_userCoins != null || _userDiamonds != null)
+          if (widget.matchType == 'Apuesta') _buildBetSelection(),
+
+          if (_userCoins != null || _userDiamonds != null) ...[
+            const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1977,18 +2011,22 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                 ],
               ),
             ),
+          ],
 
           const SizedBox(height: 20),
 
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _startMatchmaking,
+              onPressed: (widget.matchType == 'Apuesta' && _selectedBetAmount == null)
+                  ? null
+                  : _startMatchmaking,
               icon: const Icon(Icons.search, size: 22),
               label: const Text('Buscar partida',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 elevation: 4,
@@ -2069,11 +2107,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                 style: const TextStyle(fontSize: 14, color: Colors.grey)),
             const SizedBox(height: 12),
             Text(
-              _matchmakingSeconds < 10
+              _matchmakingSeconds < 6
                   ? 'Conectando con otros jugadores...'
-                  : _matchmakingSeconds < 18
-                      ? 'Ampliando búsqueda...'
-                      : '¡Ya casi! Preparando partida...',
+                  : '¡Ya casi! Ampliando búsqueda...',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 40),
@@ -2248,7 +2284,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     final isBet = widget.matchType == 'Apuesta';
     final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
-    if (balance < (isBet ? 25 : 100)) {
+    final minRequired = isBet ? (_selectedBetAmount ?? 25) : 100;
+    if (balance < minRequired) {
       _showInsufficientFundsDialog();
       return;
     }
@@ -2517,12 +2554,13 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   void _showInsufficientFundsDialog() {
     final isBet = widget.matchType == 'Apuesta';
+    final required = isBet ? (_selectedBetAmount ?? 25) : 100;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Fondos insuficientes'),
         content: Text(isBet
-            ? 'Necesitas al menos 25 diamantes para jugar.\nTienes: ${_userDiamonds ?? 0}.'
+            ? 'Necesitas al menos $required diamantes para jugar.\nTienes: ${_userDiamonds ?? 0}.'
             : 'Necesitas al menos 100 monedas para jugar.\nTienes: ${_userCoins ?? 0}.'),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
       ),

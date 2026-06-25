@@ -65,7 +65,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   bool _gameEnded = false;
   bool _hasUserExited = false;
-  bool _hasDeductedEntryFee = false;
   DateTime? _gameStartTime;
   bool _isScreenKeepOnActive = false;
 
@@ -227,19 +226,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _handleAbandon(game);
     }
 
-    // Descontar cuota de entrada cuando la partida se activa (una sola vez por jugador)
-    if (!_hasDeductedEntryFee && game.isActive && _currentUser != null) {
-      _hasDeductedEntryFee = true;
-      final betAmt = game.betAmount ?? (game.currencyType == 'diamonds' ? 25 : 100);
-      if (betAmt > 0) {
-        if (game.currencyType == 'diamonds') {
-          _firestoreService.incrementUserDiamonds(_currentUser!.uid, -betAmt);
-        } else {
-          _firestoreService.incrementUserCoins(_currentUser!.uid, -betAmt);
-        }
-      }
-    }
-
     if (prevGame != null && !prevGame.rewardsDistributed && game.rewardsDistributed) {
       if (kDebugMode) print('💰 [Ludo] Recompensas distribuidas por Cloud Function');
       Future.delayed(const Duration(seconds: 1), () {
@@ -280,7 +266,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   Future<void> _autoAction() async {
     if (!mounted || _gameEnded || !_isMyTurn) return;
 
-    // Si hay selección de bonus activa, auto-elegir la primera opción
     if (_bonusSelectionActive && _pendingBonusMoves.isNotEmpty) {
       final m = _pendingBonusMoves.first;
       _executeBonusMove(m['pieceId'] as int, m['bonusPos'] as int);
@@ -288,7 +273,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     if (_dice1Value == 0 && _dice2Value == 0) {
-      // Awaitar el lanzamiento y luego auto-mover sin esperar otro ciclo del timer
       await _rollDice();
       await Future.delayed(const Duration(milliseconds: 1000));
       if (!mounted || _gameEnded || !_isMyTurn) return;
@@ -422,7 +406,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       }
     }
 
-    // Regla: doble con barrera propia → el primer movimiento debe abrir la barrera
     if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
       final barrIndices = _getBarreraIndices(_myColor);
       if (barrIndices.isNotEmpty) {
@@ -741,7 +724,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return false;
   }
 
-  /// Devuelve los índices de fichas del color dado que forman una barrera propia.
   Set<int> _getBarreraIndices(String color) {
     final pieces = _gameState.getPiecesByColor(color);
     final inBarrera = <int>{};
@@ -1440,7 +1422,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     );
   }
 
-  // ── Chat placeholder — implementación completa próximamente ─────────────────
   Widget _buildChatWidget() {
     const quickEmojis = ['😂', '😤', '💀', '🫡', '🔥', '😈', '👑', '🤡'];
     return Container(
