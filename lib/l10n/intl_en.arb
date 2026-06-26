@@ -44,6 +44,7 @@
   "veryEasy": "Very easy",
   "easy": "Easy",
   "difficult": "Difficult",
+  "ultraDifficult": "Ultra difficult",
   "startGame": "Start game",
   "playOnline": "Play online",
   "roomCode": "Room code",

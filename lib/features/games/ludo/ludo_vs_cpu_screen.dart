@@ -38,6 +38,21 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   bool _canRollDice = true;
   bool _gameEnded = false;
   final Random _random = Random();
+
+  bool get _isUltra => widget.difficulty.toLowerCase().contains('ultra');
+
+  int _rollCpuDice() {
+    if (!_isUltra) return _random.nextInt(6) + 1;
+    // Modo ultra difícil: sesgo extremo hacia 5 y 6
+    // Distribución: 1→2%, 2→3%, 3→5%, 4→8%, 5→32%, 6→50%
+    final r = _random.nextDouble();
+    if (r < 0.02) return 1;
+    if (r < 0.05) return 2;
+    if (r < 0.10) return 3;
+    if (r < 0.18) return 4;
+    if (r < 0.50) return 5;
+    return 6;
+  }
   DateTime? _gameStartTime;
   double _boardSize = 0;
 
@@ -996,8 +1011,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     if (_gameEnded || _currentPlayer != cpuColor || !mounted) return;
 
     setState(() {
-      _dice1Value = _random.nextInt(6) + 1;
-      _dice2Value = _random.nextInt(6) + 1;
+      _dice1Value = _rollCpuDice();
+      _dice2Value = _rollCpuDice();
       _totalDiceValue = _dice1Value + _dice2Value;
       _canRollDice = false;
       _hasUsedDice1 = false; _hasUsedDice2 = false;
@@ -1163,28 +1178,119 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     if (_movablePieces.isEmpty) return null;
 
     Map<String, dynamic>? bestMove;
-    int bestScore = -1000;
+    int bestScore = -9999;
 
     for (final move in _movablePieces) {
       final piece = move['piece'] as LudoPiece;
       int score = 0;
 
       if (piece.isFinished) continue;
+
+      // Pieza en el corredor de llegada
       if (piece.position >= 52) score += 1000;
+
+      // Sacar ficha de casa con un 5
       if (piece.isHome && move['diceValue'] == 5) score += 500;
+
+      // Progreso desde salida
       if (!piece.isHome && piece.position < 52) {
-        score += _stepsFromStart(piece.position, _getStartPosition(_currentPlayer)) * 10;
+        final steps = _stepsFromStart(piece.position, _getStartPosition(_currentPlayer));
+        score += steps * (_isUltra ? 15 : 10);
       }
 
       final diceValue = move['diceValue'] as int;
       final newPos = _calculateNewPosition(piece, diceValue, _currentPlayer);
-      if (newPos != null && newPos < 52 && !_isSafeForColor(newPos, _currentPlayer)) {
-        for (final ec in _activePlayers) {
-          if (ec == _currentPlayer) continue;
-          for (final e in _gameState.getPiecesByColor(ec)) {
-            if (!e.isHome && !e.isFinished && e.position == newPos) {
-              score += 300;
-              break;
+
+      if (newPos != null) {
+        // Captura de enemigo
+        if (newPos < 52 && !_isSafeForColor(newPos, _currentPlayer)) {
+          for (final ec in _activePlayers) {
+            if (ec == _currentPlayer) continue;
+            for (final e in _gameState.getPiecesByColor(ec)) {
+              if (!e.isHome && !e.isFinished && e.position == newPos) {
+                if (_isUltra) {
+                  final enemySteps = _stepsFromStart(e.position, _getStartPosition(ec));
+                  // Bonus extra si la víctima es el jugador humano (amarillo)
+                  final isHuman = ec == 'yellow';
+                  score += (isHuman ? 1200 : 800) + enemySteps * 12;
+                } else {
+                  score += 300;
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        if (_isUltra) {
+          // Penalizar aterrizaje en casilla donde un enemigo puede capturarnos el siguiente turno
+          if (newPos < 52 && !_isSafeForColor(newPos, _currentPlayer)) {
+            for (final ec in _activePlayers) {
+              if (ec == _currentPlayer) continue;
+              for (final e in _gameState.getPiecesByColor(ec)) {
+                if (e.isHome || e.isFinished) continue;
+                for (int d = 2; d <= 6; d++) {
+                  final eReach = _calculateNewPosition(e, d, ec);
+                  if (eReach == newPos) { score -= 400; break; }
+                }
+              }
+            }
+          }
+
+          // Bonus por aterrizar en casilla segura
+          if (newPos < 52 && _isSafeForColor(newPos, _currentPlayer)) score += 200;
+
+          // Bonus por formar barrera (2 fichas propias en la misma casilla)
+          if (newPos < 52) {
+            final allies = _gameState.getPiecesByColor(_currentPlayer)
+                .where((p) => p != piece && !p.isHome && !p.isFinished && p.position == newPos)
+                .length;
+            if (allies == 1) score += 450; // formaría barrera — muy fuerte en ultra
+          }
+
+          // Bonus extra por avanzar la ficha más adelantada (acelerar victoria)
+          if (!piece.isHome && piece.position < 52) {
+            int maxSteps = 0;
+            for (final p in _gameState.getPiecesByColor(_currentPlayer)) {
+              if (p.isHome || p.isFinished) continue;
+              final s = _stepsFromStart(p.position, _getStartPosition(_currentPlayer));
+              if (s > maxSteps) maxSteps = s;
+            }
+            final mySteps = _stepsFromStart(piece.position, _getStartPosition(_currentPlayer));
+            if (mySteps == maxSteps) score += 150;
+          }
+
+          // Bonus por acercarse a ficha del humano (amenaza proactiva)
+          if (newPos < 52 && !_isSafeForColor(newPos, _currentPlayer)) {
+            for (final e in _gameState.getPiecesByColor('yellow')) {
+              if (e.isHome || e.isFinished) continue;
+              // Si podemos capturar al humano en 1-2 dados futuros desde newPos
+              for (int d = 1; d <= 6; d++) {
+                final threat = (newPos + d) % 52;
+                if (threat == e.position) { score += 180; break; }
+              }
+            }
+          }
+
+          // Penalizar dejar fichas en zona peligrosa cerca del humano
+          if (!piece.isHome && piece.position < 52 && !_isSafeForColor(piece.position, _currentPlayer)) {
+            for (final e in _gameState.getPiecesByColor('yellow')) {
+              if (e.isHome || e.isFinished) continue;
+              for (int d = 1; d <= 6; d++) {
+                final reach = _calculateNewPosition(e, d, 'yellow');
+                if (reach == piece.position) { score += 50; break; } // bonus por huir de peligro
+              }
+            }
+          }
+
+          // Sacar ficha de casa si hay piezas del humano cerca de la salida del CPU
+          if (piece.isHome && move['diceValue'] == 5) {
+            final startPos = _getStartPosition(_currentPlayer);
+            for (final e in _gameState.getPiecesByColor('yellow')) {
+              if (e.isHome || e.isFinished) continue;
+              final dist = (_stepsFromStart(e.position, _getStartPosition('yellow')) -
+                            _stepsFromStart(startPos, _getStartPosition('yellow'))).abs();
+              if (dist <= 10) score += 120; // urgencia de salir cuando el humano está cerca
             }
           }
         }
@@ -1890,7 +1996,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       },
     );
   }
-}  // end _LudoVsCpuScreenState
+}
 
 class _Coord {
   final int col;

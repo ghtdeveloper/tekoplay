@@ -2100,7 +2100,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       builder: (context) {
         final isBet = widget.matchType == 'Apuesta';
         // En modo apuesta solo existe dificultad máxima para que la CPU gane
-        String selectedDifficulty = isBet ? S.of(context).difficult : S.of(context).normal;
+        String selectedDifficulty = isBet ? S.of(context).ultraDifficult : S.of(context).normal;
         int selectedCpuCount = 1;
 
         return StatefulBuilder(
@@ -2262,6 +2262,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                       S.of(context).easy,
                                       S.of(context).normal,
                                       S.of(context).difficult,
+                                      S.of(context).ultraDifficult,
                                     ].map((level) => RadioListTile<String>(
                                       title: Text(level, style: const TextStyle(fontSize: 14)),
                                       value: level,

@@ -157,6 +157,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "diamondStore": MessageLookupByLibrary.simpleMessage("Tienda de diamantes"),
     "diamonds": MessageLookupByLibrary.simpleMessage("diamantes"),
     "difficult": MessageLookupByLibrary.simpleMessage("Difícil"),
+    "ultraDifficult": MessageLookupByLibrary.simpleMessage("Ultra difícil"),
     "difficulty": MessageLookupByLibrary.simpleMessage("Dificultad"),
     "domino": MessageLookupByLibrary.simpleMessage("Dominó"),
     "dominoTutorial": MessageLookupByLibrary.simpleMessage(

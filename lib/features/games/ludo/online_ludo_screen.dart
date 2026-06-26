@@ -444,35 +444,16 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     });
   }
 
-  /// Lógica al agotar el tiempo de búsqueda:
-  /// - Modo Apuesta (cualquier cantidad): NUNCA bot → cancelar y avisar.
-  /// - Modo Independiente 1v1: bot como fallback.
-  /// - Modo Independiente 2+ jugadores: NUNCA bot → cancelar y avisar.
+
   void _onMatchmakingTimeout() {
     if (!mounted || _navigated || _isPlayingAgainstBot) return;
 
-    final isBet = widget.matchType == 'Apuesta';
-
-    if (!isBet && _selectedPlayerCount == 2) {
-      // Único caso donde se permite bot: modo libre 1v1
+    if (_selectedPlayerCount == 2) {
       _startBotGame();
       return;
     }
 
-    // Todos los demás casos: cancelar y mostrar mensaje
     _cancelMatchmaking();
-
-    if (!mounted) return;
-    final msg = isBet
-        ? 'No se encontraron jugadores. En modo Apuesta solo se juega contra personas reales.'
-        : 'No se encontraron suficientes jugadores. Intenta de nuevo.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isBet ? Colors.red.shade700 : Colors.orange,
-        duration: const Duration(seconds: 4),
-      ),
-    );
   }
 
   void _cancelMatchmaking() {
@@ -998,14 +979,12 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   void _scheduleBotMove() {
     if (_gameEnded || !_isPlayingAgainstBot || _currentPlayer != _botColor) return;
-    if (_botExecuting) return; // Prevent concurrent bot executions
+    if (_botExecuting) return;
     _botExecuting = true;
     setState(() => _isBotThinking = true);
-    // Safety timer: if bot gets stuck, force next turn after 6s
     _botSafetyTimer?.cancel();
     _botSafetyTimer = Timer(const Duration(seconds: 6), () {
       if (!mounted || _gameEnded) return;
-      // Siempre limpiar el estado del bot, sin importar de quién sea el turno
       _botExecuting = false;
       _dice1Value = 0;
       _dice2Value = 0;
@@ -1013,7 +992,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _hasUsedDice2 = false;
       _movablePieces.clear();
       setState(() => _isBotThinking = false);
-      // Solo avanzar el turno si todavía le toca al bot
       if (_currentPlayer == _botColor) _nextTurn();
     });
     final thinkTime = 600 + _random.nextInt(800);
