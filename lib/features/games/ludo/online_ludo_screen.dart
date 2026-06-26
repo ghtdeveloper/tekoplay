@@ -85,6 +85,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   bool _hasUsedDice2 = false;
   int _consecutiveDoubles = 0;
   bool _isRollingDice = false;
+  final Map<String, int?> _lastMovedPieceId = {};
 
   List<Map<String, dynamic>> _movablePieces = [];
   int? _selectedPieceId;
@@ -273,7 +274,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
            _screenState == _LudoOnlineState.waitingRoom) &&
           !_navigated) {
         t.cancel();
-        _startBotGame();
+        _onMatchmakingTimeout();
         return;
       }
 
@@ -443,6 +444,37 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     });
   }
 
+  /// Lógica al agotar el tiempo de búsqueda:
+  /// - Modo Apuesta (cualquier cantidad): NUNCA bot → cancelar y avisar.
+  /// - Modo Independiente 1v1: bot como fallback.
+  /// - Modo Independiente 2+ jugadores: NUNCA bot → cancelar y avisar.
+  void _onMatchmakingTimeout() {
+    if (!mounted || _navigated || _isPlayingAgainstBot) return;
+
+    final isBet = widget.matchType == 'Apuesta';
+
+    if (!isBet && _selectedPlayerCount == 2) {
+      // Único caso donde se permite bot: modo libre 1v1
+      _startBotGame();
+      return;
+    }
+
+    // Todos los demás casos: cancelar y mostrar mensaje
+    _cancelMatchmaking();
+
+    if (!mounted) return;
+    final msg = isBet
+        ? 'No se encontraron jugadores. En modo Apuesta solo se juega contra personas reales.'
+        : 'No se encontraron suficientes jugadores. Intenta de nuevo.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isBet ? Colors.red.shade700 : Colors.orange,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   void _cancelMatchmaking() {
     _matchmakingTimer?.cancel();
     _keepAliveTimer?.cancel();
@@ -578,7 +610,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   Future<void> _rollDice() async {
-    if (!_isMyTurn || _gameEnded || _isRollingDice) return;
+    if (!_isMyTurn || _gameEnded || _isRollingDice || _bonusSelectionActive) return;
     if (_dice1Value != 0 || _dice2Value != 0) return;
 
     setState(() => _isRollingDice = true);
@@ -722,6 +754,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     piece.position = newPos;
     if (newPos == 57) piece.isFinished = true;
+    _lastMovedPieceId[color] = pieceId;
     if (diceNumber == 1) {
       _hasUsedDice1 = true;
     } else {
@@ -875,21 +908,32 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   void _applyTripleDoublesPenalty(String color) {
-    final active = _gameState.getPiecesByColor(color)
-        .where((p) => !p.isHome && !p.isFinished)
-        .toList();
+    final pieces = _gameState.getPiecesByColor(color);
+    final active = pieces.where((p) => !p.isHome && !p.isFinished).toList();
     if (active.isEmpty) return;
-    final sp = _getStartPosition(color);
-    LudoPiece? furthest;
-    int maxSteps = -1;
-    for (final p in active) {
-      final steps = p.position >= 52
-          ? 51 + (p.position - 51)
-          : _stepsFromStart(p.position, sp);
-      if (steps > maxSteps) { maxSteps = steps; furthest = p; }
+
+    // Enviar a casa la última ficha movida; si ya no está activa, la más avanzada
+    final lastId = _lastMovedPieceId[color];
+    LudoPiece? target;
+    if (lastId != null && lastId < pieces.length) {
+      final last = pieces[lastId];
+      if (!last.isHome && !last.isFinished) {
+        target = last;
+      }
     }
-    if (furthest != null) {
-      furthest.position = -1;
+    if (target == null) {
+      final sp = _getStartPosition(color);
+      int maxSteps = -1;
+      for (final p in active) {
+        final steps = p.position >= 52
+            ? 51 + (p.position - 51)
+            : _stepsFromStart(p.position, sp);
+        if (steps > maxSteps) { maxSteps = steps; target = p; }
+      }
+    }
+
+    if (target != null) {
+      target.position = -1;
       _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
     }
     setState(() {});
@@ -960,16 +1004,17 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     // Safety timer: if bot gets stuck, force next turn after 6s
     _botSafetyTimer?.cancel();
     _botSafetyTimer = Timer(const Duration(seconds: 6), () {
-      if (mounted && !_gameEnded && _currentPlayer == _botColor) {
-        _botExecuting = false;
-        _dice1Value = 0;
-        _dice2Value = 0;
-        _hasUsedDice1 = false;
-        _hasUsedDice2 = false;
-        _movablePieces.clear();
-        setState(() => _isBotThinking = false);
-        _nextTurn();
-      }
+      if (!mounted || _gameEnded) return;
+      // Siempre limpiar el estado del bot, sin importar de quién sea el turno
+      _botExecuting = false;
+      _dice1Value = 0;
+      _dice2Value = 0;
+      _hasUsedDice1 = false;
+      _hasUsedDice2 = false;
+      _movablePieces.clear();
+      setState(() => _isBotThinking = false);
+      // Solo avanzar el turno si todavía le toca al bot
+      if (_currentPlayer == _botColor) _nextTurn();
     });
     final thinkTime = 600 + _random.nextInt(800);
     Future.delayed(Duration(milliseconds: thinkTime), () {
@@ -979,7 +1024,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   Future<void> _executeBotTurn() async {
-    if (_gameEnded || !mounted || _currentPlayer != _botColor) return;
+    if (_gameEnded || !mounted || _currentPlayer != _botColor) { _clearBotExecution(); return; }
 
     final d1 = _random.nextInt(6) + 1;
     final d2 = _random.nextInt(6) + 1;
@@ -996,6 +1041,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       setState(() {});
       _showEventToast('$_opponentName perdió el turno (3 dobles)');
       await Future.delayed(const Duration(milliseconds: 1500));
+      _clearBotExecution();
       _nextTurn();
       return;
     }
@@ -1013,6 +1059,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _showEventToast('$_opponentName no tiene movimientos');
       await Future.delayed(const Duration(milliseconds: 1200));
       setState(() { _dice1Value = 0; _dice2Value = 0; });
+      _clearBotExecution();
       _nextTurn();
       return;
     }
@@ -1021,7 +1068,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   Future<void> _executeBotBestMove() async {
-    if (_gameEnded || _currentPlayer != _botColor) return;
+    if (_gameEnded || _currentPlayer != _botColor) { _clearBotExecution(); return; }
     _calculateMovablePieces();
     if (_movablePieces.isEmpty) {
       final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
@@ -1727,7 +1774,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   Widget _buildGameControls() {
-    final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice;
+    final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice && !_bonusSelectionActive;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.white,
@@ -2491,19 +2538,24 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     final currencyType = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
 
-    String? gameId;
-    try {
-      gameId = await _gameService.createGame(
-        hostId: _currentUser!.uid,
-        hostName: _myName ?? 'Jugador',
-        hostPhotoUrl: _myPhotoUrl,
-        currencyType: currencyType,
-        betAmount: betAmount,
-        numberOfPlayers: _selectedPlayerCount,
-        isOnlineMatchmaking: false,
-      );
-    } catch (e) {
-      if (kDebugMode) print('Error creando sala para invitación: $e');
+    // Si ya hay una sala activa (p.ej. invitando al 2do/3er jugador), la reusamos
+    final bool isNewGame = _activeGameId == null;
+    String? gameId = _activeGameId;
+
+    if (isNewGame) {
+      try {
+        gameId = await _gameService.createGame(
+          hostId: _currentUser!.uid,
+          hostName: _myName ?? 'Jugador',
+          hostPhotoUrl: _myPhotoUrl,
+          currencyType: currencyType,
+          betAmount: betAmount,
+          numberOfPlayers: _selectedPlayerCount,
+          isOnlineMatchmaking: false,
+        );
+      } catch (e) {
+        if (kDebugMode) print('Error creando sala para invitación: $e');
+      }
     }
 
     if (gameId == null || !mounted) {
@@ -2531,20 +2583,26 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (!mounted) return;
 
     if (error != null) {
-      _firestore.collection('ludo_games').doc(gameId).update({
-        'status': 'cancelled',
-        'finishedAt': FieldValue.serverTimestamp(),
-      }).catchError((_) {});
+      // Solo cancelar el juego si lo acabamos de crear
+      if (isNewGame) {
+        _firestore.collection('ludo_games').doc(gameId).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error), backgroundColor: Colors.red),
       );
       return;
     }
-    _activeGameId = gameId;
-    _myPlayerNumber = 1;
-    setState(() => _screenState = _LudoOnlineState.waitingRoom);
-    _listenToRoomGame(gameId);
-    _startKeepAlive(gameId);
+
+    if (isNewGame) {
+      _activeGameId = gameId;
+      _myPlayerNumber = 1;
+      setState(() => _screenState = _LudoOnlineState.waitingRoom);
+      _listenToRoomGame(gameId);
+      _startKeepAlive(gameId);
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

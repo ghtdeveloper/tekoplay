@@ -53,6 +53,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   bool _bonusHadDouble = false;
 
   int _consecutiveDoubles = 0;
+  final Map<String, int?> _lastMovedPieceId = {};
 
   Timer? _moveTimer;
   int _moveTimerSeconds = 0;
@@ -831,6 +832,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         _hasUsedDice2 = true;
       }
     });
+    _lastMovedPieceId[color] = pieceId;
 
     if (_checkVictory(color)) {
       Future.delayed(const Duration(milliseconds: 500), () => _endGame(color));
@@ -1104,6 +1106,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         _hasUsedDice2 = true;
       }
     });
+    _lastMovedPieceId[color] = pieceId;
 
     if (captured) _applyCpuCaptureBonus(color);
 
@@ -1215,18 +1218,27 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     if (activePieces.isEmpty) return;
 
-    LudoPiece? furthest;
-    int maxSteps = -1;
-
-    for (final piece in activePieces) {
-      final steps = piece.position >= 52
-          ? 51 + (piece.position - 51)
-          : _stepsFromStart(piece.position, _getStartPosition(color));
-      if (steps > maxSteps) { maxSteps = steps; furthest = piece; }
+    // Enviar a casa la última ficha movida; si ya no está activa, la más avanzada
+    final lastId = _lastMovedPieceId[color];
+    LudoPiece? target;
+    if (lastId != null && lastId < pieces.length) {
+      final last = pieces[lastId];
+      if (!last.isHome && !last.isFinished) {
+        target = last;
+      }
+    }
+    if (target == null) {
+      int maxSteps = -1;
+      for (final piece in activePieces) {
+        final steps = piece.position >= 52
+            ? 51 + (piece.position - 51)
+            : _stepsFromStart(piece.position, _getStartPosition(color));
+        if (steps > maxSteps) { maxSteps = steps; target = piece; }
+      }
     }
 
-    if (furthest != null) {
-      setState(() => furthest!.position = -1);
+    if (target != null) {
+      setState(() => target!.position = -1);
       _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
     }
   }

@@ -50,6 +50,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   bool _hasUsedDice2 = false;
   bool _isRollingDice = false;
   int _consecutiveDoubles = 0;
+  int? _lastMovedPieceId;
   final Random _random = Random();
 
 
@@ -289,7 +290,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Future<void> _rollDice() async {
-    if (!_isMyTurn || _gameEnded || _isRollingDice) return;
+    if (!_isMyTurn || _gameEnded || _isRollingDice || _bonusSelectionActive) return;
     if (_dice1Value != 0 || _dice2Value != 0) return;
 
     setState(() { _isRollingDice = true; });
@@ -358,25 +359,37 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       await _syncGameState(advanceTurn: true);
       return;
     }
-    final sp = _getStartPosition(_myColor);
-    LudoPiece? furthest;
-    int maxSteps = -1;
-    for (final p in active) {
-      final steps = p.position >= 52
-          ? 51 + (p.position - 51)
-          : _stepsFromStart(p.position, sp);
-      if (steps > maxSteps) { maxSteps = steps; furthest = p; }
+
+    // Enviar a casa la última ficha movida; si ya no está activa, la más avanzada
+    LudoPiece? target;
+    if (_lastMovedPieceId != null && _lastMovedPieceId! < pieces.length) {
+      final last = pieces[_lastMovedPieceId!];
+      if (!last.isHome && !last.isFinished) {
+        target = last;
+      }
     }
-    if (furthest != null) {
-      furthest.position = -1;
+    if (target == null) {
+      final sp = _getStartPosition(_myColor);
+      int maxSteps = -1;
+      for (final p in active) {
+        final steps = p.position >= 52
+            ? 51 + (p.position - 51)
+            : _stepsFromStart(p.position, sp);
+        if (steps > maxSteps) { maxSteps = steps; target = p; }
+      }
+    }
+
+    if (target != null) {
+      target.position = -1;
       _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
     }
     await _syncGameState(advanceTurn: true);
   }
 
-  void _calculateMovablePieces() {
+  void _calculateMovablePieces([String? forColor]) {
+    final color = forColor ?? _myColor;
     _movablePieces.clear();
-    final pieces = _gameState.getPiecesByColor(_myColor);
+    final pieces = _gameState.getPiecesByColor(color);
 
     for (int i = 0; i < pieces.length; i++) {
       final piece = pieces[i];
@@ -384,30 +397,30 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
       if (piece.isHome) {
         if (!_hasUsedDice1 && _dice1Value == 5) {
-          final sp = _getStartPosition(_myColor);
-          if (_canLandOn(_myColor, sp, piece)) {
+          final sp = _getStartPosition(color);
+          if (_canLandOn(color, sp, piece)) {
             _movablePieces.add({'pieceId': i, 'diceValue': 5, 'diceNumber': 1, 'piece': piece});
           }
         }
         if (!_hasUsedDice2 && _dice2Value == 5 && (_dice1Value != _dice2Value || _hasUsedDice1)) {
-          final sp = _getStartPosition(_myColor);
-          if (_canLandOn(_myColor, sp, piece)) {
+          final sp = _getStartPosition(color);
+          if (_canLandOn(color, sp, piece)) {
             _movablePieces.add({'pieceId': i, 'diceValue': 5, 'diceNumber': 2, 'piece': piece});
           }
         }
       } else {
-        if (!_hasUsedDice1 && _canMovePieceWithValue(piece, _dice1Value)) {
+        if (!_hasUsedDice1 && _canMovePieceWithValue(piece, _dice1Value, color)) {
           _movablePieces.add({'pieceId': i, 'diceValue': _dice1Value, 'diceNumber': 1, 'piece': piece});
         }
         if (!_hasUsedDice2 && (_dice1Value != _dice2Value || _hasUsedDice1) &&
-            _canMovePieceWithValue(piece, _dice2Value)) {
+            _canMovePieceWithValue(piece, _dice2Value, color)) {
           _movablePieces.add({'pieceId': i, 'diceValue': _dice2Value, 'diceNumber': 2, 'piece': piece});
         }
       }
     }
 
     if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
-      final barrIndices = _getBarreraIndices(_myColor);
+      final barrIndices = _getBarreraIndices(color);
       if (barrIndices.isNotEmpty) {
         final barrMoves = _movablePieces.where((m) => barrIndices.contains(m['pieceId'])).toList();
         if (barrMoves.isNotEmpty) _movablePieces = barrMoves;
@@ -417,13 +430,14 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (mounted) setState(() {});
   }
 
-  bool _canMovePieceWithValue(LudoPiece piece, int diceValue) {
+  bool _canMovePieceWithValue(LudoPiece piece, int diceValue, [String? color]) {
+    final c = color ?? _myColor;
     if (piece.isFinished) return false;
     if (piece.isHome) return diceValue == 5;
-    final np = _calculateNewPosition(piece, diceValue, _myColor);
+    final np = _calculateNewPosition(piece, diceValue, c);
     if (np == null) return false;
-    if (_hasBarrierInPath(piece, diceValue, _myColor)) return false;
-    return _canLandOn(_myColor, np, piece);
+    if (_hasBarrierInPath(piece, diceValue, c)) return false;
+    return _canLandOn(c, np, piece);
   }
 
   void _handleBoardTap(Offset local) {
@@ -539,6 +553,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     piece.position = newPos;
     if (newPos == 57) piece.isFinished = true;
+    _lastMovedPieceId = pieceId;
 
     if (diceNumber == 1) {
       _hasUsedDice1 = true;
@@ -1483,7 +1498,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Widget _buildControls() {
-    final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice;
+    final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice && !_bonusSelectionActive;
     final isOpponentTurn = !_isMyTurn && !_gameEnded;
     final currentColor = _currentGame != null ? _colorForCurrentTurn() : _myColor;
 
