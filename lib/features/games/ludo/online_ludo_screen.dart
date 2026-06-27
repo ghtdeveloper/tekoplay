@@ -819,11 +819,21 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _bonusHadDouble = hadDouble;
 
     if (color == _myColor) {
-      _bonusSelectionActive = true;
-      _movablePieces = _pendingBonusMoves.map((m) => {...m, 'diceValue': 20, 'diceNumber': 0}).toList();
-      setState(() {});
-      _showEventToast('¡Capturaste! Elige ficha para +20', color: Colors.green);
-      _startTurnTimer();
+      // Si solo hay una ficha elegible, ejecutar bonus automáticamente sin esperar toque
+      if (_pendingBonusMoves.length == 1) {
+        final m = _pendingBonusMoves.first;
+        _showEventToast('¡Capturaste! +20 casillas', color: Colors.green);
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (!mounted || _gameEnded) return;
+          _executeBonusMove(color, m['pieceId'] as int, m['bonusPos'] as int, hadDouble);
+        });
+      } else {
+        _bonusSelectionActive = true;
+        _movablePieces = _pendingBonusMoves.map((m) => {...m, 'diceValue': 20, 'diceNumber': 0}).toList();
+        setState(() {});
+        _showEventToast('¡Capturaste! Elige ficha para +20', color: Colors.green);
+        _startTurnTimer();
+      }
     } else {
       Future.delayed(const Duration(milliseconds: 800), () {
         if (!mounted || _gameEnded) return;

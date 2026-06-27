@@ -60,7 +60,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
-  List<Map<String, String>> _moveHistory = [];
+  final List<Map<String, String>> _moveHistory = [];
   String? _lastMoveFrom;
   String? _lastMoveTo;
 
@@ -473,19 +473,25 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
       return false;
     }
 
+    // Capture before async gap
+    final isBet = widget.matchType == S.of(context).bet;
+
     try {
       final userData = await _firestoreService.getUser(currentUser!.uid);
+      if (!mounted) return false;
       if (userData != null) {
-        if (widget.matchType == S.of(context).bet) {
+        if (isBet) {
           final newDiamonds = userData.diamonds - gameCost;
           await _firestoreService.updateUserDiamonds(
             currentUser!.uid,
             newDiamonds,
           );
+          if (!mounted) return false;
           setState(() => _userDiamonds = newDiamonds);
         } else {
           final newCoins = userData.coins - gameCost;
           await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
+          if (!mounted) return false;
           setState(() => _userCoins = newCoins);
         }
       }
@@ -552,23 +558,29 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   }
 
   Future<void> _initializeStockfish() async {
+    // Capture context-dependent values before async gaps
+    final isFun = widget.matchType == S.of(context).fun;
+    final isBet = widget.matchType == S.of(context).bet;
+
     _stockfish.stdin = "uci";
     await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
     _stockfish.stdin = "isready";
     await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
 
-    if (widget.matchType == S.of(context).fun){
+    if (isFun) {
       _stockfish.stdin = "setoption name Threads value 1";
       _stockfish.stdin = "setoption name Hash value 32";
     }
 
-    if (widget.matchType == S.of(context).bet) {
+    if (isBet) {
       _stockfish.stdin = "setoption name Hash value 128";
     } else {
       _stockfish.stdin = "setoption name Hash value 32";
     }
 
-    if (widget.matchType == S.of(context).bet) {
+    if (isBet) {
       switch (widget.selectedDifficulty.toLowerCase()) {
         case 'normal':
           _stockfish.stdin = "setoption name Skill Level value 15";
@@ -620,6 +632,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
     if (!_hasStartedGame) {
       final canPlay = await _checkAndDeductGameCost();
+      if (!mounted) return;
       if (!canPlay) {
         return;
       }
@@ -727,13 +740,12 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   }
 
   Future<void> _recordGameResult(GameResultModel result) async {
-    if (currentUser == null) {
-      return;
-    }
+    if (currentUser == null) return;
+    if (_gameStartTime == null) return;
 
-    if (_gameStartTime == null) {
-      return;
-    }
+    // Capture context-dependent values before async gaps
+    final isBet = widget.matchType == S.of(context).bet;
+    final currencyType = _getCurrencyType();
 
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
@@ -758,17 +770,20 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
       if (currencyChange > 0) {
         final userData = await _firestoreService.getUser(currentUser!.uid);
+        if (!mounted) return;
         if (userData != null) {
-          if (widget.matchType == S.of(context).bet) {
-            final newDiamonds = userData.diamonds! + currencyChange;
+          if (isBet) {
+            final newDiamonds = userData.diamonds + currencyChange;
             await _firestoreService.updateUserDiamonds(
               currentUser!.uid,
               newDiamonds,
             );
+            if (!mounted) return;
             setState(() => _userDiamonds = newDiamonds);
           } else {
             final newCoins = userData.coins + currencyChange;
             await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);
+            if (!mounted) return;
             setState(() => _userCoins = newCoins);
           }
         }
@@ -787,17 +802,18 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
           'finalFEN': controller.getFen(),
           'gameCost': gameCost,
           'currencyChange': currencyChange,
-          'currencyType': _getCurrencyType(),
+          'currencyType': currencyType,
           'matchType': widget.matchType,
           'timeControl': '1 minuto por movimiento',
           'hasTimeLimit': true,
         },
       );
 
+      if (!mounted) return;
       if (success) {
         if (currencyChange > 0) {
           if (kDebugMode) {
-            print('Recompensa: $currencyChange ${_getCurrencyType()}');
+            print('Recompensa: $currencyChange $currencyType');
           }
         }
       } else {
@@ -1187,23 +1203,22 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
       );
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        if (_gameEnded) {
-          return true;
-        }
+    return PopScope(
+      canPop: _gameEnded,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
         final shouldAbandon = await _showAbandonDialog();
+        if (!context.mounted) return;
         if (shouldAbandon) {
           _interstitialHelper.forceShowAd(
             onComplete: () async {
               await _recordGameResult(GameResultModel.loss);
             },
           );
-          return true;
+          if (context.mounted) Navigator.of(context).pop();
         }
-        return false;
       },
-      child:Scaffold(
+      child: Scaffold(
       backgroundColor: const ui.Color(0xFFEC7A34),
       appBar: AppBar(
         backgroundColor: const ui.Color(0xFFEC7A34),
@@ -1301,7 +1316,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
                     BoardArrow(
                       from: _lastMoveFrom!,
                       to: _lastMoveTo!,
-                      color: Colors.yellowAccent.withOpacity(0.5),
+                      color: Colors.yellowAccent.withValues(alpha: 0.5),
                     ),
                   ] : [],
                 ),

@@ -72,7 +72,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   String? _opponentPhotoUrl;
 
   bool _localizationsReady = false;
-  bool _isScreenKeepOnActive = false;
 
   @override
   void initState() {
@@ -89,7 +88,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     try {
       if (!await WakelockPlus.enabled) {
         await WakelockPlus.enable();
-        if (mounted) setState(() => _isScreenKeepOnActive = true);
       }
     } catch (_) {}
   }
@@ -98,7 +96,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     try {
       if (await WakelockPlus.enabled) {
         await WakelockPlus.disable();
-        if (mounted) setState(() => _isScreenKeepOnActive = false);
       }
     } catch (_) {}
   }
@@ -345,6 +342,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     if (currentUser == null) return;
     try {
       final userDoc = await _firestoreService.getUser(currentUser!.uid);
+      if (!mounted) return;
       if (userDoc != null) {
         setState(() {
           _userDiamonds = userDoc.diamonds;
@@ -355,6 +353,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       if (kDebugMode) {
         print('💥 Error loading user currency: $e');
       }
+      if (!mounted) return;
       setState(() {
         _userDiamonds = 0;
         _userCoins = 0;
@@ -424,12 +423,13 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         }
         _handleGameUpdate(game);
       },
-      onError: (error) {
+      onError: (Object error, StackTrace stackTrace) {
         if (kDebugMode) {
           print('Error in game stream: $error');
         }
         setState(() => _isConnected = false);
         _startReconnectTimer();
+        return false;
       },
     );
   }
@@ -885,6 +885,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         moveNotation: "move",
       );
 
+      if (!mounted) return;
       if (!success) {
         _syncGameState();
         _showError('Error al enviar movimiento. Inténtalo de nuevo.');
@@ -1546,12 +1547,13 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
               SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () async {
+                  final navigator = Navigator.of(context);
                   final cancelled = await _gameService.cancelGame(
                     widget.gameId,
                     currentUser!.uid,
                   );
                   if (cancelled) {
-                    Navigator.of(context).pop();
+                    navigator.pop();
                   }
                 },
                 icon: Icon(Icons.close),
@@ -1567,21 +1569,20 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       );
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        if (_gameEnded || _hasUserExitedGame) {
-          return true;
-        }
+    return PopScope(
+      canPop: _gameEnded || _hasUserExitedGame,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
         final shouldAbandon = await _showAbandonDialog();
         if (shouldAbandon) {
           _interstitialHelper.forceShowAd(
             onComplete: () async {
+              final navigator = Navigator.of(context);
               await _abandonGame();
+              navigator.pop();
             },
           );
-          return true;
         }
-        return false;
       },
       child: Scaffold(
         backgroundColor: const ui.Color(0xFFEC7A34),

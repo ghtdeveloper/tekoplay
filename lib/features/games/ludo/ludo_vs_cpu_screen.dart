@@ -924,6 +924,16 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       return;
     }
 
+    // Si solo hay una ficha elegible, ejecutar bonus automáticamente
+    if (bonusMoves.length == 1) {
+      final m = bonusMoves.first;
+      _showEventToast('🎯 ¡Comiste! +20 casillas');
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted || _gameEnded) return;
+        _applyBonusTopiece('yellow', m['piece'] as LudoPiece, m['bonusPos'] as int, hadDouble);
+      });
+      return;
+    }
     setState(() {
       _movablePieces = bonusMoves;
       _bonusSelectionActive = true;
