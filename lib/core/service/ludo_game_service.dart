@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/ludo_game_match.dart';
+import 'game_quota_service.dart';
 
 class LudoGameService {
   static final LudoGameService _instance = LudoGameService._internal();
@@ -142,10 +143,39 @@ class LudoGameService {
 
       await gameRef.update(updates);
 
+      // Cobrar cuotas al unirse (igual que chess) cuando es juego de apuesta con 2 jugadores
+      final isBetGame = (game.betAmount ?? 0) > 0 && newPlayerCount == 2;
+      if (isBetGame) {
+        final quotaService = GameQuotaService();
+        final result = await quotaService.collectQuotas(
+          gameId: gameId,
+          hostId: game.hostId,
+          guestId: playerId,
+          quotaAmount: game.betAmount!,
+          currencyType: game.currencyType,
+          collectionName: _gamesCollection,
+        );
+
+        if (result['success'] != true) {
+          // Revertir el join si no se pudieron cobrar las cuotas
+          await gameRef.update({
+            'guest2Id': null,
+            'guest2Name': null,
+            'guest2PhotoUrl': null,
+            'player2Quota': null,
+            'status': 'waiting',
+            'startedAt': null,
+          });
+          if (kDebugMode) print('💥 Fallo al cobrar cuotas Ludo: ${result['error']}');
+          return false;
+        }
+      }
+
       if (kDebugMode) {
         print('✅ Jugador unido al juego Ludo: $playerName');
         print('   Posición: player$playerNumber');
         print('   Jugadores actuales: $newPlayerCount/$expectedPlayers');
+        if (isBetGame) print('   Cuotas cobradas: ${game.betAmount} ${game.currencyType} c/u');
       }
 
       return true;
@@ -153,6 +183,36 @@ class LudoGameService {
       if (kDebugMode) {
         print('💥 Error uniéndose al juego Ludo: $e');
       }
+      return false;
+    }
+  }
+
+  /// Finalizar partida de Ludo (análogo a MultiplayerGameService.finishGame)
+  Future<bool> finishGame({
+    required String gameId,
+    required String winnerId,
+  }) async {
+    try {
+      final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
+      final gameDoc = await gameRef.get();
+      if (!gameDoc.exists) return false;
+
+      await gameRef.update({
+        'status': 'finished',
+        'winnerId': winnerId,
+        'result': 'win',
+        'finishedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (kDebugMode) {
+        print('✅ [Ludo] Juego finalizado: $gameId');
+        print('   Ganador: $winnerId');
+        print('   Cloud Function distribuirá las recompensas automáticamente');
+      }
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('💥 Error finalizando juego Ludo: $e');
       return false;
     }
   }

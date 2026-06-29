@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,8 +10,10 @@ import '../../../core/models/ludo_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/ludo_game_service.dart';
+import '../../../core/service/bot_name_service.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
+import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'ludo_board_painter.dart';
 import 'multiplayer_ludo_screen.dart';
@@ -36,6 +39,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   _LudoOnlineState _screenState = _LudoOnlineState.playerCountSelection;
   int _selectedPlayerCount = 2;
   int? _selectedBetAmount;
+  // Calculado en didChangeDependencies para no depender de strings hardcodeados.
+  String _currencyType = 'coins';
 
   static const List<int> _betOptions = [10, 20, 50, 100, 250, 500, 1000, 5000, 10000];
 
@@ -57,17 +62,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   int? _userDiamonds;
 
   bool _isPlayingAgainstBot = false;
+  bool _botIsWeak = false; // true when player earned a "gimme" win
 
-  static const List<Map<String, String>> _botProfiles = [
-    {'name': 'Carlos_MX99',   'emoji': '😎'},
-    {'name': 'luisR_2024',    'emoji': '🎮'},
-    {'name': 'PepitaFlores',  'emoji': '👑'},
-    {'name': 'Andreita_07',   'emoji': '🔥'},
-    {'name': 'j_Coronado',    'emoji': '🏆'},
-    {'name': 'marcoG_55',     'emoji': '⚡'},
-    {'name': 'SofiaV_play',   'emoji': '🌟'},
-    {'name': 'reydelParchis', 'emoji': '🎲'},
-  ];
 
   String _opponentName   = '';
   String _opponentEmoji  = '🎮';
@@ -136,6 +132,12 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _Coord(8, 5), _Coord(8, 4), _Coord(8, 3), _Coord(8, 2), _Coord(8, 1), _Coord(8, 0),
     _Coord(7, 0), _Coord(6, 0),
   ];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _currencyType = widget.matchType == S.of(context).bet ? 'diamonds' : 'coins';
+  }
 
   @override
   void initState() {
@@ -296,7 +298,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     _isJoiningGame = true;
     try {
-      final ct = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
+      final ct = _currencyType;
       final waiting = await _gameService.findWaitingGames(
         numberOfPlayers: _selectedPlayerCount,
         currencyType: ct,
@@ -334,7 +336,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   Future<void> _findOrCreateGame() async {
     try {
-      final ct = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
+      final ct = _currencyType;
       final waiting = await _gameService.findWaitingGames(
         numberOfPlayers: _selectedPlayerCount,
         currencyType: ct,
@@ -366,7 +368,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         hostId: _currentUser!.uid,
         hostName: _myName ?? 'Jugador',
         hostPhotoUrl: _myPhotoUrl,
-        currencyType: widget.matchType == 'Apuesta' ? 'diamonds' : 'coins',
+        currencyType: _currencyType,
         betAmount: widget.matchType == 'Apuesta' ? _selectedBetAmount : null,
         numberOfPlayers: _selectedPlayerCount,
         isOnlineMatchmaking: true,
@@ -477,7 +479,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     }
   }
 
-  void _startBotGame() {
+  Future<void> _startBotGame() async {
     if (_isPlayingAgainstBot || _navigated) return;
     if (_screenState == _LudoOnlineState.gameActive) return;
 
@@ -500,7 +502,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       }
     }
 
-    final profile = _botProfiles[_random.nextInt(_botProfiles.length)];
+    final profile = await BotNameService.pickUnseenProfile(_random);
+    final isBetMode = widget.matchType == 'Apuesta';
+    _botIsWeak = isBetMode && await BotNameService.shouldBotPlayWeak();
 
     _myColor   = 'yellow';
     _botColor  = 'red';
@@ -636,22 +640,35 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   void _handleBoardTap(Offset local) {
     if (!_isMyTurn || _gameEnded || _boardSize == 0) return;
-    if (_dice1Value == 0 && _dice2Value == 0) return;
+    if (_dice1Value == 0 && _dice2Value == 0 && !_bonusSelectionActive) return;
 
     final sq = _boardSize / 15;
     final tapR = sq * 0.7;
     final pieces = _gameState.getPiecesByColor(_myColor);
 
     if (_bonusSelectionActive) {
+      // Use a generous radius for bonus taps; finger taps are imprecise.
+      final bonusTapR = sq * 1.8;
+      int? closestId;
+      Map<String, dynamic>? closestBm;
+      double closestDist = double.infinity;
+
       for (int i = 0; i < pieces.length; i++) {
         final bm = _pendingBonusMoves.firstWhere(
             (m) => m['pieceId'] == i, orElse: () => {});
         if (bm.isEmpty) continue;
         final pos = _getPieceScreenPos(pieces[i], _myColor, sq);
-        if (pos != null && (local - pos).distance < tapR) {
-          _executeBonusMove(_myColor, i, bm['bonusPos'] as int, _bonusHadDouble);
-          return;
+        if (pos == null) continue;
+        final dist = (local - pos).distance;
+        if (dist < bonusTapR && dist < closestDist) {
+          closestDist = dist;
+          closestId = i;
+          closestBm = bm;
         }
+      }
+
+      if (closestId != null && closestBm != null) {
+        _executeBonusMove(_myColor, closestId, closestBm['bonusPos'] as int, _bonusHadDouble);
       }
       return;
     }
@@ -1011,11 +1028,72 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     });
   }
 
+  /// Picks the dice pair for the bot.
+  /// • Bet mode + strong: samples 8 pairs, picks the best (hardest to beat).
+  /// • Bet mode + weak  : samples 8 pairs, picks the WORST (gives player edge).
+  /// • Fun mode         : pure random.
+  (int, int) _chooseBotDice() {
+    final isBet = widget.matchType == 'Apuesta';
+    if (!isBet) {
+      return (_random.nextInt(6) + 1, _random.nextInt(6) + 1);
+    }
+
+    const candidates = 8;
+    int bestScore = _botIsWeak ? double.maxFinite.toInt() : -1;
+    int bestD1 = _random.nextInt(6) + 1;
+    int bestD2 = _random.nextInt(6) + 1;
+
+    for (int i = 0; i < candidates; i++) {
+      final cd1 = _random.nextInt(6) + 1;
+      final cd2 = _random.nextInt(6) + 1;
+      final score = _scoreDicePair(cd1, cd2);
+      final better = _botIsWeak ? score < bestScore : score > bestScore;
+      if (better) {
+        bestScore = score;
+        bestD1 = cd1;
+        bestD2 = cd2;
+      }
+    }
+    return (bestD1, bestD2);
+  }
+
+  /// Scores a dice pair for the bot by simulating the best move it enables.
+  int _scoreDicePair(int d1, int d2) {
+    final botPieces = _gameState.getPiecesByColor(_botColor);
+    int best = 0;
+    for (final dv in {d1, d2}) {
+      for (int i = 0; i < botPieces.length; i++) {
+        final p = botPieces[i];
+        if (p.isFinished) continue;
+        final np = _calculateNewPosition(p, dv, _botColor);
+        if (np == null || !_canLandOn(_botColor, np, p)) continue;
+        int s = 0;
+        // Capture enemy
+        if (np < 52 && !_isSafeForColor(np, _botColor)) {
+          for (final ec in _activePlayers) {
+            if (ec == _botColor) continue;
+            final hit = _gameState.getPiecesByColor(ec)
+                .where((ep) => !ep.isHome && !ep.isFinished && ep.position == np).length;
+            if (hit > 0 && hit < 2) s += 1000;
+          }
+        }
+        if (np == 57) s += 800;
+        if (np >= 52 && p.position < 52) s += 300;
+        if (p.isHome) s += 200;
+        if (!p.isHome && p.position < 52) {
+          s += _stepsFromStart(p.position, _getStartPosition(_botColor)) * 5;
+        }
+        if (np < 52 && _isSafeForColor(np, _botColor)) s += 50;
+        if (s > best) best = s;
+      }
+    }
+    return best;
+  }
+
   Future<void> _executeBotTurn() async {
     if (_gameEnded || !mounted || _currentPlayer != _botColor) { _clearBotExecution(); return; }
 
-    final d1 = _random.nextInt(6) + 1;
-    final d2 = _random.nextInt(6) + 1;
+    final (d1, d2) = _chooseBotDice();
 
     if (d1 == d2) {
       _consecutiveDoubles++;
@@ -1072,7 +1150,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       return;
     }
 
-    int bestScore = -1;
+    // Weak mode: intentionally pick the worst move so the player can win.
+    int bestScore = _botIsWeak ? double.maxFinite.toInt() : -1;
     Map<String, dynamic>? bestMove;
 
     for (final move in _movablePieces) {
@@ -1092,14 +1171,39 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         }
       }
       if (np == 57) score += 800;
-      if (np >= 52 && piece.position < 52) score += 300;
+      if (np >= 52 && piece.position < 52) score += 400;
       if (piece.isHome) score += 200;
       if (!piece.isHome && piece.position < 52) {
         score += _stepsFromStart(piece.position, _getStartPosition(_botColor)) * 5;
       }
-      if (np < 52 && _isSafeForColor(np, _botColor)) score += 50;
+      // Bonus: landing on a safe square
+      if (np < 52 && _isSafeForColor(np, _botColor)) score += 80;
+      // Bonus: forming a barrier (landing where another bot piece already is)
+      if (np < 52) {
+        final sameSquare = _gameState.getPiecesByColor(_botColor)
+            .where((bp) => !bp.isFinished && !bp.isHome && bp.position == np).length;
+        if (sameSquare == 1) score += 150; // creates barrier of 2
+      }
+      // Penalty: landing somewhere an enemy can capture next turn
+      if (np < 52 && !_isSafeForColor(np, _botColor)) {
+        bool canBeHit = false;
+        for (final ec in _activePlayers) {
+          if (ec == _botColor) continue;
+          for (final ep in _gameState.getPiecesByColor(ec)) {
+            if (ep.isHome || ep.isFinished) continue;
+            for (int dv2 = 1; dv2 <= 6; dv2++) {
+              final enp = _calculateNewPosition(ep, dv2, ec);
+              if (enp == np) { canBeHit = true; break; }
+            }
+            if (canBeHit) break;
+          }
+          if (canBeHit) break;
+        }
+        if (canBeHit) score -= 200;
+      }
 
-      if (score > bestScore) { bestScore = score; bestMove = move; }
+      final better = _botIsWeak ? score < bestScore : score > bestScore;
+      if (better) { bestScore = score; bestMove = move; }
     }
     bestMove ??= _movablePieces.first;
     await Future.delayed(Duration(milliseconds: 300 + _random.nextInt(300)));
@@ -1278,11 +1382,16 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     setState(() => _gameEnded = true);
     _turnTimer?.cancel();
     _botSafetyTimer?.cancel();
+    final isBet = widget.matchType == 'Apuesta';
     final isWin = winnerColor == _myColor;
 
+    // Track consecutive losses so we know when to give the player a soft win.
+    if (isBet && _isPlayingAgainstBot) {
+      BotNameService.recordBetResult(playerWon: isWin);
+    }
+
     if (isWin && _currentUser != null) {
-      final isBet = widget.matchType == 'Apuesta';
-      final betAmount = isBet ? 25 : 100;
+      final betAmount = isBet ? (_selectedBetAmount ?? 25) : 100;
       final prize = betAmount + (betAmount * 0.7).ceil();
       if (isBet) {
         _firestoreService.incrementUserDiamonds(_currentUser!.uid, prize);
@@ -2524,7 +2633,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }) async {
     if (_currentUser == null || !mounted) return;
 
-    final currencyType = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
+    final currencyType = _currencyType;
 
     // Si ya hay una sala activa (p.ej. invitando al 2do/3er jugador), la reusamos
     final bool isNewGame = _activeGameId == null;

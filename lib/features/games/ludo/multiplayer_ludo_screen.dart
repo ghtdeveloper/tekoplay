@@ -37,6 +37,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   final LudoGameService _gameService = LudoGameService();
   User? get _currentUser => FirebaseAuth.instance.currentUser;
 
+  int? _userDiamonds;
+  int? _userCoins;
+  StreamSubscription<DocumentSnapshot>? _balanceSubscription;
+
   LudoGameMatch? _currentGame;
   StreamSubscription<LudoGameMatch?>? _gameSubscription;
   LudoGameState _gameState = LudoGameState.initial();
@@ -138,6 +142,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _gameSubscription?.cancel();
+    _balanceSubscription?.cancel();
     _turnTimer?.cancel();
     _pulseController.dispose();
     _diceAnimController.dispose();
@@ -179,6 +184,25 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         .getGameStream(widget.gameId)
         .listen(_handleGameUpdate, onError: (e) {
       if (kDebugMode) print('Ludo stream error: $e');
+    });
+    _setupBalanceListener();
+  }
+
+  void _setupBalanceListener() {
+    if (_currentUser == null) return;
+    _balanceSubscription?.cancel();
+    _balanceSubscription = _firestore
+        .collection('users')
+        .doc(_currentUser!.uid)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists && mounted) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _userDiamonds = data['diamonds'] ?? 0;
+          _userCoins = data['coins'] ?? 0;
+        });
+      }
     });
   }
 
@@ -449,16 +473,28 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final pieces = _gameState.getPiecesByColor(_myColor);
 
     if (_bonusSelectionActive) {
+      final bonusTapR = sq * 1.8;
+      int? closestId;
+      Map<String, dynamic>? closestBm;
+      double closestDist = double.infinity;
+
       for (int i = 0; i < pieces.length; i++) {
         final bm = _pendingBonusMoves.firstWhere(
           (m) => m['pieceId'] == i, orElse: () => {},
         );
         if (bm.isEmpty) continue;
         final pos = _getPieceScreenPosition(pieces[i], _myColor, sq);
-        if (pos != null && (local - pos).distance < tapR) {
-          _executeBonusMove(i, bm['bonusPos'] as int);
-          return;
+        if (pos == null) continue;
+        final dist = (local - pos).distance;
+        if (dist < bonusTapR && dist < closestDist) {
+          closestDist = dist;
+          closestId = i;
+          closestBm = bm;
         }
+      }
+
+      if (closestId != null && closestBm != null) {
+        _executeBonusMove(closestId, closestBm['bonusPos'] as int);
       }
       return;
     }
@@ -864,25 +900,21 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     setState(() => _gameEnded = true);
     _turnTimer?.cancel();
 
-    _firestore.collection('ludo_games').doc(widget.gameId).update({
-      'status': 'finished',
-      'winnerId': _currentUser?.uid,
-      'result': 'win',
-      'finishedAt': FieldValue.serverTimestamp(),
-    });
+    final winnerId = _currentUser?.uid;
+    if (winnerId != null) {
+      // Usar el servicio en lugar de escribir Firestore directamente
+      // (equivalente a MultiplayerGameService.finishGame en chess)
+      _gameService.finishGame(gameId: widget.gameId, winnerId: winnerId);
+    }
 
     final isWin = winnerColor == _myColor;
-    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss).then((_) {
-      _reloadUserCurrency();
-    });
+    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
     _showEndDialog(isWin ? '¡GANASTE! 🏆' : '${_getColorName(winnerColor)} ganó', _currentGame);
   }
 
   void _handleGameEnd(LudoGameMatch game) {
     final isWin = game.winnerId == _currentUser?.uid;
-    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss).then((_) {
-      _reloadUserCurrency();
-    });
+    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
     _showEndDialog(isWin ? '¡GANASTE! 🏆' : 'Otro jugador ganó', game);
   }
 
@@ -890,25 +922,20 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final data = game.toFirestore();
     final abandonedBy = data['abandonedBy'] as String?;
     if (abandonedBy != null && abandonedBy != _currentUser?.uid) {
-      _recordResult(GameResultModel.win).then((_) {
-        _reloadUserCurrency();
-      });
+      _recordResult(GameResultModel.win);
       _showEndDialog('Un jugador abandonó. ¡Ganaste! 🎉', game);
     } else {
       if (!_hasUserExited) {
-        _recordResult(GameResultModel.loss).then((_) {
-          _reloadUserCurrency();
-        });
+        _recordResult(GameResultModel.loss);
       }
       _showEndDialog('Partida abandonada.', game);
     }
   }
 
   Future<void> _reloadUserCurrency() async {
-    if (_currentUser == null) return;
-    try {
-      await _firestoreService.getUser(_currentUser!.uid);
-    } catch (_) {}
+    // El listener _balanceSubscription actualiza automáticamente _userDiamonds/_userCoins
+    // cuando la Cloud Function modifica el balance en Firestore. No se necesita polling.
+    if (kDebugMode) print('💰 [Ludo] Balance actualizado por listener en tiempo real');
   }
 
   Future<void> _recordResult(GameResultModel result) async {
@@ -932,7 +959,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final isWin = message.contains('GANASTE') || message.contains('Ganaste');
     final betAmount = game?.betAmount;
     final isBetGame = betAmount != null && betAmount > 0 && game?.currencyType == 'diamonds';
-    final winnerPrize = isBetGame ? (betAmount + (betAmount * 0.7).ceil()) : 0;
+    // Ganador recibe 90% del pot total (apuesta × 2). Casa cobra el 10%.
+    final winnerPrize = isBetGame ? ((betAmount * 2) * 0.90).floor() : 0;
 
     showDialog(
       context: context,

@@ -12,6 +12,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/service/bot_name_service.dart';
 import '../../../core/service/multiplayer_game_service.dart';
 import '../../../core/service/online_match_chess_game_service.dart';
 import '../../../core/utils/game_earnings_calculator.dart';
@@ -98,16 +99,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   final Random _random = Random();
   bool _isScreenKeepOnActive = false;
 
-  final List<Map<String, String>> _botProfiles = [
-    {'name': 'jContreras', 'avatar': '🤖'},
-    {'name': 'rLopez29', 'avatar': '👾'},
-    {'name': 'aGarcia203', 'avatar': '🎮'},
-    {'name': 'kSmith20', 'avatar': '👑'},
-    {'name': 'lPaker54', 'avatar': '♟️'},
-    {'name': 'abreyce', 'avatar': '🧠'},
-    {'name': 'katherineSmith', 'avatar': '👾'},
-    {'name': 'luisCoronado', 'avatar': '👑'},
-  ];
+  String? _botAvatar;
+  bool _botIsWeak = false; // true when player earned a "gimme" win
 
   @override
   void initState() {
@@ -129,10 +122,18 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     if (!_isStockfishReady) return;
 
     if (widget.matchType == S.of(context).bet) {
-      _cpuMoveTime = 150;
-      _stockfish!.stdin = "setoption name Threads value 2";
-      _stockfish!.stdin = "setoption name Hash value 64";
-      _stockfish!.stdin = "setoption name Skill Level value 20";
+      if (_botIsWeak) {
+        // Deliberately weak — player earned a win after 3 consecutive losses.
+        _cpuMoveTime = 50;
+        _stockfish!.stdin = "setoption name Threads value 1";
+        _stockfish!.stdin = "setoption name Hash value 16";
+        _stockfish!.stdin = "setoption name Skill Level value 0";
+      } else {
+        _cpuMoveTime = 3000;
+        _stockfish!.stdin = "setoption name Threads value 4";
+        _stockfish!.stdin = "setoption name Hash value 128";
+        _stockfish!.stdin = "setoption name Skill Level value 20";
+      }
     } else if (widget.matchType == S.of(context).fun) {
       _cpuMoveTime = 75;
       _stockfish!.stdin = "setoption name Threads value 1";
@@ -148,7 +149,13 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _initializeStockfish() {
-    _stockfish = Stockfish();
+    try {
+      _stockfish = Stockfish();
+    } catch (_) {
+      // Another native instance is still alive; wait for it to shut down.
+      Future.delayed(const Duration(milliseconds: 800), _initializeStockfish);
+      return;
+    }
 
     _stockfish!.stdout.listen((output) {
       if (!_isPlayingAgainstBot) return;
@@ -222,7 +229,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   bool _shouldBotMakeMove() {
     if (widget.matchType == S.of(context).bet) {
-      return _random.nextInt(100) < 99;
+      return true;
     } else if (widget.matchType == S.of(context).fun) {
       return _random.nextInt(100) < 55;
     }
@@ -309,17 +316,22 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _botMoveTimer?.cancel();
     _betNegotiationSubscription?.cancel();
     _balanceSubscription?.cancel();
-    if (_isStockfishReady && _stockfish != null) {
-      _stockfish!.stdin = "quit";
-    }
+    // Always try to shut down the engine, even if it wasn't fully ready.
+    try { _stockfish?.stdin = "quit"; } catch (_) {}
+    try { _stockfish?.dispose(); } catch (_) {}
+    _stockfish = null;
     _disableWakeLock();
-    _stockfish?.dispose();
     _interstitialHelper.dispose();
     super.dispose();
   }
 
   Future<void> _cleanupActiveGame() async {
-    if (_activeGameId != null && !_isPlayingAgainstBot) {
+    // Only cancel the game in Firestore if it is still in the waiting state.
+    // Active/playing games should NOT be cancelled on dispose — the opponent
+    // screen handles that via the abandoned/timeout flow.
+    final isWaiting = _currentGame == null ||
+        _currentGame!.status == 'waiting';
+    if (_activeGameId != null && !_isPlayingAgainstBot && isWaiting) {
       try {
         await FirebaseFirestore.instance
             .collection('multiplayer_games')
@@ -327,7 +339,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             .update({
               'status': 'cancelled',
               'cancelledAt': FieldValue.serverTimestamp(),
-              'cancelReason': 'user_disconnected',
+              'cancelReason': 'host_left_waiting',
             });
       } catch (e) {
         if (kDebugMode) {
@@ -666,20 +678,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _matchmakingSeconds = 0;
     });
 
-    final userRanking = await _getUserRanking();
-
-    try {
-      final gameId = await _findOrCreateGame(userRanking);
-
-      if (gameId != null && mounted) {
-        _startGameSubscription(gameId);
-        // No return: el timer debe arrancar para que el contador se muestre
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error en búsqueda inicial: $e');
-      }
-    }
+    // Start the timer immediately so the counter is visible from second 1.
+    // userRanking is captured by reference — the closure will see the updated
+    // value once the async fetch below completes (always before the 5s mark).
+    int userRanking = 1000;
 
     _matchmakingTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
       if (!mounted) {
@@ -687,9 +689,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         return;
       }
 
-      if (_currentGame != null ||
-          _gameState == OnlineGameState.playing ||
-          _gameState == OnlineGameState.betNegotiation) {
+      if (_gameState == OnlineGameState.playing ||
+          _gameState == OnlineGameState.betNegotiation ||
+          (_currentGame != null && _currentGame!.status == 'active')) {
         timer.cancel();
         return;
       }
@@ -701,19 +703,22 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
         if (_matchmakingSeconds % 5 == 0 && !_isPlayingAgainstBot) {
           try {
-            if (_currentGame != null ||
-                _gameState != OnlineGameState.searching ||
-                _activeGameId != null) {
+            // Si el host ya tiene un juego en espera o ya está en partida,
+            // saltamos la búsqueda pero dejamos el timer corriendo (para el bot).
+            if (_gameState != OnlineGameState.searching) {
               timer.cancel();
               return;
             }
-
+            if (_currentGame != null || _activeGameId != null) {
+              // Host esperando rival — no buscar otros juegos, sólo seguir contando.
+            } else {
             final waitingGames = await OnlineMatchmakingChessService()
                 .findWaitingGamesProgressive(
                   gameType: 'Ajedrez',
                   userRanking: userRanking,
                   timeMinutes: _selectedTimeMinutes,
                   searchTimeSeconds: _matchmakingSeconds,
+                  excludeHostId: currentUser?.uid,
                 );
 
             if (waitingGames.isNotEmpty && mounted) {
@@ -725,7 +730,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                     '⚠️ Juego encontrado pero ya hay uno activo, ignorando',
                   );
                 }
-                timer.cancel();
                 return;
               }
 
@@ -751,6 +755,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                 return;
               }
             }
+            } // end else (no activeGameId)
           } catch (e) {
             if (kDebugMode) {
               print('❌ Error en búsqueda progresiva: $e');
@@ -761,9 +766,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         const int maxWaitTime = 30;
         if (_matchmakingSeconds >= maxWaitTime &&
             !_isPlayingAgainstBot &&
-            _currentGame == null &&
-            _gameState == OnlineGameState.searching &&
-            _activeGameId == null) {
+            (_currentGame == null || _currentGame!.status == 'waiting') &&
+            _gameState == OnlineGameState.searching) {
           if (kDebugMode) {
             print('⏰ Tiempo máximo alcanzado. Iniciando juego contra bot...');
             print('   _matchmakingSeconds: $_matchmakingSeconds');
@@ -787,23 +791,45 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         }
       }
     });
+
+    // Fetch ranking and do the initial game search in the background.
+    // This runs concurrently with the timer so the counter starts immediately.
+    try {
+      userRanking = await _getUserRanking();
+      final gameId = await _findOrCreateGame(userRanking);
+      if (gameId != null && mounted) {
+        _startGameSubscription(gameId);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error en búsqueda inicial: $e');
+      }
+    }
   }
 
-  void _startBotGame() {
-    if (_currentGame != null) {
+  Future<void> _startBotGame() async {
+    if (_currentGame != null && _currentGame!.status != 'waiting') {
       if (kDebugMode) {
-        print('⚠️ _startBotGame cancelado: Ya hay _currentGame');
+        print('⚠️ _startBotGame cancelado: Ya hay _currentGame activo');
       }
       return;
     }
 
+    // Si el host tiene un juego en espera, cancelarlo antes de iniciar el bot.
     if (_activeGameId != null) {
-      if (kDebugMode) {
-        print(
-          '⚠️ _startBotGame cancelado: Ya hay _activeGameId: $_activeGameId',
-        );
-      }
-      return;
+      try {
+        await FirebaseFirestore.instance
+            .collection('multiplayer_games')
+            .doc(_activeGameId!)
+            .update({
+              'status': 'cancelled',
+              'cancelReason': 'no_opponent_found',
+            });
+      } catch (_) {}
+      _gameSubscription?.cancel();
+      _keepAliveTimer?.cancel();
+      _activeGameId = null;
+      _currentGame = null;
     }
 
     if (_gameState != OnlineGameState.searching) {
@@ -824,11 +850,19 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       print('🤖 Iniciando juego contra BOT');
     }
 
+    final botProfile = await BotNameService.pickUnseenProfile(_random);
+    _botIsWeak = widget.matchType == S.of(context).bet &&
+        await BotNameService.shouldBotPlayWeak();
+
+    // Re-apply engine settings now that _botIsWeak is known.
+    _setupStockfishSettings();
+
     setState(() {
       _isPlayingAgainstBot = true;
+      _gameStarted = true;
       _gameState = OnlineGameState.playing;
-      final botProfile = _botProfiles[_random.nextInt(_botProfiles.length)];
       _opponentName = botProfile['name'];
+      _botAvatar = botProfile['avatar'];
       _opponentPhotoUrl = null;
       _myColor = _random.nextBool() ? PlayerColor.white : PlayerColor.black;
       controller.resetBoard();
@@ -1054,6 +1088,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             userRanking: userRanking,
             timeMinutes: _selectedTimeMinutes,
             betAmount: _selectedBetAmount,
+            excludeHostId: currentUser?.uid,
           );
 
       if (waitingGames.isNotEmpty) {
@@ -1711,9 +1746,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     _activeGameId = gameId;
 
-    _matchmakingTimer?.cancel();
-    _matchmakingTimer = null;
-
     _startKeepAlive(gameId);
 
     final gameNotFoundMsg = S.of(context).gameNotFound;
@@ -1832,6 +1864,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     _loadPlayerRankings(game);
 
+    // For guest players who didn't go through time selection UI, read from game data
+    _selectedTimeMinutes ??= game.gameSettings?['timeMinutes'] as int?;
+
     if (_selectedTimeMinutes != null) {
       _myTimeSeconds = _selectedTimeMinutes! * 60;
       _opponentTimeSeconds = _selectedTimeMinutes! * 60;
@@ -1897,8 +1932,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _gameEnded = true;
     _playerTimer?.cancel();
 
-    final result = isMyTimeout ? GameResultModel.loss : GameResultModel.win;
-    _recordGameResult(result);
+    final effectiveResult = isMyTimeout ? GameResultModel.loss : GameResultModel.win;
+    _recordGameResult(effectiveResult);
 
     if (!_isPlayingAgainstBot && _currentGame != null) {
       final winnerId =
@@ -1908,7 +1943,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
       MultiplayerGameService().finishGameOnline(
         gameId: _currentGame!.id,
-        result: result,
+        result: effectiveResult,
         winnerId: winnerId,
         reason: 'timeout',
       );
@@ -2284,6 +2319,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     final messenger = ScaffoldMessenger.of(context);
     final s = S.of(context);
     final isBetMode = widget.matchType == s.bet;
+
+    // Track consecutive losses for the soft-win system.
+    if (isBetMode && _isPlayingAgainstBot) {
+      BotNameService.recordBetResult(playerWon: result == GameResultModel.win);
+    }
     final isFunMode = widget.matchType == s.fun;
 
     try {
@@ -3051,14 +3091,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     final isPlayerTurn = isMe ? _isMyTurn : !_isMyTurn;
     final ranking = isMe ? _myRanking : _opponentRanking;
 
-    String? botAvatar;
-    if (!isMe && _isPlayingAgainstBot && _opponentName != null) {
-      final botProfile = _botProfiles.firstWhere(
-        (p) => p['name'] == _opponentName,
-        orElse: () => _botProfiles[0],
-      );
-      botAvatar = botProfile['avatar'];
-    }
+    final String? botAvatar = (!isMe && _isPlayingAgainstBot) ? _botAvatar : null;
 
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),

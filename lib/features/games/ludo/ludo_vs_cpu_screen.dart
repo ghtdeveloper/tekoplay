@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/ludo_game_match.dart';
@@ -98,6 +100,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   late Animation<double> _toastAnim;
 
   final FirestoreService _firestoreService = FirestoreService();
+  User? get _currentUser => FirebaseAuth.instance.currentUser;
+  int? _userDiamonds;
+  int? _userCoins;
 
 
   static const List<_Coord> _boardPath = [
@@ -145,8 +150,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     _toastController = AnimationController(duration: const Duration(milliseconds: 300), vsync: this);
     _toastAnim = CurvedAnimation(parent: _toastController, curve: Curves.easeOut);
 
-    // Yellow comienza: iniciar temporizador AFK de tirada
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startAfkRollTimer());
+    // Yellow comienza: iniciar temporizador AFK de tirada y cargar balance
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadAndDeductGameCost();
+      _startAfkRollTimer();
+    });
   }
 
   void _setupActivePlayers() {
@@ -1391,6 +1399,49 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     return _gameState.getPiecesByColor(color).every((p) => p.isFinished);
   }
 
+  int _getGameCost() => widget.matchType == 'Apuesta' ? 25 : 100;
+
+  Future<void> _loadAndDeductGameCost() async {
+    if (_currentUser == null) return;
+    try {
+      final userData = await _firestoreService.getUser(_currentUser!.uid);
+      if (userData == null || !mounted) return;
+
+      final isBet = widget.matchType == 'Apuesta';
+      final cost = _getGameCost();
+
+      if (isBet) {
+        if (userData.diamonds < cost) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Diamantes insuficientes (necesitas $cost 💎)'), backgroundColor: Colors.red),
+            );
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+        final newDiamonds = userData.diamonds - cost;
+        await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
+        if (mounted) setState(() => _userDiamonds = newDiamonds);
+      } else {
+        if (userData.coins < cost) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Monedas insuficientes (necesitas $cost 🪙)'), backgroundColor: Colors.red),
+            );
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+        final newCoins = userData.coins - cost;
+        await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
+        if (mounted) setState(() => _userCoins = newCoins);
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error deduciendo costo Ludo vs CPU: $e');
+    }
+  }
+
   void _endGame(String winnerColor) {
     if (_gameEnded) return;
     setState(() => _gameEnded = true);
@@ -1411,11 +1462,31 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   }
 
   Future<void> _recordGameResult(GameResultModel result) async {
-    if (_gameStartTime == null) return;
+    if (_gameStartTime == null || _currentUser == null) return;
     try {
+      final isBet = widget.matchType == 'Apuesta';
+      final gameCost = _getGameCost();
       final duration = DateTime.now().difference(_gameStartTime!).inMinutes;
+
+      // Recompensar al ganador (igual que chess_vs_cpu_screen)
+      if (result == GameResultModel.win) {
+        final currencyChange = gameCost + (gameCost * 0.7).ceil();
+        final userData = await _firestoreService.getUser(_currentUser!.uid);
+        if (userData != null && mounted) {
+          if (isBet) {
+            final newDiamonds = userData.diamonds + currencyChange;
+            await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
+            if (mounted) setState(() => _userDiamonds = newDiamonds);
+          } else {
+            final newCoins = userData.coins + currencyChange;
+            await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
+            if (mounted) setState(() => _userCoins = newCoins);
+          }
+        }
+      }
+
       await _firestoreService.recordGameMatch(
-        userId: 'current_user_id',
+        userId: _currentUser!.uid,
         gameType: GameTypeModel.ludo,
         result: result,
         pointsEarned: result == GameResultModel.win ? 20 : -5,
@@ -1426,10 +1497,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
           'playerColor': 'yellow',
           'matchType': widget.matchType,
           'cpuCount': widget.cpuCount,
+          'gameCost': gameCost,
+          'currencyType': isBet ? 'diamonds' : 'coins',
         },
       );
     } catch (e) {
-      debugPrint('Error recording game: $e');
+      if (kDebugMode) print('Error recording Ludo vs CPU result: $e');
     }
   }
 

@@ -69,6 +69,7 @@ class OnlineMatchmakingChessService {
     required int userRanking,
     required int? timeMinutes,
     int searchTimeSeconds = 0,
+    String? excludeHostId,
   }) async {
     try {
       // Rangos progresivos basados en el tiempo de búsqueda
@@ -80,6 +81,10 @@ class OnlineMatchmakingChessService {
       } else {
         rankingRange = 300; // Después de 30 segundos: rango de ±300 puntos
       }
+
+      const int maxInactivitySeconds = 30;
+      final DateTime minActivityTime =
+          DateTime.now().subtract(Duration(seconds: maxInactivitySeconds));
 
       final int minRanking = userRanking - rankingRange;
       final int maxRanking = userRanking + rankingRange;
@@ -99,11 +104,21 @@ class OnlineMatchmakingChessService {
       )
           .orderBy('gameSettings.hostRanking')
           .orderBy('createdAt')
-          .limit(5)
+          .limit(10)
           .get();
 
       final games = query.docs
           .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
+          .where((game) {
+            // Exclude stale games (host went inactive or app crashed)
+            final bool fresh = game.lastHostActivity != null
+                ? game.lastHostActivity!.isAfter(minActivityTime)
+                : game.createdAt.isAfter(minActivityTime);
+            // Exclude the current user's own games to prevent self-matching
+            final bool notOwn =
+                excludeHostId == null || game.hostId != excludeHostId;
+            return fresh && notOwn;
+          })
           .toList();
 
       if (games.isNotEmpty) {
@@ -130,6 +145,7 @@ class OnlineMatchmakingChessService {
     required int userRanking,
     required int? timeMinutes,
     int? betAmount,
+    String? excludeHostId,
   }) async {
     try {
       const int maxRankingDifference = 300;
@@ -159,11 +175,13 @@ class OnlineMatchmakingChessService {
       final games = query.docs
           .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
           .where((game) {
-        if (game.lastHostActivity == null) {
-          return game.createdAt.isAfter(minActivityTime);
-        }
-        return game.lastHostActivity!.isAfter(minActivityTime);
-      })
+            final bool fresh = game.lastHostActivity != null
+                ? game.lastHostActivity!.isAfter(minActivityTime)
+                : game.createdAt.isAfter(minActivityTime);
+            final bool notOwn =
+                excludeHostId == null || game.hostId != excludeHostId;
+            return fresh && notOwn;
+          })
           .toList();
 
       if (games.isNotEmpty) {

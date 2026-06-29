@@ -24,6 +24,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   late AudioPlayer _audioPlayer;
   double _currentVolume = 0.5;
+  bool _isPausedForNavigation = false;
   User? _currentUser;
   bool _isEmailVerified = true;
   Timer? _emailVerificationTimer;
@@ -40,7 +41,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _startEmailVerificationCheck();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
     _enableWakeLock();
-    // Verificar actualizaciones al abrir la app (delay para no bloquear el render inicial)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) AppUpdateService.checkForUpdate(context);
@@ -130,6 +130,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  Future<void> _resumeMusic() async {
+    await _loadAndApplyVolume();
+    await _audioPlayer.resume();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -138,8 +143,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
-        _loadAndApplyVolume();
-        _audioPlayer.resume();
+        if (!_isPausedForNavigation) {
+          _resumeMusic();
+        }
         _checkEmailVerification();
         break;
       case AppLifecycleState.paused:
@@ -238,6 +244,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.of(context).pop();
+                        _isPausedForNavigation = true;
                         await _audioPlayer.pause();
                         await Navigator.push(
                           context,
@@ -248,8 +255,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                        await _loadAndApplyVolume();
-                        await _audioPlayer.resume();
+                        _isPausedForNavigation = false;
+                        await _resumeMusic();
                       },
                       icon: Icon(Icons.sports_esports),
                       label: Text(
@@ -274,6 +281,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.of(context).pop();
+                        _isPausedForNavigation = true;
                         await _audioPlayer.pause();
                         await Navigator.push(
                           context,
@@ -284,8 +292,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                        await _loadAndApplyVolume();
-                        await _audioPlayer.resume();
+                        _isPausedForNavigation = false;
+                        await _resumeMusic();
                       },
                       icon: Icon(Icons.monetization_on),
                       label: Text(
@@ -1117,6 +1125,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () async {
+              _isPausedForNavigation = true;
               await _audioPlayer.pause();
               final _ = await Navigator.push(
                 context,
@@ -1129,8 +1138,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
               );
               _loadCurrentUser();
-              await _loadAndApplyVolume();
-              await _audioPlayer.resume();
+              _isPausedForNavigation = false;
+              await _resumeMusic();
             },
           ),
         ],

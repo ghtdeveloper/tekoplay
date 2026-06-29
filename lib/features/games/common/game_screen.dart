@@ -78,8 +78,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   String? _localizedChess;
   String? _localizedDomino;
   String? _localizedLudo;
-  String? _localizedBet;
-  String? _localizedFun;
+
   int? _withdrawableDiamonds;
   List<MultiplayerGameMatch> _previousActiveGames = [];
 
@@ -99,8 +98,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _localizedChess = S.of(context).chess;
     _localizedDomino = S.of(context).domino;
     _localizedLudo = S.of(context).parchisShort;
-    _localizedBet = S.of(context).bet;
-    _localizedFun = S.of(context).fun;
   }
 
   bool get isChess => gameType == _localizedChess;
@@ -205,7 +202,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
-        _audioPlayer?.resume();
+        _resumeGameMusic();
         break;
       case AppLifecycleState.paused:
         _disableWakeLock();
@@ -217,6 +214,20 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         break;
       case AppLifecycleState.detached:
         break;
+    }
+  }
+
+  Future<void> _resumeGameMusic() async {
+    if (_isDisposed || _audioPlayer == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _currentVolume = prefs.getDouble('musicVolume') ?? 0.5;
+      await _audioPlayer?.setVolume(_currentVolume);
+      await _audioPlayer?.resume();
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error reanudando música del juego: $e');
+      }
     }
   }
 
@@ -676,13 +687,18 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _processCoinPurchase(int coins, int price) async {
+    final notAvailableMsg = S.of(context).googlePayNotAvailable;
+    final coinsLabel = S.of(context).coins;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
     try {
       final paymentService = PaymentService();
       final canPay = await paymentService.canMakePayments();
       if (!canPay) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(S.of(context).googlePayNotAvailable),
+            content: Text(notAvailableMsg),
             backgroundColor: Colors.orange,
           ),
         );
@@ -690,7 +706,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       }
 
       final result = await paymentService.makePayment(
-        label: '$coins ${S.of(context).coins}',
+        label: '$coins $coinsLabel',
         amount: price.toDouble(),
         productId: 'coins_$coins',
       );
@@ -706,11 +722,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               setState(() { _userCoins = (_userCoins ?? 0) + coins; });
             }
           }
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                '${S.of(context).purchaseSuccessful} +$coins ${S.of(context).coins}',
-              ),
+              content: Text('$successMsg +$coins $coinsLabel'),
               backgroundColor: Colors.green,
             ),
           );
@@ -722,23 +737,29 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       if (kDebugMode) {
         print('Error en compra: $e');
       }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(S.of(context).paymentProcessingError),
+          content: Text(errorMsg),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  Future<void> _processDiamondPurchase(int diamonds, int price) async {
+  Future<void> _processDiamondPurchase(int diamonds, double price) async {
+    final notAvailableMsg = S.of(context).googlePayNotAvailable;
+    final diamondsLabel = S.of(context).diamonds;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
     try {
       final paymentService = PaymentService();
       final canPay = await paymentService.canMakePayments();
       if (!canPay) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(S.of(context).googlePayNotAvailable),
+            content: Text(notAvailableMsg),
             backgroundColor: Colors.orange,
           ),
         );
@@ -746,8 +767,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       }
 
       final result = await paymentService.makePayment(
-        label: '$diamonds ${S.of(context).diamonds}',
-        amount: price.toDouble(),
+        label: '$diamonds $diamondsLabel',
+        amount: price,
         productId: 'diamonds_$diamonds',
       );
 
@@ -757,17 +778,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         if (success) {
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
-          } else {
-            if (mounted && !_isDisposed) {
-              setState(() { _userDiamonds = (_userDiamonds ?? 0) + diamonds; });
-            }
           }
-
+          // For authenticated users the Firestore realtime listener
+          // already updates _userDiamonds automatically — no manual setState needed.
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                '${S.of(context).purchaseSuccessful} +$diamonds ${S.of(context).diamonds}',
-              ),
+              content: Text('$successMsg +$diamonds $diamondsLabel'),
               backgroundColor: Colors.green,
             ),
           );
@@ -779,9 +796,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       if (kDebugMode) {
         print('Error en compra: $e');
       }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(S.of(context).paymentProcessingError),
+          content: Text(errorMsg),
           backgroundColor: Colors.red,
         ),
       );
@@ -1594,6 +1612,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                           children: [
                                             TextButton(
                                               onPressed: () async {
+                                                final rejectedMsg = S.of(context).invitationRejected;
                                                 final result =
                                                     await GameInvitationService()
                                                         .respondToInvitation(
@@ -1602,16 +1621,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                         );
                                                 if (result != null &&
                                                     result['success'] == true) {
+                                                  if (!context.mounted) return;
                                                   Navigator.of(context).pop();
                                                   ScaffoldMessenger.of(
                                                     context,
                                                   ).showSnackBar(
                                                     SnackBar(
-                                                      content: Text(
-                                                        S
-                                                            .of(context)
-                                                            .invitationRejected,
-                                                      ),
+                                                      content: Text(rejectedMsg),
                                                       backgroundColor:
                                                           Colors.orange,
                                                     ),
@@ -1628,16 +1644,19 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                             SizedBox(width: 8),
                                             ElevatedButton(
                                               onPressed: () async {
-                                                if (_currentUser == null)
+                                                if (_currentUser == null) {
                                                   return;
+                                                }
 
                                                 final hasEnoughFunds =
                                                     await _validateUserFundsForInvitation();
                                                 if (!hasEnoughFunds) {
+                                                  if (!context.mounted) return;
                                                   Navigator.of(context).pop();
                                                   return;
                                                 }
 
+                                                if (!context.mounted) return;
                                                 showDialog(
                                                   context: context,
                                                   barrierDismissible: false,
@@ -1655,6 +1674,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                           true,
                                                         );
 
+                                                if (!context.mounted) return;
                                                 Navigator.of(context).pop();
 
                                                 if (result != null &&
@@ -1679,15 +1699,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                     ),
                                                   );
                                                 } else {
+                                                  final errorMsg = S.of(context).errorAcceptedInvitation;
                                                   ScaffoldMessenger.of(
                                                     context,
                                                   ).showSnackBar(
                                                     SnackBar(
-                                                      content: Text(
-                                                        S
-                                                            .of(context)
-                                                            .errorAcceptedInvitation,
-                                                      ),
+                                                      content: Text(errorMsg),
                                                       backgroundColor:
                                                           Colors.red,
                                                     ),
@@ -1728,6 +1745,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       if (!hasEnoughFunds) {
         return;
       }
+      if (!context.mounted) return;
 
       final TextEditingController emailController = TextEditingController();
       final TextEditingController betAmountController = TextEditingController();
@@ -1928,13 +1946,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                 (isLoading || !isFormValid)
                                     ? null
                                     : () async {
+                                      final isBetMode = matchType == S.of(context).bet;
+                                      final successMsg = S.of(context).successfulSentInvitation;
                                       final stillHasEnoughFunds =
                                           await _validateUserFundsForInvitation();
                                       if (!stillHasEnoughFunds) {
+                                        if (!context.mounted) return;
                                         Navigator.of(context).pop();
                                         return;
                                       }
-                                      if (matchType == S.of(context).bet) {
+                                      if (!context.mounted) return;
+                                      if (isBetMode) {
                                         final betAmount = int.tryParse(
                                           betAmountController.text.trim(),
                                         );
@@ -1944,7 +1966,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                           ScaffoldMessenger.of(
                                             context,
                                           ).showSnackBar(
-                                            SnackBar(
+                                            const SnackBar(
                                               content: Text(
                                                 'Monto de apuesta inválido',
                                               ),
@@ -1967,9 +1989,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                 toUserEmail:
                                                     emailController.text.trim(),
                                                 gameType: gameType,
-                                                betAmount:
-                                                    matchType ==
-                                                            S.of(context).bet
+                                                betAmount: isBetMode
                                                         ? int.parse(
                                                           betAmountController
                                                               .text
@@ -1982,17 +2002,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
                                       setState(() => isLoading = false);
 
+                                      if (!context.mounted) return;
                                       if (error == null) {
                                         Navigator.of(context).pop();
                                         ScaffoldMessenger.of(
                                           context,
                                         ).showSnackBar(
                                           SnackBar(
-                                            content: Text(
-                                              S
-                                                  .of(context)
-                                                  .successfulSentInvitation,
-                                            ),
+                                            content: Text(successMsg),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
@@ -2179,13 +2196,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                   ),
                                   const SizedBox(height: 12),
                                   Row(
-                                    children: [1, 2, 3].map((count) {
-                                      final isSelected = selectedCpuCount == count;
+                                    children: [1, 2, 3].map((n) {
+                                      final isSelected = selectedCpuCount == n;
                                       return Expanded(
                                         child: Padding(
                                           padding: const EdgeInsets.symmetric(horizontal: 4),
                                           child: GestureDetector(
-                                            onTap: () => setState(() => selectedCpuCount = count),
+                                            onTap: () => setState(() => selectedCpuCount = n),
                                             child: AnimatedContainer(
                                               duration: const Duration(milliseconds: 180),
                                               padding: const EdgeInsets.symmetric(vertical: 10),
@@ -2206,7 +2223,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                       color: isSelected ? Colors.white : Colors.grey.shade400, size: 22),
                                                   const SizedBox(height: 4),
                                                   Text(
-                                                    '$count CPU${count > 1 ? 's' : ''}',
+                                                    '$n CPU${n > 1 ? 's' : ''}',
                                                     style: TextStyle(
                                                       fontWeight: FontWeight.bold,
                                                       color: isSelected ? Colors.white : Colors.black87,
@@ -2214,7 +2231,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                     ),
                                                   ),
                                                   Text(
-                                                    count == 1 ? '(1 vs 1)' : count == 2 ? '(3 jugadores)' : '(4 jugadores)',
+                                                    n == 1 ? '(1 vs 1)' : n == 2 ? '(3 jugadores)' : '(4 jugadores)',
                                                     style: TextStyle(
                                                       fontSize: 9,
                                                       color: isSelected ? Colors.white70 : Colors.grey.shade500,

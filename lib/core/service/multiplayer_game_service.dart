@@ -569,20 +569,20 @@ class MultiplayerGameService {
             '   La Cloud Function distribuirá las recompensas automáticamente');
 
         if (currencyType == 'diamonds' && betAmount != null) {
-          final totalPot = betAmount * 2;
-          final winnerPrize = betAmount + (betAmount * 0.7).round();
-          final commission = (betAmount * 0.3).round();
+          final totalPot    = betAmount * 2;
+          final winnerPrize = betAmount + (betAmount * 0.90).floor();
+          final commission  = totalPot - winnerPrize; // 10% exacto
 
-          print('\n💎 Distribución esperada:');
+          print('\n💎 Distribución esperada (10% comisión apuesta):');
           print('   Total Pot: $totalPot diamantes');
           if (result == GameResultModel.draw) {
-            final drawReturn = (betAmount * 0.15).round();
+            final drawReturn = (betAmount * 0.90).floor();
             print('   Cada jugador recupera: $drawReturn diamantes');
             print('   Comisión: ${totalPot - (drawReturn * 2)} diamantes');
           } else {
             print('   Ganador recibirá: $winnerPrize diamantes');
             print('   Perdedor pierde: $betAmount diamantes');
-            print('   Comisión: $commission diamantes');
+            print('   Comisión casa: $commission diamantes');
           }
         }
       }

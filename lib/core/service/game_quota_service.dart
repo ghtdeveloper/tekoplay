@@ -14,6 +14,7 @@ class GameQuotaService {
     required String guestId,
     required int quotaAmount,
     required String currencyType,
+    String collectionName = 'multiplayer_games',
   }) async {
     try {
       return await _firestore.runTransaction((transaction) async {
@@ -58,7 +59,7 @@ class GameQuotaService {
           {currencyType: guestNewBalance},
         );
 
-        final gameRef = _firestore.collection('multiplayer_games').doc(gameId);
+        final gameRef = _firestore.collection(collectionName).doc(gameId);
         transaction.update(gameRef, {
           'hostQuota': quotaAmount,
           'guestQuota': quotaAmount,
@@ -88,18 +89,21 @@ class GameQuotaService {
     }
   }
 
+  /// Calcula la distribución de premios en modo apuesta con diamantes (10% comisión).
+  /// [totalPot] = suma de las apuestas de ambos jugadores.
   Map<String, int> calculateDistribution({
     required int totalPot,
     required String winnerId,
     required String hostId,
   }) {
-    final quotaAmount = totalPot ~/ 2;
-    final winnerPrize = quotaAmount + (quotaAmount * 0.7).round();
-    final houseCommission = quotaAmount - (quotaAmount * 0.7).round();
+    final quotaAmount    = totalPot ~/ 2;
+    // floor garantiza que la casa siempre reciba al menos su 10%.
+    final winnerPrize    = quotaAmount + (quotaAmount * 0.90).floor();
+    final houseCommission = totalPot - winnerPrize; // resto exacto
 
     return {
-      'winnerPrize': winnerPrize,
-      'loserLoss': -quotaAmount,
+      'winnerPrize':    winnerPrize,
+      'loserLoss':      -quotaAmount,
       'houseCommission': houseCommission,
     };
   }
