@@ -649,6 +649,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }).toList();
 
     for (final newGame in newGames) {
+      // Skip friend games (isOnlineMatchmaking: false) — MultiplayerLudoScreen
+      // handles its own waiting room → game transition internally.
+      final isMatchmaking = newGame.gameSettings?['isOnlineMatchmaking'] == true;
+      if (!isMatchmaking) continue;
+
       if (newGame.hostId == _currentUser!.uid &&
           newGame.status == 'active' &&
           newGame.guest2Id != null) {
@@ -1738,6 +1743,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void _showFriendGameDialog(BuildContext context) {
     if (_currentUser == null) {
       _showLoginRequiredDialog(context, S.of(context).vsFriend);
+      return;
+    }
+
+    // Ludo has its own full setup flow inside MultiplayerLudoScreen
+    if (isLudo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MultiplayerLudoScreen(matchType: matchType),
+        ),
+      );
       return;
     }
 

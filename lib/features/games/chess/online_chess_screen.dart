@@ -90,6 +90,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   int _myTimeSeconds = 0;
   int _opponentTimeSeconds = 0;
   Timer? _playerTimer;
+  bool _firstMoveDone = false;
+  DateTime? _backgroundedAt;
+  bool _isInCheck = false;
 
   bool _isPlayingAgainstBot = false;
   Stockfish? _stockfish;
@@ -100,7 +103,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   bool _isScreenKeepOnActive = false;
 
   String? _botAvatar;
-  bool _botIsWeak = false; // true when player earned a "gimme" win
+  bool _botIsWeak = false;
+  bool _botEmergencyMoveTriggered = false;
 
   @override
   void initState() {
@@ -123,13 +127,12 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     if (widget.matchType == S.of(context).bet) {
       if (_botIsWeak) {
-        // Deliberately weak — player earned a win after 3 consecutive losses.
         _cpuMoveTime = 50;
         _stockfish!.stdin = "setoption name Threads value 1";
         _stockfish!.stdin = "setoption name Hash value 16";
         _stockfish!.stdin = "setoption name Skill Level value 0";
       } else {
-        _cpuMoveTime = 3000;
+        _cpuMoveTime = 400;
         _stockfish!.stdin = "setoption name Threads value 4";
         _stockfish!.stdin = "setoption name Hash value 128";
         _stockfish!.stdin = "setoption name Skill Level value 20";
@@ -152,7 +155,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     try {
       _stockfish = Stockfish();
     } catch (_) {
-      // Another native instance is still alive; wait for it to shut down.
       Future.delayed(const Duration(milliseconds: 800), _initializeStockfish);
       return;
     }
@@ -255,9 +257,27 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
+        if (_backgroundedAt != null && _gameStarted && !_gameEnded && _firstMoveDone && _selectedTimeMinutes != null) {
+          final elapsed = DateTime.now().difference(_backgroundedAt!).inSeconds;
+          if (elapsed > 0) {
+            setState(() {
+              if (_isMyTurn) {
+                _myTimeSeconds = (_myTimeSeconds - elapsed).clamp(0, _myTimeSeconds);
+                if (_myTimeSeconds <= 0) _timeOut(isMyTimeout: true);
+              } else {
+                _opponentTimeSeconds = (_opponentTimeSeconds - elapsed).clamp(0, _opponentTimeSeconds);
+                if (_opponentTimeSeconds <= 0) _timeOut(isMyTimeout: false);
+              }
+            });
+          }
+        }
+        _backgroundedAt = null;
         break;
       case AppLifecycleState.paused:
         _disableWakeLock();
+        if (_gameStarted && !_gameEnded && _firstMoveDone && _selectedTimeMinutes != null) {
+          _backgroundedAt = DateTime.now();
+        }
         break;
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
@@ -316,7 +336,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _botMoveTimer?.cancel();
     _betNegotiationSubscription?.cancel();
     _balanceSubscription?.cancel();
-    // Always try to shut down the engine, even if it wasn't fully ready.
     try { _stockfish?.stdin = "quit"; } catch (_) {}
     try { _stockfish?.dispose(); } catch (_) {}
     _stockfish = null;
@@ -326,9 +345,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   Future<void> _cleanupActiveGame() async {
-    // Only cancel the game in Firestore if it is still in the waiting state.
-    // Active/playing games should NOT be cancelled on dispose — the opponent
-    // screen handles that via the abandoned/timeout flow.
     final isWaiting = _currentGame == null ||
         _currentGame!.status == 'waiting';
     if (_activeGameId != null && !_isPlayingAgainstBot && isWaiting) {
@@ -678,9 +694,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _matchmakingSeconds = 0;
     });
 
-    // Start the timer immediately so the counter is visible from second 1.
-    // userRanking is captured by reference — the closure will see the updated
-    // value once the async fetch below completes (always before the 5s mark).
     int userRanking = 1000;
 
     _matchmakingTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
@@ -703,14 +716,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
         if (_matchmakingSeconds % 5 == 0 && !_isPlayingAgainstBot) {
           try {
-            // Si el host ya tiene un juego en espera o ya está en partida,
-            // saltamos la búsqueda pero dejamos el timer corriendo (para el bot).
             if (_gameState != OnlineGameState.searching) {
               timer.cancel();
               return;
             }
             if (_currentGame != null || _activeGameId != null) {
-              // Host esperando rival — no buscar otros juegos, sólo seguir contando.
             } else {
             final waitingGames = await OnlineMatchmakingChessService()
                 .findWaitingGamesProgressive(
@@ -755,7 +765,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                 return;
               }
             }
-            } // end else (no activeGameId)
+            }
           } catch (e) {
             if (kDebugMode) {
               print('❌ Error en búsqueda progresiva: $e');
@@ -792,8 +802,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       }
     });
 
-    // Fetch ranking and do the initial game search in the background.
-    // This runs concurrently with the timer so the counter starts immediately.
     try {
       userRanking = await _getUserRanking();
       final gameId = await _findOrCreateGame(userRanking);
@@ -814,8 +822,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       }
       return;
     }
-
-    // Si el host tiene un juego en espera, cancelarlo antes de iniciar el bot.
     if (_activeGameId != null) {
       try {
         await FirebaseFirestore.instance
@@ -854,7 +860,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _botIsWeak = widget.matchType == S.of(context).bet &&
         await BotNameService.shouldBotPlayWeak();
 
-    // Re-apply engine settings now that _botIsWeak is known.
     _setupStockfishSettings();
 
     setState(() {
@@ -877,7 +882,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       if (_selectedTimeMinutes != null) {
         _myTimeSeconds = _selectedTimeMinutes! * 60;
         _opponentTimeSeconds = _selectedTimeMinutes! * 60;
-        _startPlayerTimer();
       }
 
       _isMyTurn = _myColor == PlayerColor.white;
@@ -1029,13 +1033,21 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   void _makeBotMove() {
     if (!_isStockfishReady || _gameEnded || !_isPlayingAgainstBot) return;
 
+    int safeMovetime = _cpuMoveTime;
+    if (_opponentTimeSeconds > 0) {
+      final int maxSafe = max(50, (_opponentTimeSeconds * 1000) - 700 - 1200);
+      safeMovetime = min(_cpuMoveTime, maxSafe);
+    }
+
+    _botEmergencyMoveTriggered = false;
+
     _botMoveTimer = Timer(
-      Duration(milliseconds: 500 + _random.nextInt(200)),
+      const Duration(milliseconds: 80),
       () {
         if (!_gameEnded && !_isMyTurn) {
           final fen = controller.getFen();
           _stockfish!.stdin = "position fen $fen";
-          _stockfish!.stdin = "go movetime $_cpuMoveTime";
+          _stockfish!.stdin = "go movetime $safeMovetime";
         }
       },
     );
@@ -1043,6 +1055,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   void _applyBotMove(String uci) {
     if (_gameEnded || _isMyTurn || !_isPlayingAgainstBot) return;
+    _botEmergencyMoveTriggered = false;
 
     String from, to, promo = '';
 
@@ -1068,6 +1081,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _lastMoveToSquare = to;
       _showLastMove = true;
     });
+    _onFirstMoveConfirmed();
 
     _checkGameEnd();
   }
@@ -1822,7 +1836,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           _showLastMove = true;
           _lastMoveWasMine = false;
         });
+        _onFirstMoveConfirmed();
       }
+      final inCheck = controller.isInCheck();
+      if (_isInCheck != inCheck) setState(() => _isInCheck = inCheck);
     }
 
     if (!_gameEnded && game.isFinished) {
@@ -1864,13 +1881,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     _loadPlayerRankings(game);
 
-    // For guest players who didn't go through time selection UI, read from game data
     _selectedTimeMinutes ??= game.gameSettings?['timeMinutes'] as int?;
 
     if (_selectedTimeMinutes != null) {
       _myTimeSeconds = _selectedTimeMinutes! * 60;
       _opponentTimeSeconds = _selectedTimeMinutes! * 60;
-      _startPlayerTimer();
     }
   }
 
@@ -1899,6 +1914,14 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
   }
 
+  void _onFirstMoveConfirmed() {
+    if (_firstMoveDone) return;
+    setState(() => _firstMoveDone = true);
+    if (_selectedTimeMinutes != null && _gameStarted && !_gameEnded) {
+      _startPlayerTimer();
+    }
+  }
+
   void _startPlayerTimer() {
     _playerTimer?.cancel();
 
@@ -1918,6 +1941,20 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           }
         } else {
           _opponentTimeSeconds--;
+          if (_isPlayingAgainstBot &&
+              _opponentTimeSeconds <= 2 &&
+              !_isMyTurn &&
+              !_gameEnded &&
+              !_botEmergencyMoveTriggered &&
+              _isStockfishReady &&
+              _stockfish != null) {
+            _botEmergencyMoveTriggered = true;
+            _botMoveTimer?.cancel();
+            final fen = controller.getFen();
+            _stockfish!.stdin = "stop";
+            _stockfish!.stdin = "position fen $fen";
+            _stockfish!.stdin = "go movetime 50";
+          }
           if (_opponentTimeSeconds <= 0) {
             _timeOut(isMyTimeout: false);
           }
@@ -2079,6 +2116,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       });
     }
 
+    _onFirstMoveConfirmed();
+
     if (_isPlayingAgainstBot) {
       _handleBotGameMove();
     } else {
@@ -2180,6 +2219,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   void _checkGameEnd() {
     if (_gameEnded) return;
 
+    final inCheck = controller.isInCheck();
+    if (_isInCheck != inCheck) setState(() => _isInCheck = inCheck);
+
     bool isCheckMate = controller.isCheckMate();
     bool isDraw = controller.isDraw();
     bool isStaleMate = controller.isStaleMate();
@@ -2236,6 +2278,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   void _checkForGameEnd(String fen) {
     if (_gameEnded) return;
+
+    final inCheck = controller.isInCheck();
+    if (_isInCheck != inCheck) setState(() => _isInCheck = inCheck);
 
     bool isCheckMate = controller.isCheckMate();
     bool isDraw = controller.isDraw();
@@ -2320,7 +2365,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     final s = S.of(context);
     final isBetMode = widget.matchType == s.bet;
 
-    // Track consecutive losses for the soft-win system.
     if (isBetMode && _isPlayingAgainstBot) {
       BotNameService.recordBetResult(playerWon: result == GameResultModel.win);
     }
@@ -2567,88 +2611,80 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Widget _buildGameEndOverlay() {
     final isWin = _gameEndMessage.toLowerCase().contains('ganaste') ||
         _gameEndMessage.toLowerCase().contains('won');
-    final color = isWin ? Colors.green : Colors.red;
+    final color = isWin ? Colors.green[700]! : Colors.red[700]!;
     final icon = isWin ? Icons.emoji_events_rounded : Icons.sports_esports_rounded;
 
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withValues(alpha: 0.55),
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 24),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.95),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.4),
-                  blurRadius: 24,
-                  spreadRadius: 4,
-                ),
-              ],
-              border: Border.all(color: color.withValues(alpha: 0.6), width: 2),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 48, color: color),
-                const SizedBox(height: 12),
-                Text(
-                  S.of(context).gameOver,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: color,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _gameEndMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.5),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          setState(() => _showGameEndOverlay = false);
-                          _resetGameState();
-                          Navigator.of(context).pop();
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.black54,
-                          side: const BorderSide(color: Colors.black26),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(S.of(context).exit),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() => _showGameEndOverlay = false);
-                          _resetGameState();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: color,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(S.of(context).playAgain),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.93),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _gameEndMessage,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGameEndButtons() {
+    final isWin = _gameEndMessage.toLowerCase().contains('ganaste') ||
+        _gameEndMessage.toLowerCase().contains('won');
+    final color = isWin ? Colors.green[700]! : Colors.red[700]!;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () {
+                setState(() => _showGameEndOverlay = false);
+                _resetGameState();
+                Navigator.of(context).pop();
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: const BorderSide(color: Colors.white38),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(S.of(context).exit),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {
+                setState(() => _showGameEndOverlay = false);
+                _resetGameState();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(S.of(context).playAgain),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2793,6 +2829,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _lastMoveWasMine = false;
       _myTimeSeconds = 0;
       _opponentTimeSeconds = 0;
+      _firstMoveDone = false;
+      _isInCheck = false;
       _waitingForMoveResponse = false;
       _matchmakingSeconds = 0;
 
@@ -3025,32 +3063,29 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             if (_selectedTimeMinutes != null)
               _buildTimer(_opponentTimeSeconds, isMyTimer: false),
 
+            if (_showGameEndOverlay) _buildGameEndOverlay(),
+
             Expanded(
-              child: Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Stack(
-                      children: [
-                        GestureDetector(
-                          onPanUpdate: (_) {},
-                          onPanStart: (_) {},
-                          onPanEnd: (_) {},
-                          behavior: HitTestBehavior.opaque,
-                          child: ChessBoard(
-                            controller: controller,
-                            boardColor: BoardColor.brown,
-                            boardOrientation: _myColor ?? PlayerColor.white,
-                            enableUserMoves: _isMyTurn && !_gameEnded,
-                            onMove: _playerMoved,
-                          ),
-                        ),
-                        _buildLastMoveOverlay(),
-                      ],
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Stack(
+                  children: [
+                    GestureDetector(
+                      onPanUpdate: (_) {},
+                      onPanStart: (_) {},
+                      onPanEnd: (_) {},
+                      behavior: HitTestBehavior.opaque,
+                      child: ChessBoard(
+                        controller: controller,
+                        boardColor: BoardColor.brown,
+                        boardOrientation: _myColor ?? PlayerColor.white,
+                        enableUserMoves: _isMyTurn && !_gameEnded,
+                        onMove: _playerMoved,
+                      ),
                     ),
-                  ),
-                  if (_showGameEndOverlay) _buildGameEndOverlay(),
-                ],
+                    _buildLastMoveOverlay(),
+                  ],
+                ),
               ),
             ),
 
@@ -3059,18 +3094,39 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
             _buildPlayerInfo(isMe: true),
 
-            if (!_gameEnded)
+            if (_showGameEndOverlay)
+              _buildGameEndButtons()
+            else
               Container(
                 padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  _isMyTurn
-                      ? S.of(context).yourTurn
-                      : S.of(context).opponentTurn,
-                  style: TextStyle(
-                    color: _isMyTurn ? Colors.green[300] : Colors.white70,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_isInCheck && !_gameEnded) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.red[700],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          '♚ ¡JAQUE!',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Text(
+                      _gameEnded
+                          ? ''
+                          : (_isMyTurn ? S.of(context).yourTurn : S.of(context).opponentTurn),
+                      style: TextStyle(
+                        color: _isMyTurn ? Colors.green[300] : Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             const BannerAdWidget(),

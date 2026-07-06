@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -39,7 +38,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   _LudoOnlineState _screenState = _LudoOnlineState.playerCountSelection;
   int _selectedPlayerCount = 2;
   int? _selectedBetAmount;
-  // Calculado en didChangeDependencies para no depender de strings hardcodeados.
   String _currencyType = 'coins';
 
   static const List<int> _betOptions = [10, 20, 50, 100, 250, 500, 1000, 5000, 10000];
@@ -62,18 +60,23 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   int? _userDiamonds;
 
   bool _isPlayingAgainstBot = false;
-  bool _botIsWeak = false; // true when player earned a "gimme" win
+  bool _botIsWeak = false;
 
 
   String _opponentName   = '';
   String _opponentEmoji  = '🎮';
+  final Map<String, String> _botNames  = {};
+  final Map<String, String> _botEmojis = {};
 
   LudoGameState _gameState = LudoGameState.initial();
   String _myColor   = 'yellow';
-  String _botColor  = 'red';
+  List<String> _botColors = ['red'];
   List<String> _activePlayers = ['yellow', 'red'];
   String _currentPlayer = 'yellow';
-  bool get _isMyTurn => _currentPlayer == _myColor;
+  bool get _isMyTurn  => _currentPlayer == _myColor;
+  bool get _isBotTurn => _isPlayingAgainstBot && !_isMyTurn;
+  String get _currentBotName  => _botNames[_currentPlayer]  ?? _opponentName;
+  String get _currentBotEmoji => _botEmojis[_currentPlayer] ?? _opponentEmoji;
 
   int _dice1Value = 0;
   int _dice2Value = 0;
@@ -89,6 +92,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   bool _bonusSelectionActive = false;
   bool _bonusHadDouble = false;
   final List<Map<String, dynamic>> _pendingBonusMoves = [];
+  Set<int> _bridgeBreakPieceIds = {};
 
   bool _gameEnded = false;
   double _boardSize = 0;
@@ -97,6 +101,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   bool _isBotThinking = false;
   bool _botExecuting = false;
   Timer? _botSafetyTimer;
+  final Map<String, bool> _botMissedFive = {};
+  Timer? _awayTimer;
 
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
@@ -132,6 +138,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _Coord(8, 5), _Coord(8, 4), _Coord(8, 3), _Coord(8, 2), _Coord(8, 1), _Coord(8, 0),
     _Coord(7, 0), _Coord(6, 0),
   ];
+
+  bool get _isBetMode => _currencyType == 'diamonds';
 
   @override
   void didChangeDependencies() {
@@ -174,6 +182,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _keepAliveTimer?.cancel();
     _turnTimer?.cancel();
     _botSafetyTimer?.cancel();
+    _awayTimer?.cancel();
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
     _pulseController.dispose();
@@ -186,8 +195,26 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isScreenKeepOnActive) _enableWakeLock();
-    if (state == AppLifecycleState.paused) _disableWakeLock();
+    if (state == AppLifecycleState.resumed) {
+      if (_isScreenKeepOnActive) _enableWakeLock();
+      _awayTimer?.cancel();
+      _awayTimer = null;
+    }
+    if (state == AppLifecycleState.paused) {
+      _disableWakeLock();
+      if (!_gameEnded && _screenState == _LudoOnlineState.gameActive) {
+        _awayTimer?.cancel();
+        _awayTimer = Timer(const Duration(minutes: 2), () {
+          if (!mounted || _gameEnded) return;
+          final winner = _activePlayers.firstWhere(
+            (c) => c != _myColor,
+            orElse: () => _botColors.first,
+          );
+          _showEventToast('Perdiste por inactividad', color: Colors.red);
+          _endGame(winner);
+        });
+      }
+    }
   }
 
   Future<void> _enableWakeLock() async {
@@ -242,7 +269,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   Future<void> _startMatchmaking() async {
     if (_currentUser == null || _isSearching) return;
-    final isBet = widget.matchType == 'Apuesta';
+    final isBet = _isBetMode;
     if (isBet && _selectedBetAmount == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona el monto de la apuesta antes de buscar partida.')),
@@ -369,7 +396,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         hostName: _myName ?? 'Jugador',
         hostPhotoUrl: _myPhotoUrl,
         currencyType: _currencyType,
-        betAmount: widget.matchType == 'Apuesta' ? _selectedBetAmount : null,
+        betAmount: _isBetMode ? _selectedBetAmount : null,
         numberOfPlayers: _selectedPlayerCount,
         isOnlineMatchmaking: true,
       );
@@ -449,13 +476,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   void _onMatchmakingTimeout() {
     if (!mounted || _navigated || _isPlayingAgainstBot) return;
-
-    if (_selectedPlayerCount == 2) {
-      _startBotGame();
-      return;
-    }
-
-    _cancelMatchmaking();
+    _startBotGame();
   }
 
   void _cancelMatchmaking() {
@@ -492,7 +513,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _keepAliveTimer?.cancel();
     _gameSubscription?.cancel();
 
-    final isBet = widget.matchType == 'Apuesta';
+    final isBet = _isBetMode;
     final cost = isBet ? (_selectedBetAmount ?? 25) : 100;
     if (_currentUser != null) {
       if (isBet) {
@@ -502,19 +523,30 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       }
     }
 
-    final profile = await BotNameService.pickUnseenProfile(_random);
-    final isBetMode = widget.matchType == 'Apuesta';
+    final isBetMode = _isBetMode;
     _botIsWeak = isBetMode && await BotNameService.shouldBotPlayWeak();
 
-    _myColor   = 'yellow';
-    _botColor  = 'red';
-    _activePlayers = ['yellow', 'red'];
+    const allColors = ['yellow', 'red', 'blue', 'green'];
+    _myColor = 'yellow';
+    final botCount = (_selectedPlayerCount) - 1;
+    _botColors = allColors.skip(1).take(botCount).toList();
+    _activePlayers = [_myColor, ..._botColors];
     _currentPlayer = 'yellow';
+
+    _botNames.clear();
+    _botEmojis.clear();
+    for (final bc in _botColors) {
+      final profile = await BotNameService.pickUnseenProfile(_random);
+      _botNames[bc]  = profile['name']!;
+      _botEmojis[bc] = profile['emoji']!;
+    }
+    _botMissedFive.clear();
+
+    _opponentName  = _botNames[_botColors.first] ?? 'Bot';
+    _opponentEmoji = _botEmojis[_botColors.first] ?? '🤖';
 
     setState(() {
       _isPlayingAgainstBot = true;
-      _opponentName  = profile['name']!;
-      _opponentEmoji = profile['emoji']!;
       _gameState     = LudoGameState.initial();
       _gameEnded     = false;
       _gameStartTime = DateTime.now();
@@ -622,6 +654,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       return;
     }
 
+    _bridgeBreakPieceIds = (d1 == d2) ? _getBarreraIndices(_myColor) : {};
+
     setState(() {
       _dice1Value = d1; _dice2Value = d2;
       _hasUsedDice1 = false; _hasUsedDice2 = false;
@@ -647,7 +681,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final pieces = _gameState.getPiecesByColor(_myColor);
 
     if (_bonusSelectionActive) {
-      // Use a generous radius for bonus taps; finger taps are imprecise.
       final bonusTapR = sq * 1.8;
       int? closestId;
       Map<String, dynamic>? closestBm;
@@ -814,7 +847,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (p.isFinished || p.isHome) continue;
       final bp = _calculateCaptureBonusPosition(p, color);
       if (bp == null) continue;
-      if (bp < 52 && _isEnemyBarrierAt(bp, color)) continue;
       _pendingBonusMoves.add({'pieceId': i, 'piece': p, 'bonusPos': bp});
     }
 
@@ -836,7 +868,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _bonusHadDouble = hadDouble;
 
     if (color == _myColor) {
-      // Si solo hay una ficha elegible, ejecutar bonus automáticamente sin esperar toque
       if (_pendingBonusMoves.length == 1) {
         final m = _pendingBonusMoves.first;
         _showEventToast('¡Capturaste! +20 casillas', color: Colors.green);
@@ -897,6 +928,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _dice1Value = 0; _dice2Value = 0;
     _hasUsedDice1 = false; _hasUsedDice2 = false;
     _movablePieces.clear();
+    _bridgeBreakPieceIds = {};
     _nextTurn();
   }
 
@@ -910,7 +942,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
       _startTurnTimer();
     } else {
-      _showTurnBannerAnim('Turno de $_opponentName', _getPlayerColor(_botColor));
+      _showTurnBannerAnim(
+        'Turno de ${_botNames[next] ?? _opponentName}',
+        _getPlayerColor(next),
+      );
       Future.delayed(const Duration(milliseconds: 800), _scheduleBotMove);
     }
   }
@@ -920,7 +955,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final active = pieces.where((p) => !p.isHome && !p.isFinished).toList();
     if (active.isEmpty) return;
 
-    // Enviar a casa la última ficha movida; si ya no está activa, la más avanzada
     final lastId = _lastMovedPieceId[color];
     LudoPiece? target;
     if (lastId != null && lastId < pieces.length) {
@@ -979,12 +1013,32 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       }
     }
     
-    if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
+    final isDoubles = _dice1Value > 0 && _dice1Value == _dice2Value;
+
+    if (isDoubles && !_hasUsedDice1 && !_hasUsedDice2) {
       final barrIndices = _getBarreraIndices(_currentPlayer);
       if (barrIndices.isNotEmpty) {
         final barrMoves = _movablePieces.where((m) => barrIndices.contains(m['pieceId'])).toList();
         if (barrMoves.isNotEmpty) _movablePieces = barrMoves;
       }
+    }
+
+    if (isDoubles && _hasUsedDice1 && !_hasUsedDice2 && _bridgeBreakPieceIds.isNotEmpty) {
+      final pieces = _gameState.getPiecesByColor(_currentPlayer);
+      _movablePieces.removeWhere((m) {
+        final pid = m['pieceId'] as int;
+        if (!_bridgeBreakPieceIds.contains(pid)) return false;
+        final piece = pieces[pid];
+        final np = _calculateNewPosition(piece, _dice2Value, _currentPlayer);
+        if (np == null) return false;
+        for (int j = 0; j < pieces.length; j++) {
+          if (j == pid) continue;
+          if (!_bridgeBreakPieceIds.contains(j)) continue;
+          final ally = pieces[j];
+          if (!ally.isHome && !ally.isFinished && ally.position == np) return true;
+        }
+        return false;
+      });
     }
 
     if (mounted) setState(() {});
@@ -1005,7 +1059,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   void _scheduleBotMove() {
-    if (_gameEnded || !_isPlayingAgainstBot || _currentPlayer != _botColor) return;
+    if (_gameEnded || !_isBotTurn) return;
     if (_botExecuting) return;
     _botExecuting = true;
     setState(() => _isBotThinking = true);
@@ -1019,7 +1073,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _hasUsedDice2 = false;
       _movablePieces.clear();
       setState(() => _isBotThinking = false);
-      if (_currentPlayer == _botColor) _nextTurn();
+      if (_isBotTurn) _nextTurn();
     });
     final thinkTime = 600 + _random.nextInt(800);
     Future.delayed(Duration(milliseconds: thinkTime), () {
@@ -1028,72 +1082,140 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     });
   }
 
-  /// Picks the dice pair for the bot.
-  /// • Bet mode + strong: samples 8 pairs, picks the best (hardest to beat).
-  /// • Bet mode + weak  : samples 8 pairs, picks the WORST (gives player edge).
-  /// • Fun mode         : pure random.
   (int, int) _chooseBotDice() {
-    final isBet = widget.matchType == 'Apuesta';
-    if (!isBet) {
-      return (_random.nextInt(6) + 1, _random.nextInt(6) + 1);
+    if (_botIsWeak) {
+      int bestScore = double.maxFinite.toInt();
+      int bestD1 = _random.nextInt(6) + 1;
+      int bestD2 = _random.nextInt(6) + 1;
+      for (int i = 0; i < 6; i++) {
+        final cd1 = _random.nextInt(6) + 1;
+        final cd2 = _random.nextInt(6) + 1;
+        final score = _scoreDicePair(cd1, cd2);
+        if (score < bestScore) { bestScore = score; bestD1 = cd1; bestD2 = cd2; }
+      }
+      return (bestD1, bestD2);
     }
 
-    const candidates = 8;
-    int bestScore = _botIsWeak ? double.maxFinite.toInt() : -1;
-    int bestD1 = _random.nextInt(6) + 1;
-    int bestD2 = _random.nextInt(6) + 1;
-
-    for (int i = 0; i < candidates; i++) {
-      final cd1 = _random.nextInt(6) + 1;
-      final cd2 = _random.nextInt(6) + 1;
-      final score = _scoreDicePair(cd1, cd2);
-      final better = _botIsWeak ? score < bestScore : score > bestScore;
-      if (better) {
-        bestScore = score;
-        bestD1 = cd1;
-        bestD2 = cd2;
+    if (!_isBetMode) {
+      int bestScore = -1;
+      int bestD1 = _random.nextInt(6) + 1;
+      int bestD2 = _random.nextInt(6) + 1;
+      for (int i = 0; i < 16; i++) {
+        final cd1 = _random.nextInt(6) + 1;
+        final cd2 = _random.nextInt(6) + 1;
+        final score = _scoreDicePair(cd1, cd2);
+        if (score > bestScore) { bestScore = score; bestD1 = cd1; bestD2 = cd2; }
       }
+      return (bestD1, bestD2);
+    }
+
+    int bestScore = -1;
+    int bestD1 = 1, bestD2 = 1;
+    for (int d1 = 1; d1 <= 6; d1++) {
+      for (int d2 = 1; d2 <= 6; d2++) {
+        final score = _scoreDicePair(d1, d2);
+        if (score > bestScore) { bestScore = score; bestD1 = d1; bestD2 = d2; }
+      }
+    }
+    if (_random.nextInt(5) == 0) {
+      final candidates = <(int, int, int)>[];
+      for (int d1 = 1; d1 <= 6; d1++) {
+        for (int d2 = 1; d2 <= 6; d2++) {
+          candidates.add((d1, d2, _scoreDicePair(d1, d2)));
+        }
+      }
+      candidates.sort((a, b) => b.$3.compareTo(a.$3));
+      final top = candidates.take(3).toList();
+      final pick = top[_random.nextInt(top.length)];
+      return (pick.$1, pick.$2);
     }
     return (bestD1, bestD2);
   }
 
-  /// Scores a dice pair for the bot by simulating the best move it enables.
   int _scoreDicePair(int d1, int d2) {
-    final botPieces = _gameState.getPiecesByColor(_botColor);
-    int best = 0;
+    final bc = _currentPlayer;
+    final botPieces = _gameState.getPiecesByColor(bc);
+
+    int bestSingle = 0;
     for (final dv in {d1, d2}) {
-      for (int i = 0; i < botPieces.length; i++) {
-        final p = botPieces[i];
+      for (final p in botPieces) {
         if (p.isFinished) continue;
-        final np = _calculateNewPosition(p, dv, _botColor);
-        if (np == null || !_canLandOn(_botColor, np, p)) continue;
-        int s = 0;
-        // Capture enemy
-        if (np < 52 && !_isSafeForColor(np, _botColor)) {
-          for (final ec in _activePlayers) {
-            if (ec == _botColor) continue;
-            final hit = _gameState.getPiecesByColor(ec)
-                .where((ep) => !ep.isHome && !ep.isFinished && ep.position == np).length;
-            if (hit > 0 && hit < 2) s += 1000;
-          }
-        }
-        if (np == 57) s += 800;
-        if (np >= 52 && p.position < 52) s += 300;
-        if (p.isHome) s += 200;
-        if (!p.isHome && p.position < 52) {
-          s += _stepsFromStart(p.position, _getStartPosition(_botColor)) * 5;
-        }
-        if (np < 52 && _isSafeForColor(np, _botColor)) s += 50;
-        if (s > best) best = s;
+        final np = _calculateNewPosition(p, dv, bc);
+        if (np == null || !_canLandOn(bc, np, p)) continue;
+        final s = _scoreSingleAction(p, np);
+        if (s > bestSingle) bestSingle = s;
       }
     }
-    return best;
+
+    int bestCombo = 0;
+    for (final p1 in botPieces) {
+      if (p1.isFinished) continue;
+      final np1 = _calculateNewPosition(p1, d1, bc);
+      if (np1 == null || !_canLandOn(bc, np1, p1)) continue;
+      final s1 = _scoreSingleAction(p1, np1);
+
+      int bestS2 = 0;
+      for (final p2 in botPieces) {
+        if (p2.isFinished) continue;
+        final pos2 = (p2.id == p1.id) ? np1 : p2.position;
+        final tempPiece = LudoPiece(id: p2.id, color: p2.color, position: pos2, isFinished: p2.isFinished);
+        final np2 = _calculateNewPosition(tempPiece, d2, bc);
+        if (np2 == null || !_canLandOn(bc, np2, tempPiece)) continue;
+        final s2 = _scoreSingleAction(tempPiece, np2);
+        if (s2 > bestS2) bestS2 = s2;
+      }
+      final combo = s1 + (bestS2 * 6 ~/ 10);
+      if (combo > bestCombo) bestCombo = combo;
+    }
+
+    return max(bestSingle, bestCombo);
+  }
+
+  int _scoreSingleAction(LudoPiece piece, int np) {
+    final bc = piece.color; // color del bot que mueve
+    int s = 0;
+    if (np < 52 && !_isSafeForColor(np, bc)) {
+      for (final ec in _activePlayers) {
+        if (ec == bc) continue;
+        final hit = _gameState.getPiecesByColor(ec)
+            .where((ep) => !ep.isHome && !ep.isFinished && ep.position == np).length;
+        if (hit == 1) {
+          final ep = _gameState.getPiecesByColor(ec).firstWhere((e) => !e.isHome && !e.isFinished && e.position == np);
+          final enemyAdv = _stepsFromStart(ep.position, _getStartPosition(ec));
+          s += 10000 + enemyAdv * 20;
+        }
+      }
+    }
+    if (np == 57) s += 900;
+    else if (np >= 52 && piece.position < 52) s += 450;
+    else if (np >= 52) s += np * 20;
+    if (piece.isHome) s += 300;
+    if (!piece.isHome && piece.position < 52) {
+      s += _stepsFromStart(piece.position, _getStartPosition(bc)) * 6;
+    }
+
+    if (np < 52 && _isSafeForColor(np, bc)) s += 80;
+    if (np < 52) {
+      final allies = _gameState.getPiecesByColor(bc)
+          .where((bp) => !bp.isFinished && !bp.isHome && bp.id != piece.id && bp.position == np).length;
+      if (allies == 1) s += 200;
+    }
+    return s;
   }
 
   Future<void> _executeBotTurn() async {
-    if (_gameEnded || !mounted || _currentPlayer != _botColor) { _clearBotExecution(); return; }
+    if (_gameEnded || !mounted || _isMyTurn) { _clearBotExecution(); return; }
+    final bc = _currentPlayer;
 
-    final (d1, d2) = _chooseBotDice();
+    var (d1, d2) = _chooseBotDice();
+
+    final botPieces = _gameState.getPiecesByColor(bc);
+    final hasHomePieces = botPieces.any((p) => p.isHome);
+    final missedFive = _botMissedFive[bc] ?? false;
+    if (missedFive && hasHomePieces && d1 != 5 && d2 != 5) {
+      if (_random.nextBool()) d1 = 5; else d2 = 5;
+    }
+    _botMissedFive[bc] = hasHomePieces && d1 != 5 && d2 != 5;
 
     if (d1 == d2) {
       _consecutiveDoubles++;
@@ -1103,9 +1225,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     if (_consecutiveDoubles >= 3) {
       _consecutiveDoubles = 0;
-      _applyTripleDoublesPenalty(_botColor);
+      _applyTripleDoublesPenalty(bc);
       setState(() {});
-      _showEventToast('$_opponentName perdió el turno (3 dobles)');
+      _showEventToast('$_currentBotName perdió el turno (3 dobles)');
       await Future.delayed(const Duration(milliseconds: 1500));
       _clearBotExecution();
       _nextTurn();
@@ -1122,7 +1244,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _calculateMovablePieces();
 
     if (_movablePieces.isEmpty) {
-      _showEventToast('$_opponentName no tiene movimientos');
+      _showEventToast('$_currentBotName no tiene movimientos');
       await Future.delayed(const Duration(milliseconds: 1200));
       setState(() { _dice1Value = 0; _dice2Value = 0; });
       _clearBotExecution();
@@ -1134,7 +1256,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   Future<void> _executeBotBestMove() async {
-    if (_gameEnded || _currentPlayer != _botColor) { _clearBotExecution(); return; }
+    if (_gameEnded || _isMyTurn) { _clearBotExecution(); return; }
+    final bc = _currentPlayer;
     _calculateMovablePieces();
     if (_movablePieces.isEmpty) {
       final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
@@ -1150,56 +1273,29 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       return;
     }
 
-    // Weak mode: intentionally pick the worst move so the player can win.
     int bestScore = _botIsWeak ? double.maxFinite.toInt() : -1;
     Map<String, dynamic>? bestMove;
 
     for (final move in _movablePieces) {
       final piece = move['piece'] as LudoPiece;
       final dv = move['diceValue'] as int;
-      final np = _calculateNewPosition(piece, dv, _botColor);
+      final np = _calculateNewPosition(piece, dv, bc);
       if (np == null) continue;
 
-      int score = 0;
+      int score = _scoreSingleAction(piece, np);
 
-      if (np < 52 && !_isSafeForColor(np, _botColor)) {
+      if (np < 52 && !_isSafeForColor(np, bc)) {
+        int threatCount = 0;
         for (final ec in _activePlayers) {
-          if (ec == _botColor) continue;
-          final count = _gameState.getPiecesByColor(ec)
-              .where((p) => !p.isHome && !p.isFinished && p.position == np).length;
-          if (count > 0 && count < 2) score += 1000;
-        }
-      }
-      if (np == 57) score += 800;
-      if (np >= 52 && piece.position < 52) score += 400;
-      if (piece.isHome) score += 200;
-      if (!piece.isHome && piece.position < 52) {
-        score += _stepsFromStart(piece.position, _getStartPosition(_botColor)) * 5;
-      }
-      // Bonus: landing on a safe square
-      if (np < 52 && _isSafeForColor(np, _botColor)) score += 80;
-      // Bonus: forming a barrier (landing where another bot piece already is)
-      if (np < 52) {
-        final sameSquare = _gameState.getPiecesByColor(_botColor)
-            .where((bp) => !bp.isFinished && !bp.isHome && bp.position == np).length;
-        if (sameSquare == 1) score += 150; // creates barrier of 2
-      }
-      // Penalty: landing somewhere an enemy can capture next turn
-      if (np < 52 && !_isSafeForColor(np, _botColor)) {
-        bool canBeHit = false;
-        for (final ec in _activePlayers) {
-          if (ec == _botColor) continue;
+          if (ec == bc) continue;
           for (final ep in _gameState.getPiecesByColor(ec)) {
             if (ep.isHome || ep.isFinished) continue;
             for (int dv2 = 1; dv2 <= 6; dv2++) {
-              final enp = _calculateNewPosition(ep, dv2, ec);
-              if (enp == np) { canBeHit = true; break; }
+              if (_calculateNewPosition(ep, dv2, ec) == np) { threatCount++; break; }
             }
-            if (canBeHit) break;
           }
-          if (canBeHit) break;
         }
-        if (canBeHit) score -= 200;
+        if (threatCount > 0) score -= 350 * threatCount;
       }
 
       final better = _botIsWeak ? score < bestScore : score > bestScore;
@@ -1210,7 +1306,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     if (mounted && !_gameEnded) {
       _executePieceMove(
-        _botColor,
+        bc,
         bestMove['pieceId'] as int,
         bestMove['diceValue'] as int,
         bestMove['diceNumber'] as int,
@@ -1245,7 +1341,18 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     for (int step = 1; step < dv; step++) {
       final ns = _stepsFromStart(piece.position, sp) + step;
       if (ns >= 51) break;
-      if (_isEnemyBarrierAt((sp + ns) % 52, color)) return true;
+      final pos = (sp + ns) % 52;
+      if (_isAnyBarrierAt(pos)) return true;
+    }
+    return false;
+  }
+
+  bool _isAnyBarrierAt(int pos) {
+    for (final c in _activePlayers) {
+      final count = _gameState.getPiecesByColor(c)
+          .where((p) => !p.isHome && !p.isFinished && p.position == pos)
+          .length;
+      if (count >= 2) return true;
     }
     return false;
   }
@@ -1299,17 +1406,24 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   int? _calculateCaptureBonusPosition(LudoPiece piece, String color) {
     if (piece.isFinished || piece.isHome) return null;
-    if (piece.position >= 52) {
-      final np = piece.position + 20;
-      return np > 57 ? 57 : np;
-    }
+    if (piece.position >= 52) return null;
     final sp = _getStartPosition(color);
-    final steps = _stepsFromStart(piece.position, sp) + 20;
-    if (steps >= 51) {
-      final into = steps - 51;
-      return into > 5 ? 57 : 52 + into;
+    final currentSteps = _stepsFromStart(piece.position, sp);
+    for (int bonus = 1; bonus <= 20; bonus++) {
+      final ns = currentSteps + bonus;
+      final int candidatePos;
+      if (ns >= 51) {
+        final into = ns - 51;
+        if (into > 5) return null;
+        candidatePos = 52 + into;
+      } else {
+        candidatePos = (sp + ns) % 52;
+      }
+      if (candidatePos < 52 && _isAnyBarrierAt(candidatePos)) return null;
+      if (candidatePos == 57 && bonus < 20) return null;
+      if (bonus == 20) return candidatePos;
     }
-    return (sp + steps) % 52;
+    return null;
   }
 
   bool _checkVictory(String color) =>
@@ -1382,17 +1496,17 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     setState(() => _gameEnded = true);
     _turnTimer?.cancel();
     _botSafetyTimer?.cancel();
-    final isBet = widget.matchType == 'Apuesta';
+    _awayTimer?.cancel();
+    final isBet = _isBetMode;
     final isWin = winnerColor == _myColor;
 
-    // Track consecutive losses so we know when to give the player a soft win.
     if (isBet && _isPlayingAgainstBot) {
       BotNameService.recordBetResult(playerWon: isWin);
     }
 
     if (isWin && _currentUser != null) {
       final betAmount = isBet ? (_selectedBetAmount ?? 25) : 100;
-      final prize = betAmount + (betAmount * 0.7).ceil();
+      final prize = (betAmount * 2 * 0.9).floor();
       if (isBet) {
         _firestoreService.incrementUserDiamonds(_currentUser!.uid, prize);
         if (mounted) setState(() => _userDiamonds = (_userDiamonds ?? 0) + prize);
@@ -1403,7 +1517,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     }
 
     _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
-    _showGameEndDialog(isWin ? '¡GANASTE! 🏆' : '$_opponentEmoji $_opponentName ganó');
+    final winnerEmoji = _botEmojis[winnerColor] ?? _opponentEmoji;
+    final winnerName  = _botNames[winnerColor]  ?? _opponentName;
+    _showGameEndDialog(isWin ? '¡GANASTE! 🏆' : '$winnerEmoji $winnerName ganó');
   }
 
   Future<void> _recordResult(GameResultModel result) async {
@@ -1425,6 +1541,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   void _showGameEndDialog(String message) {
     if (!mounted) return;
     final isWin = message.contains('GANASTE');
+    final isBet = _isBetMode;
+    final betAmt = isBet ? (_selectedBetAmount ?? 25) : 100;
+    final netGain = (betAmt * 2 * 0.9).floor() - betAmt;
     showDialog(
       context: context, barrierDismissible: false,
       builder: (ctx) => Dialog(
@@ -1456,6 +1575,32 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               Text(message,
                   style: const TextStyle(color: Colors.black87, fontSize: 16),
                   textAlign: TextAlign.center),
+              if (isWin && isBet) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.diamond, color: Colors.blue, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        '+$netGain 💎 ganados',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 28),
               Row(
                 children: [
@@ -1496,7 +1641,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   void _restartBotGame() {
-    final isBet = widget.matchType == 'Apuesta';
+    final isBet = _isBetMode;
     final cost = isBet ? (_selectedBetAmount ?? 25) : 100;
     final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
     if (balance < cost) { _showInsufficientFundsDialog(); return; }
@@ -1524,6 +1669,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _bonusSelectionActive = false;
       _gameEnded = false;
       _gameStartTime = DateTime.now();
+      _botMissedFive.clear();
     });
     _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
     _startTurnTimer();
@@ -1611,7 +1757,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                     ],
                   ),
                 );
-                if (confirm == true) _endGame(_botColor);
+                if (confirm == true) _endGame(_botColors.first);
               },
             ),
         ],
@@ -1768,8 +1914,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   Widget _buildBoardPlayerLabels(double sz) {
     const pad = 8.0;
     final colorNames = <String, String>{
-      _myColor: 'Tú',
-      _botColor: _opponentName.isEmpty ? 'Bot' : _opponentName.split(' ').first,
+      _myColor: 'Yo',
+      for (final bc in _botColors)
+        bc: (_botNames[bc] ?? _opponentName).split(' ').first.isEmpty
+            ? 'Bot'
+            : (_botNames[bc] ?? _opponentName).split(' ').first,
     };
 
     Widget lbl(String color, {double? top, double? bottom, double? left, double? right}) {
@@ -1887,15 +2036,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                     SizedBox(
                       width: 14, height: 14,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2, color: _getPlayerColor(_botColor),
+                        strokeWidth: 2, color: _getPlayerColor(_currentPlayer),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Pensando $_opponentName...',
+                        'Pensando $_currentBotName...',
                         style: TextStyle(
-                          fontSize: 12, color: _getPlayerColor(_botColor),
+                          fontSize: 12, color: _getPlayerColor(_currentPlayer),
                           fontWeight: FontWeight.w600,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -2132,7 +2281,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
           const SizedBox(height: 28),
 
-          if (widget.matchType == 'Apuesta') _buildBetSelection(),
+          if (_isBetMode) _buildBetSelection(),
 
           if (_userCoins != null || _userDiamonds != null) ...[
             const SizedBox(height: 20),
@@ -2146,11 +2295,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(widget.matchType == 'Apuesta' ? Icons.diamond : Icons.monetization_on,
-                      color: widget.matchType == 'Apuesta' ? Colors.blue : Colors.amber, size: 20),
+                  Icon(_isBetMode ? Icons.diamond : Icons.monetization_on,
+                      color: _isBetMode ? Colors.blue : Colors.amber, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Tu balance: ${widget.matchType == 'Apuesta' ? '${_userDiamonds ?? 0} diamantes' : '${_userCoins ?? 0} monedas'}',
+                    'Tu balance: ${_isBetMode ? '${_userDiamonds ?? 0} diamantes' : '${_userCoins ?? 0} monedas'}',
                     style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -2163,7 +2312,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: (widget.matchType == 'Apuesta' && _selectedBetAmount == null)
+              onPressed: (_isBetMode && _selectedBetAmount == null)
                   ? null
                   : _startMatchmaking,
               icon: const Icon(Icons.search, size: 22),
@@ -2412,7 +2561,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               ),
               const SizedBox(height: 3),
               Text(
-                name != null ? (isMe ? 'Tú' : name.split(' ').first) : (colorNames[color] ?? '?'),
+                name != null ? (isMe ? 'Yo' : name.split(' ').first) : (colorNames[color] ?? '?'),
                 style: TextStyle(fontSize: 10,
                     color: name != null ? col : Colors.grey,
                     fontWeight: name != null ? FontWeight.bold : FontWeight.normal),
@@ -2427,7 +2576,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   void _showInviteFriendDialog(BuildContext context) {
     if (_currentUser == null) return;
 
-    final isBet = widget.matchType == 'Apuesta';
+    final isBet = _isBetMode;
     final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
     final minRequired = isBet ? (_selectedBetAmount ?? 25) : 100;
     if (balance < minRequired) {
@@ -2635,7 +2784,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     final currencyType = _currencyType;
 
-    // Si ya hay una sala activa (p.ej. invitando al 2do/3er jugador), la reusamos
     final bool isNewGame = _activeGameId == null;
     String? gameId = _activeGameId;
 
@@ -2680,7 +2828,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (!mounted) return;
 
     if (error != null) {
-      // Solo cancelar el juego si lo acabamos de crear
       if (isNewGame) {
         _firestore.collection('ludo_games').doc(gameId).update({
           'status': 'cancelled',
@@ -2709,7 +2856,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   void _showInsufficientFundsDialog() {
-    final isBet = widget.matchType == 'Apuesta';
+    final isBet = _isBetMode;
     final required = isBet ? (_selectedBetAmount ?? 25) : 100;
     showDialog(
       context: context,

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/ludo_game_match.dart';
+import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/ludo_game_service.dart';
 import '../../../core/utils/game_result.dart';
@@ -13,15 +14,17 @@ import '../../../core/utils/game_type.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'ludo_board_painter.dart';
 
+enum _FriendLudoState { setup, waitingRoom, gameActive }
+
 class MultiplayerLudoScreen extends StatefulWidget {
-  final String gameId;
+  final String? gameId;
   final int playerNumber;
   final String matchType;
 
   const MultiplayerLudoScreen({
     super.key,
-    required this.gameId,
-    required this.playerNumber,
+    this.gameId,
+    this.playerNumber = 1,
     required this.matchType,
   });
 
@@ -46,7 +49,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   LudoGameState _gameState = LudoGameState.initial();
   String _myColor = 'yellow';
   String _currentTurn = 'player1';
-  bool get _isMyTurn => _currentTurn == 'player${widget.playerNumber}';
+  bool get _isMyTurn => _currentTurn == 'player$_myPlayerNumber';
 
   int _dice1Value = 0;
   int _dice2Value = 0;
@@ -64,6 +67,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   bool _bonusSelectionActive = false;
   bool _bonusHadDouble = false;
   final List<Map<String, dynamic>> _pendingBonusMoves = [];
+  Set<int> _bridgeBreakPieceIds = {};
 
   double _boardSize = 0;
   List<String> _activePlayers = ['yellow', 'red', 'green', 'blue'];
@@ -72,6 +76,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   bool _hasUserExited = false;
   DateTime? _gameStartTime;
   bool _isScreenKeepOnActive = false;
+
+  _FriendLudoState _screenState = _FriendLudoState.setup;
+  int _myPlayerNumber = 1;
+  String? _activeGameId;
+  int _selectedPlayerCount = 2;
+  int? _selectedBetAmount;
+  StreamSubscription<LudoGameMatch?>? _waitingSubscription;
+  bool _isCreatingGame = false;
+
+  static const List<int> _betOptions = [10, 25, 50, 100, 250, 500];
 
   String _toastMessage = '';
   bool _showToast = false;
@@ -111,8 +125,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _gameStartTime = DateTime.now();
-    _enableWakeLock();
+    _myPlayerNumber = widget.playerNumber;
 
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 900), vsync: this,
@@ -135,12 +148,22 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     );
     _bannerAnim = CurvedAnimation(parent: _bannerController, curve: Curves.easeOut);
 
-    _initializeGame();
+    if (widget.gameId != null) {
+      _activeGameId = widget.gameId;
+      _screenState = _FriendLudoState.gameActive;
+      _gameStartTime = DateTime.now();
+      _enableWakeLock();
+      _initializeGame();
+    } else {
+      _screenState = _FriendLudoState.setup;
+      _setupBalanceListener();
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _waitingSubscription?.cancel();
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
     _turnTimer?.cancel();
@@ -180,12 +203,44 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   void _initializeGame() {
+    if (_activeGameId == null) return;
     _gameSubscription = _gameService
-        .getGameStream(widget.gameId)
+        .getGameStream(_activeGameId!)
         .listen(_handleGameUpdate, onError: (e) {
       if (kDebugMode) print('Ludo stream error: $e');
     });
     _setupBalanceListener();
+  }
+
+  void _startWaitingRoom(String gameId) {
+    _activeGameId = gameId;
+    setState(() => _screenState = _FriendLudoState.waitingRoom);
+
+    _waitingSubscription = _gameService
+        .getGameStream(gameId)
+        .listen((game) {
+      if (!mounted || game == null) return;
+      setState(() => _currentGame = game);
+
+      if (game.status == 'active' && _screenState == _FriendLudoState.waitingRoom) {
+        _waitingSubscription?.cancel();
+        _waitingSubscription = null;
+        _setupPlayerColor(game);
+        _setupActivePlayers(game);
+        _gameStartTime = DateTime.now();
+        _enableWakeLock();
+        setState(() {
+          _gameState = game.gameState;
+          _currentTurn = game.currentTurn;
+          _dice1Value = game.dice1;
+          _dice2Value = game.dice2;
+          _screenState = _FriendLudoState.gameActive;
+        });
+        _initializeGame();
+      }
+    }, onError: (e) {
+      if (kDebugMode) print('Ludo waiting error: $e');
+    });
   }
 
   void _setupBalanceListener() {
@@ -219,8 +274,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     final prevTurn = _currentTurn;
     final newTurn = game.currentTurn;
-    final turnChangedToMe = newTurn != prevTurn && newTurn == 'player${widget.playerNumber}';
-    final isMyTurnNow = newTurn == 'player${widget.playerNumber}';
+    final turnChangedToMe = newTurn != prevTurn && newTurn == 'player${_myPlayerNumber}';
+    final isMyTurnNow = newTurn == 'player${_myPlayerNumber}';
 
     setState(() {
       _gameState = game.gameState;
@@ -233,7 +288,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       }
     });
 
-    if (isMyTurnNow) _calculateMovablePieces();
+    if (isMyTurnNow && !_bonusSelectionActive) _calculateMovablePieces();
 
     if (prevTurn != _currentTurn && _isMyTurn && !_gameEnded) {
       _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
@@ -260,7 +315,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   void _setupPlayerColor(LudoGameMatch game) {
-    switch (widget.playerNumber) {
+    switch (_myPlayerNumber) {
       case 1: _myColor = game.player1Color; break;
       case 2: _myColor = game.player2Color ?? 'red'; break;
       case 3: _myColor = game.player3Color ?? 'blue'; break;
@@ -342,6 +397,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       return;
     }
 
+    _bridgeBreakPieceIds = (d1 == d2) ? _getBarreraIndices(_myColor) : {};
+
     setState(() {
       _dice1Value = d1;
       _dice2Value = d2;
@@ -364,7 +421,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   Future<void> _syncDiceToFirestore(int d1, int d2, bool u1, bool u2) async {
     try {
-      await _firestore.collection('ludo_games').doc(widget.gameId).update({
+      await _firestore.collection('ludo_games').doc(_activeGameId!).update({
         'dice1': d1,
         'dice2': d2,
         'hasUsedDice1': u1,
@@ -384,7 +441,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       return;
     }
 
-    // Enviar a casa la última ficha movida; si ya no está activa, la más avanzada
     LudoPiece? target;
     if (_lastMovedPieceId != null && _lastMovedPieceId! < pieces.length) {
       final last = pieces[_lastMovedPieceId!];
@@ -443,12 +499,30 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       }
     }
 
-    if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
+    final isDoubles = _dice1Value > 0 && _dice1Value == _dice2Value;
+
+    if (isDoubles && !_hasUsedDice1 && !_hasUsedDice2) {
       final barrIndices = _getBarreraIndices(color);
       if (barrIndices.isNotEmpty) {
         final barrMoves = _movablePieces.where((m) => barrIndices.contains(m['pieceId'])).toList();
         if (barrMoves.isNotEmpty) _movablePieces = barrMoves;
       }
+    }
+    if (isDoubles && _hasUsedDice1 && !_hasUsedDice2 && _bridgeBreakPieceIds.isNotEmpty) {
+      _movablePieces.removeWhere((m) {
+        final pid = m['pieceId'] as int;
+        if (!_bridgeBreakPieceIds.contains(pid)) return false;
+        final piece = pieces[pid];
+        final np = _calculateNewPosition(piece, _dice2Value, color);
+        if (np == null) return false;
+        for (int j = 0; j < pieces.length; j++) {
+          if (j == pid) continue;
+          if (!_bridgeBreakPieceIds.contains(j)) continue;
+          final ally = pieces[j];
+          if (!ally.isHome && !ally.isFinished && ally.position == np) return true;
+        }
+        return false;
+      });
     }
 
     if (mounted) setState(() {});
@@ -645,7 +719,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (p.isFinished || p.isHome) continue;
       final bp = _calculateCaptureBonusPosition(p, color);
       if (bp == null) continue;
-      if (bp < 52 && _isEnemyBarrierAt(bp, color)) continue;
       _pendingBonusMoves.add({'pieceId': i, 'piece': p, 'bonusPos': bp});
     }
 
@@ -715,7 +788,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         updates['hasUsedDice2'] = false;
       }
 
-      await _firestore.collection('ludo_games').doc(widget.gameId).update(updates);
+      await _firestore.collection('ludo_games').doc(_activeGameId!).update(updates);
     } catch (e) {
       if (kDebugMode) print('Error syncing game state: $e');
     }
@@ -759,7 +832,18 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     for (int step = 1; step < diceValue; step++) {
       final ns = _stepsFromStart(piece.position, sp) + step;
       if (ns >= 51) break;
-      if (_isEnemyBarrierAt((sp + ns) % 52, color)) return true;
+      final pos = (sp + ns) % 52;
+      if (_isAnyBarrierAt(pos)) return true;
+    }
+    return false;
+  }
+
+  bool _isAnyBarrierAt(int pos) {
+    for (final c in _activePlayers) {
+      final count = _gameState.getPiecesByColor(c)
+          .where((p) => !p.isHome && !p.isFinished && p.position == pos)
+          .length;
+      if (count >= 2) return true;
     }
     return false;
   }
@@ -816,17 +900,24 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   int? _calculateCaptureBonusPosition(LudoPiece piece, String color) {
     if (piece.isFinished || piece.isHome) return null;
-    if (piece.position >= 52) {
-      final np = piece.position + 20;
-      return np > 57 ? 57 : np;
-    }
+    if (piece.position >= 52) return null;
     final sp = _getStartPosition(color);
-    final steps = _stepsFromStart(piece.position, sp) + 20;
-    if (steps >= 51) {
-      final into = steps - 51;
-      return into > 5 ? 57 : 52 + into;
+    final currentSteps = _stepsFromStart(piece.position, sp);
+    for (int bonus = 1; bonus <= 20; bonus++) {
+      final ns = currentSteps + bonus;
+      final int candidatePos;
+      if (ns >= 51) {
+        final into = ns - 51;
+        if (into > 5) return null;
+        candidatePos = 52 + into;
+      } else {
+        candidatePos = (sp + ns) % 52;
+      }
+      if (candidatePos < 52 && _isAnyBarrierAt(candidatePos)) return null;
+      if (candidatePos == 57 && bonus < 20) return null;
+      if (bonus == 20) return candidatePos;
     }
-    return (sp + steps) % 52;
+    return null;
   }
 
   bool _checkVictory(String color) =>
@@ -900,14 +991,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     setState(() => _gameEnded = true);
     _turnTimer?.cancel();
 
-    final winnerId = _currentUser?.uid;
-    if (winnerId != null) {
-      // Usar el servicio en lugar de escribir Firestore directamente
-      // (equivalente a MultiplayerGameService.finishGame en chess)
-      _gameService.finishGame(gameId: widget.gameId, winnerId: winnerId);
-    }
-
     final isWin = winnerColor == _myColor;
+    if (isWin && _currentUser != null && _activeGameId != null) {
+      _gameService.finishGame(gameId: _activeGameId!, winnerId: _currentUser!.uid);
+    }
     _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
     _showEndDialog(isWin ? '¡GANASTE! 🏆' : '${_getColorName(winnerColor)} ganó', _currentGame);
   }
@@ -933,8 +1020,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Future<void> _reloadUserCurrency() async {
-    // El listener _balanceSubscription actualiza automáticamente _userDiamonds/_userCoins
-    // cuando la Cloud Function modifica el balance en Firestore. No se necesita polling.
     if (kDebugMode) print('💰 [Ludo] Balance actualizado por listener en tiempo real');
   }
 
@@ -959,8 +1044,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final isWin = message.contains('GANASTE') || message.contains('Ganaste');
     final betAmount = game?.betAmount;
     final isBetGame = betAmount != null && betAmount > 0 && game?.currencyType == 'diamonds';
-    // Ganador recibe 90% del pot total (apuesta × 2). Casa cobra el 10%.
+    // Premio bruto: 90% del pot. Ganancia NETA = premio - apuesta ya descontada.
     final winnerPrize = isBetGame ? ((betAmount * 2) * 0.90).floor() : 0;
+    final netGain     = isBetGame ? winnerPrize - betAmount : 0;
 
     showDialog(
       context: context,
@@ -1015,7 +1101,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                       const SizedBox(width: 8),
                       Text(
                         isWin
-                            ? '+$winnerPrize 💎 ganados'
+                            ? '+$netGain 💎 ganados'
                             : '-$betAmount 💎 perdidos',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -1109,7 +1195,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _gameEnded = true;
     _turnTimer?.cancel();
     final success = await _gameService.abandonGame(
-      gameId: widget.gameId,
+      gameId: _activeGameId!,
       playerId: _currentUser?.uid ?? '',
     );
     if (success) {
@@ -1172,8 +1258,583 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
   }
 
+  String _getCountIcon(int n) {
+    switch (n) {
+      case 2: return '👥';
+      case 3: return '👨‍👩‍👦';
+      default: return '👨‍👩‍👧‍👦';
+    }
+  }
+
+  Widget _buildSetupScaffold() {
+    final isBet = widget.matchType == 'Apuesta';
+    final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFEC7A34),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Parchís vs Amigo', style: TextStyle(color: Colors.white)),
+        elevation: 2,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEC7A34), Color(0xFFd4622a)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Center(child: Text('🎲', style: TextStyle(fontSize: 28))),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Parchís con amigos',
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        SizedBox(height: 4),
+                        Text('Invita a un amigo a jugar',
+                            style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 28),
+            const Text('¿Cuántos jugadores?',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            const Text('Elige el número de jugadores para la partida',
+                style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [2, 3, 4].map((n) {
+                final sel = _selectedPlayerCount == n;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedPlayerCount = n),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 80, height: 100,
+                      decoration: BoxDecoration(
+                        color: sel ? const Color(0xFFEC7A34) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: sel ? const Color(0xFFEC7A34) : Colors.grey.shade300,
+                            width: sel ? 2 : 1),
+                        boxShadow: sel
+                            ? [BoxShadow(color: const Color(0xFFEC7A34).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))]
+                            : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_getCountIcon(n), style: const TextStyle(fontSize: 28)),
+                          const SizedBox(height: 6),
+                          Text('$n jugadores',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+                                  color: sel ? Colors.white : Colors.black87),
+                              textAlign: TextAlign.center),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            if (isBet) ...[
+              const SizedBox(height: 24),
+              const Text('¿Cuánto quieres apostar?',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              const Text('Elige el monto de diamantes para esta partida',
+                  style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: _betOptions.map((amount) {
+                    final isSelected = _selectedBetAmount == amount;
+                    final canAfford = balance >= amount;
+                    return GestureDetector(
+                      onTap: canAfford ? () => setState(() => _selectedBetAmount = amount) : null,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.amber.shade600
+                              : (canAfford ? Colors.white : Colors.grey.shade200),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected ? Colors.amber.shade700 : Colors.grey.shade300,
+                            width: isSelected ? 2 : 1,
+                          ),
+                          boxShadow: isSelected
+                              ? [BoxShadow(color: Colors.amber.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2))]
+                              : [],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.diamond,
+                                color: isSelected ? Colors.white : (canAfford ? Colors.amber.shade600 : Colors.grey.shade400),
+                                size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              amount.toString(),
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : (canAfford ? Colors.black87 : Colors.grey.shade500),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(isBet ? Icons.diamond : Icons.monetization_on,
+                      color: isBet ? Colors.blue : Colors.amber, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Tu balance: ${isBet ? '${_userDiamonds ?? 0} diamantes' : '${_userCoins ?? 0} monedas'}',
+                    style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (isBet && _selectedBetAmount == null)
+                    ? null
+                    : () => _showFriendInviteDialog(),
+                icon: const Icon(Icons.person_add, size: 22),
+                label: const Text('Invitar amigo',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaitingRoomScaffold() {
+    final game = _currentGame;
+    final joined = game?.playerCount ?? 1;
+    final remaining = _selectedPlayerCount - joined;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFEC7A34),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Sala de espera', style: TextStyle(color: Colors.white)),
+        elevation: 2,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10)],
+                ),
+                child: Column(
+                  children: [
+                    const Text('🎲', style: TextStyle(fontSize: 48)),
+                    const SizedBox(height: 12),
+                    const Text('Sala de espera',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('$joined / $_selectedPlayerCount jugadores',
+                        style: const TextStyle(fontSize: 16, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _selectedPlayerCount > 0 ? joined / _selectedPlayerCount : 0,
+                        backgroundColor: Colors.grey.shade200,
+                        color: const Color(0xFFEC7A34), minHeight: 10,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (remaining > 0) ...[
+                      const SizedBox(width: 24, height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFEC7A34))),
+                      const SizedBox(height: 6),
+                      Text('Esperando $remaining ${remaining == 1 ? 'jugador más' : 'jugadores más'}...',
+                          style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                    ] else ...[
+                      const Icon(Icons.check_circle, color: Colors.green, size: 28),
+                      const Text('¡Todos listos! Iniciando...',
+                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              if (_activeGameId != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Código: ${_activeGameId!.substring(0, 8).toUpperCase()}',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.black45),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (remaining > 0)
+                ElevatedButton.icon(
+                  onPressed: () => _showFriendInviteDialog(),
+                  icon: const Icon(Icons.person_add, size: 18),
+                  label: const Text('Invitar otro amigo'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
+                  if (_activeGameId != null) {
+                    _firestore.collection('ludo_games').doc(_activeGameId).update({
+                      'status': 'cancelled',
+                      'finishedAt': FieldValue.serverTimestamp(),
+                    }).catchError((_) {});
+                  }
+                  _waitingSubscription?.cancel();
+                  if (mounted) Navigator.of(context).pop();
+                },
+                icon: const Icon(Icons.close),
+                label: const Text('Cancelar sala'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red, side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFriendInviteDialog() {
+    if (_currentUser == null) return;
+
+    final isBet = widget.matchType == 'Apuesta';
+    final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
+    final emailController = TextEditingController();
+    final betController = TextEditingController();
+    bool isLoading = false;
+    String? betError;
+
+    if (isBet && _selectedBetAmount != null) {
+      betController.text = '$_selectedBetAmount';
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          bool isValid = emailController.text.trim().isNotEmpty &&
+              (!isBet || (betController.text.isNotEmpty && betError == null));
+
+          void validateBet(String v) {
+            setDlg(() {
+              final n = int.tryParse(v);
+              if (v.isEmpty) {
+                betError = 'Ingresa un monto';
+              } else if (n == null || n < 1) {
+                betError = 'Monto inválido';
+              } else if (n > balance) {
+                betError = 'Saldo insuficiente (tienes $balance)';
+              } else {
+                betError = null;
+              }
+            });
+          }
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Invitar amigo',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: isLoading ? null : () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(isBet ? Icons.diamond : Icons.monetization_on,
+                              color: isBet ? Colors.blue : Colors.amber, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Tu saldo: $balance ${isBet ? 'diamantes' : 'monedas'}',
+                            style: TextStyle(color: Colors.green.shade800,
+                                fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEC7A34).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('🎲', style: TextStyle(fontSize: 18)),
+                          const SizedBox(width: 8),
+                          Text('$_selectedPlayerCount jugadores',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: emailController,
+                      enabled: !isLoading,
+                      keyboardType: TextInputType.emailAddress,
+                      onChanged: (_) => setDlg(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Email del amigo',
+                        hintText: 'ejemplo@email.com',
+                        prefixIcon: const Icon(Icons.email),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    if (isBet) ...[
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: betController,
+                        enabled: !isLoading,
+                        keyboardType: TextInputType.number,
+                        onChanged: validateBet,
+                        decoration: InputDecoration(
+                          labelText: 'Monto a apostar (diamantes)',
+                          prefixIcon: const Icon(Icons.diamond, color: Colors.amber),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          errorText: betError,
+                          helperText: 'Disponible: $balance diamantes',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [10, 25, 50, 100, 250].map((n) {
+                          final ok = n <= balance;
+                          return ActionChip(
+                            label: Text('$n'),
+                            onPressed: ok && !isLoading
+                                ? () {
+                                    betController.text = '$n';
+                                    validateBet('$n');
+                                  }
+                                : null,
+                            backgroundColor: ok ? Colors.amber.withValues(alpha: 0.15) : Colors.grey.shade200,
+                            labelStyle: TextStyle(
+                                color: ok ? Colors.amber.shade800 : Colors.grey,
+                                fontWeight: FontWeight.bold),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: (isLoading || !isValid)
+                            ? null
+                            : () async {
+                                setDlg(() => isLoading = true);
+                                Navigator.of(ctx).pop();
+                                await _createAndInvite(
+                                  email: emailController.text.trim(),
+                                  betAmount: isBet ? int.tryParse(betController.text.trim()) : null,
+                                );
+                              },
+                        icon: isLoading
+                            ? const SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.send),
+                        label: Text(isLoading ? 'Enviando...' : 'Enviar invitación',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _createAndInvite({required String email, int? betAmount}) async {
+    if (_currentUser == null || !mounted) return;
+
+    final isBet = widget.matchType == 'Apuesta';
+    final currencyType = isBet ? 'diamonds' : 'coins';
+    final effectiveBet = betAmount ?? _selectedBetAmount;
+
+    final bool isNewGame = _activeGameId == null;
+    String? gameId = _activeGameId;
+
+    if (isNewGame) {
+      gameId = await _gameService.createGame(
+        hostId: _currentUser!.uid,
+        hostName: _currentUser!.displayName ?? 'Jugador',
+        hostPhotoUrl: _currentUser!.photoURL,
+        currencyType: currencyType,
+        betAmount: effectiveBet,
+        numberOfPlayers: _selectedPlayerCount,
+        isOnlineMatchmaking: false,
+      );
+    }
+
+    if (gameId == null || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Error al crear la sala. Intenta de nuevo.'),
+            backgroundColor: Colors.red));
+      }
+      return;
+    }
+
+    final error = await GameInvitationService().createInvitation(
+      fromUserId: _currentUser!.uid,
+      fromUserName: _currentUser!.displayName ?? 'Jugador',
+      toUserEmail: email,
+      gameType: 'Parchís',
+      betAmount: effectiveBet,
+      currencyType: currencyType,
+      existingGameId: gameId,
+      numberOfPlayers: _selectedPlayerCount,
+    );
+
+    if (!mounted) return;
+
+    if (error != null) {
+      if (isNewGame) {
+        _firestore.collection('ludo_games').doc(gameId).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (isNewGame) {
+      if (isBet && betAmount != null) setState(() => _selectedBetAmount = betAmount);
+      _startWaitingRoom(gameId);
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('¡Invitación enviada! Esperando que tu amigo acepte...'),
+          backgroundColor: Colors.green));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_screenState == _FriendLudoState.setup) return _buildSetupScaffold();
+    if (_screenState == _FriendLudoState.waitingRoom) return _buildWaitingRoomScaffold();
+
     return PopScope(
       canPop: _gameEnded,
       onPopInvokedWithResult: (didPop, _) async {
@@ -1352,7 +2013,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final colorNames = <String, String>{};
     void addPlayer(int n, String? color, String? name) {
       if (color == null) return;
-      colorNames[color] = (n == widget.playerNumber) ? 'Tú' : (name ?? 'J$n').split(' ').first;
+      colorNames[color] = (n == _myPlayerNumber) ? 'Yo' : (name ?? 'J$n').split(' ').first;
     }
     addPlayer(1, _currentGame!.player1Color, _currentGame!.hostName);
     addPlayer(2, _currentGame!.player2Color, _currentGame!.guest2Name);
@@ -1364,7 +2025,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (name == null) return const SizedBox.shrink();
       final pc = _getPlayerColor(color);
       final isActive = color == activeColor;
-      final isMe = name == 'Tú';
+      final isMe = name == 'Yo';
       return Positioned(
         top: top, bottom: bottom, left: left, right: right,
         child: Container(
@@ -1424,7 +2085,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       child: Row(
         children: players.map((p) {
           final isActive = _currentTurn == 'player${p['n']}';
-          final isMe = p['n'] == widget.playerNumber;
+          final isMe = p['n'] == _myPlayerNumber;
           final col = _getPlayerColor(p['color'] as String);
           return Expanded(
             child: AnimatedContainer(
@@ -1447,7 +2108,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
-                      isMe ? 'Tú' : (p['name'] as String).split(' ').first,
+                      isMe ? 'Yo' : (p['name'] as String).split(' ').first,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: isActive ? FontWeight.bold : FontWeight.normal,

@@ -40,6 +40,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   StreamSubscription<MultiplayerGameMatch?>? _gameSubscription;
 
   bool _gameEnded = false;
+  bool _showGameEndOverlay = false;
+  String _gameEndMessage = '';
   bool _isMyTurn = false;
   Timer? _reconnectTimer;
   bool _isConnected = true;
@@ -114,7 +116,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
 
 
-  // Iniciar timer para el primer movimiento (14 segundos)
   void _startInitialMoveTimer() {
     if (_hasPlayerMovedOnce || _gameEnded || !_isMyTurn) return;
 
@@ -126,7 +127,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     });
   }
 
-  // Iniciar timer del jugador (1 minuto por movimiento)
   void _startPlayerTimer() {
     if (_gameEnded || !_isMyTurn) return;
 
@@ -150,7 +150,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     });
   }
 
-  // Manejar timeout
   void _timeOut({required bool isInitialTimeout}) {
     if (_gameEnded) return;
 
@@ -162,7 +161,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         ? 'Tiempo agotado: No realizaste tu primer movimiento en 14 segundos'
         : 'Tiempo agotado: No completaste tu movimiento en 1 minuto';
 
-    // Abandonar la partida automáticamente
     _abandonGameDueToTimeout();
 
     _showTimeoutDialog(message);
@@ -1021,77 +1019,71 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   void _showGameEndDialog(String message) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            S.of(context).gameOver,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                message,
-                style: TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
+    if (!mounted) return;
+    setState(() {
+      _showGameEndOverlay = true;
+      _gameEndMessage = message;
+    });
+  }
+
+  Widget _buildGameEndOverlay() {
+    final isWin = _gameEndMessage.toLowerCase().contains('ganaste') ||
+        _gameEndMessage.toLowerCase().contains('won');
+    final color = isWin ? Colors.green[700]! : Colors.red[700]!;
+    final icon = isWin ? Icons.emoji_events_rounded : Icons.sports_esports_rounded;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.93),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _gameEndMessage,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
               ),
-              if (_selectedBetAmount != null) ...[
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_getCurrencyIcon(), color: Colors.blue),
-                      SizedBox(width: 8),
-                      Text(
-                        '${S.of(context).bet}: $_selectedBetAmount ${_getCurrencyName()}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue[800],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).pop();
-              },
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.orange[600],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Text(S.of(context).exit),
-              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGameEndButtons() {
+    final isWin = _gameEndMessage.toLowerCase().contains('ganaste') ||
+        _gameEndMessage.toLowerCase().contains('won');
+    final color = isWin ? Colors.green[700]! : Colors.red[700]!;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(S.of(context).exit),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1612,6 +1604,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
             _buildTimer(),
 
+            if (_showGameEndOverlay) _buildGameEndOverlay(),
+
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -1630,7 +1624,9 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
               child: _buildPlayerInfo(true),
             ),
 
-            if (!_gameEnded && _gameStarted)
+            if (_showGameEndOverlay)
+              _buildGameEndButtons()
+            else if (!_gameEnded && _gameStarted)
               Container(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(

@@ -41,6 +41,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
   bool _isStockfishReady = false;
   bool _gameEnded = false;
+  bool _showGameEndOverlay = false;
+  String _gameEndMessage = '';
   bool _hasStartedGame = false;
   bool _waitingForCpuMove = false;
 
@@ -473,7 +475,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
       return false;
     }
 
-    // Capture before async gap
     final isBet = widget.matchType == S.of(context).bet;
 
     try {
@@ -558,7 +559,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   }
 
   Future<void> _initializeStockfish() async {
-    // Capture context-dependent values before async gaps
     final isFun = widget.matchType == S.of(context).fun;
     final isBet = widget.matchType == S.of(context).bet;
 
@@ -743,7 +743,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     if (currentUser == null) return;
     if (_gameStartTime == null) return;
 
-    // Capture context-dependent values before async gaps
     final isBet = widget.matchType == S.of(context).bet;
     final currencyType = _getCurrencyType();
 
@@ -838,67 +837,84 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
   }
 
   void _showGameEndDialog(String message) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            S.of(context).gameOver,
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            message,
-            style: TextStyle(fontSize: 16),
-            textAlign: TextAlign.center,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _restartGame();
-              },
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.orange[600],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+    if (!mounted) return;
+    setState(() {
+      _showGameEndOverlay = true;
+      _gameEndMessage = message;
+    });
+  }
+
+  Widget _buildGameEndOverlay() {
+    final isWin = _gameEndMessage.toLowerCase().contains('ganaste') ||
+        _gameEndMessage.toLowerCase().contains('won');
+    final color = isWin ? Colors.green[700]! : Colors.red[700]!;
+    final icon = isWin ? Icons.emoji_events_rounded : Icons.sports_esports_rounded;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.93),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _gameEndMessage,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Text(S.of(context).newGame),
-              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).pop();
-              },
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.grey[600],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGameEndButtons() {
+    final isWin = _gameEndMessage.toLowerCase().contains('ganaste') ||
+        _gameEndMessage.toLowerCase().contains('won');
+    final color = isWin ? Colors.green[700]! : Colors.red[700]!;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: const BorderSide(color: Colors.white38),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Text(S.of(context).exit),
-              ),
+              child: Text(S.of(context).exit),
             ),
-          ],
-        );
-      },
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _restartGame,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(S.of(context).newGame),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -944,7 +960,6 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
       if (_playerColor == PlayerColor.black && _isStockfishReady) {
         _makeCpuMove();
       } else if (_playerColor == PlayerColor.white) {
-        // Si el jugador es blanco, iniciar su turno y el timer inicial
         _isPlayerTurn = true;
         _startInitialMoveTimer();
       }
@@ -957,6 +972,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
         _playerTimer?.cancel();
         _initialMoveTimer?.cancel();
         _gameEnded = false;
+        _showGameEndOverlay = false;
+        _gameEndMessage = '';
         _waitingForCpuMove = false;
         _hasStartedGame = false;
         _gameStartTime = null;
@@ -1289,7 +1306,9 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
             _buildTimer(),
 
-            if (!_gameEnded)
+            if (_showGameEndOverlay) _buildGameEndOverlay(),
+
+            if (!_gameEnded && !_showGameEndOverlay)
               Container(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
@@ -1322,24 +1341,27 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: ElevatedButton.icon(
-                onPressed: _restartGame,
-                icon: const Icon(Icons.replay),
-                label: Text(S.of(context).restartGame),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 14,
+            if (_showGameEndOverlay)
+              _buildGameEndButtons()
+            else
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: ElevatedButton.icon(
+                  onPressed: _restartGame,
+                  icon: const Icon(Icons.replay),
+                  label: Text(S.of(context).restartGame),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 14,
+                    ),
                   ),
                 ),
               ),
-            ),
             const BannerAdWidget(),
           ],
         ),

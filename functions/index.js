@@ -451,7 +451,9 @@ exports.distributeGameRewards = onDocumentUpdated(
 );
 
 
-// FUNCIÓN: Distribuir recompensas del juego ONLINE DE APUESTA (solo diamantes)
+// FUNCIÓN: Distribuir recompensas del juego ONLINE DE APUESTA (solo diamantes, matchmaking)
+// Requiere quotasCollected === true (cobradas por el cliente al unirse el guest).
+// Usa calcDistribution() como única fuente de verdad — misma fórmula que los demás modos.
 exports.distributeOnlineBetGameRewards = onDocumentUpdated(
   {
     document: 'multiplayer_games/{gameId}',
@@ -462,45 +464,26 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
     const beforeData = event.data?.before.data();
     const afterData = event.data?.after.data();
 
-    console.log(`\n💎 [${gameId}] === INICIO FUNCIÓN APUESTA ONLINE ===`);
+    console.log(`\n💎 [${gameId}] === INICIO distributeOnlineBetGameRewards ===`);
     console.log(`📊 Status: "${beforeData?.status}" → "${afterData?.status}"`);
-    console.log(`💎 rewardsDistributed: ${afterData?.rewardsDistributed}`);
     console.log(`✅ quotasCollected: ${afterData?.quotasCollected}`);
-    console.log(`💰 betAmount: ${afterData?.betAmount}`);
-    console.log(`🎯 result: "${afterData?.result}"`);
-    console.log(`🏆 winnerId: ${afterData?.winnerId}`);
-    console.log(`💱 currencyType: ${afterData?.currencyType}`);
+    console.log(`💎 rewardsDistributed: ${afterData?.rewardsDistributed}`);
+    console.log(`💰 betAmount: ${afterData?.betAmount} | totalPot: ${afterData?.totalPot}`);
+    console.log(`🎯 result: "${afterData?.result}" | winnerId: ${afterData?.winnerId}`);
 
-    if (!beforeData || !afterData) {
-      console.log(`❌ [${gameId}] No hay datos before/after`);
+    if (!beforeData || !afterData) return null;
+
+    // Solo juegos de matchmaking online con diamantes
+    if (afterData.currencyType !== 'diamonds' || !afterData.gameSettings?.isOnlineMatchmaking) {
+      console.log(`⏭️ [${gameId}] No aplica (SALIENDO)\n`);
       return null;
     }
 
-    // Solo procesar juegos de APUESTA (diamantes) online
-    if (afterData.currencyType !== 'diamonds') {
-      console.log(`⏭️ [${gameId}] No es juego de apuesta con diamantes (SALIENDO)`);
-      return null;
-    }
-
-    // Verificar que el juego sea online matchmaking
-    if (!afterData.gameSettings?.isOnlineMatchmaking) {
-      console.log(`⏭️ [${gameId}] No es juego de matchmaking online (SALIENDO)`);
-      return null;
-    }
-
-    const gameJustFinished = 
-      beforeData.status !== 'finished' && 
-      afterData.status === 'finished';
-    
-    const gameJustAbandoned = 
-      beforeData.status !== 'abandoned' && 
-      afterData.status === 'abandoned';
-
-    console.log(`🔍 gameJustFinished: ${gameJustFinished}`);
-    console.log(`🔍 gameJustAbandoned: ${gameJustAbandoned}`);
+    const gameJustFinished  = beforeData.status !== 'finished'  && afterData.status === 'finished';
+    const gameJustAbandoned = beforeData.status !== 'abandoned' && afterData.status === 'abandoned';
 
     if (!gameJustFinished && !gameJustAbandoned) {
-      console.log(`⏭️ [${gameId}] No es cambio a finished/abandoned (SALIENDO)\n`);
+      console.log(`⏭️ [${gameId}] Sin cambio a finished/abandoned (SALIENDO)\n`);
       return null;
     }
 
@@ -509,201 +492,133 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
       return null;
     }
 
-    const hostId = afterData.hostId;
-    const guestId = afterData.guestId;
-    const betAmount = afterData.betAmount || 0;
-    const winnerId = afterData.winnerId;
-    const result = afterData.result;
-    const abandonedBy = afterData.abandonedBy;
-
-    if (!hostId || !guestId || betAmount === 0) {
-      console.log(`❌ [${gameId}] Datos insuficientes para distribuir`);
-      console.log(`   hostId: ${hostId}, guestId: ${guestId}, betAmount: ${betAmount}\n`);
+    // Las cuotas DEBEN haber sido cobradas por el cliente (igual que distributeGameRewards)
+    if (afterData.quotasCollected !== true) {
+      console.log(`⚠️ [${gameId}] quotasCollected !== true — sin cuotas cobradas (SALIENDO)\n`);
       return null;
     }
 
-    console.log(`\n🚀 [${gameId}] ¡PROCEDIENDO CON APUESTA ONLINE!`);
-    console.log(`   Tipo de finalización: ${gameJustAbandoned ? 'ABANDONO' : 'FINISHED'}`);
-    console.log(`   Cantidad apostada por jugador: ${betAmount} diamantes\n`);
+    const hostId      = afterData.hostId;
+    const guestId     = afterData.guestId;
+    const totalPot    = afterData.totalPot || 0;
+    const betAmount   = afterData.betAmount || 0;
+    const winnerId    = afterData.winnerId;
+    const result      = afterData.result;
+    const abandonedBy = afterData.abandonedBy;
+
+    if (!hostId || !guestId || totalPot === 0) {
+      console.log(`❌ [${gameId}] Datos insuficientes (hostId:${hostId}, guestId:${guestId}, totalPot:${totalPot})\n`);
+      return null;
+    }
+
+    console.log(`\n🚀 [${gameId}] Procediendo | tipo: ${gameJustAbandoned ? 'ABANDONO' : 'VICTORIA'} | pot: ${totalPot} diamantes`);
 
     try {
       await db.runTransaction(async (transaction) => {
-        const gameRef = db.collection('multiplayer_games').doc(gameId);
-        const hostRef = db.collection('users').doc(hostId);
+        const gameRef  = db.collection('multiplayer_games').doc(gameId);
+        const hostRef  = db.collection('users').doc(hostId);
         const guestRef = db.collection('users').doc(guestId);
 
-        console.log(`📥 Obteniendo documentos de usuarios...`);
-        const hostDoc = await transaction.get(hostRef);
-        const guestDoc = await transaction.get(guestRef);
-        const gameDoc = await transaction.get(gameRef);
+        const [gameDoc] = await Promise.all([transaction.get(gameRef)]);
 
-        if (!hostDoc.exists || !guestDoc.exists) {
-          throw new Error('Usuarios no encontrados');
-        }
-        console.log(`✅ Documentos obtenidos correctamente`);
-
+        // Re-verificar idempotencia dentro de la transacción
         const currentGameData = gameDoc.data();
-        if (currentGameData && currentGameData.rewardsDistributed === true) {
-          console.log(`⚠️ [${gameId}] Ya distribuido en transacción\n`);
+        if (currentGameData?.rewardsDistributed === true) {
+          console.log(`⚠️ [${gameId}] Ya distribuido (transacción)\n`);
           return;
         }
 
-        const hostData = hostDoc.data();
-        const guestData = guestDoc.data();
+        // Usar calcDistribution — misma fórmula que distributeGameRewards y distributeLudoGameRewards
+        const quotaAmount = totalPot / 2; // = betAmount por jugador
+        const { winnerPrize, drawReturn, houseCommissionWin, houseCommissionDraw } =
+          calcDistribution(quotaAmount, true /* isBetMode = diamonds */);
 
-        // PASO 1: COBRAR CUOTAS SI NO SE HAN COBRADO
-        let quotasAlreadyCollected = currentGameData?.quotasCollected === true;
-        let hostCurrentDiamonds = hostData.diamonds || 0;
-        let guestCurrentDiamonds = guestData.diamonds || 0;
-
-        if (!quotasAlreadyCollected) {
-          console.log(`\n💰 ========== COBRANDO CUOTAS ==========`);
-          console.log(`📊 ANTES DE COBRAR:`);
-          console.log(`   Host ID: ${hostId}`);
-          console.log(`   Host diamonds: ${hostCurrentDiamonds}`);
-          console.log(`   Guest ID: ${guestId}`);
-          console.log(`   Guest diamonds: ${guestCurrentDiamonds}`);
-          console.log(`💵 CUOTA A COBRAR: ${betAmount} diamantes c/u`);
-
-          // Verificar que ambos tengan suficientes diamantes
-          if (hostCurrentDiamonds < betAmount) {
-            throw new Error(`Host no tiene suficientes diamantes: ${hostCurrentDiamonds} < ${betAmount}`);
-          }
-          if (guestCurrentDiamonds < betAmount) {
-            throw new Error(`Guest no tiene suficientes diamantes: ${guestCurrentDiamonds} < ${betAmount}`);
-          }
-
-          // Cobrar las cuotas
-          hostCurrentDiamonds -= betAmount;
-          guestCurrentDiamonds -= betAmount;
-
-          console.log(`📊 DESPUÉS DE COBRAR:`);
-          console.log(`   Host diamonds: ${hostCurrentDiamonds}`);
-          console.log(`   Guest diamonds: ${guestCurrentDiamonds}`);
-          console.log(`💰 Total pot: ${betAmount * 2} diamantes`);
-          console.log(`======================================\n`);
-
-          // Actualizar los balances después del cobro
-          transaction.update(hostRef, { diamonds: hostCurrentDiamonds });
-          transaction.update(guestRef, { diamonds: guestCurrentDiamonds });
-
-          // Marcar cuotas como cobradas
-          transaction.update(gameRef, {
-            quotasCollected: true,
-            quotasCollectedAt: admin.firestore.FieldValue.serverTimestamp(),
-            totalPot: betAmount * 2,
-          });
-
-          quotasAlreadyCollected = true;
-        } else {
-          console.log(`\n✅ Cuotas ya fueron cobradas previamente\n`);
-        }
-
-        // PASO 2: CALCULAR Y DISTRIBUIR RECOMPENSAS
-        // Comisión: 10% en modo apuesta con diamantes.
-        // Math.floor en winnerPrize garantiza que la casa siempre reciba al menos su 10%.
-        // houseCommission se calcula como el resto exacto (totalPot - lo que reciben los jugadores).
-        const totalPot = betAmount * 2;
-        const winnerPrize = betAmount + Math.floor(betAmount * 0.90); // ganador recibe su apuesta + 90% de la contraria
-        const drawReturn  = Math.floor(betAmount * 0.90);              // empate: cada uno recupera 90% de su apuesta
-
-        console.log(`\n💵 CÁLCULOS DE RECOMPENSAS (10% comisión):`);
-        console.log(`   totalPot: ${totalPot} diamantes`);
-        console.log(`   betAmount por jugador: ${betAmount} diamantes`);
-        console.log(`   winnerPrize: ${winnerPrize} diamantes`);
-        console.log(`   drawReturn: ${drawReturn} diamantes por jugador`);
-        console.log(`   houseCommission (win): ${totalPot - winnerPrize} diamantes`);
-        console.log(`   houseCommission (draw): ${totalPot - drawReturn * 2} diamantes`);
+        console.log(`\n💵 CÁLCULOS [APUESTA 10% comisión]:`);
+        console.log(`   pot: ${totalPot} | quotaAmount: ${quotaAmount}`);
+        console.log(`   winnerPrize: ${winnerPrize} | drawReturn: ${drawReturn}`);
+        console.log(`   houseWin: ${houseCommissionWin} | houseDraw: ${houseCommissionDraw}`);
 
         let hostReward = 0;
         let guestReward = 0;
+        let actualHouseCommission = 0;
         let distributionReason = '';
 
         if (gameJustAbandoned) {
           distributionReason = 'abandoned';
           if (abandonedBy === hostId) {
             guestReward = winnerPrize;
-            console.log(`🚪 Host abandonó → Guest gana ${guestReward} diamantes`);
+            console.log(`🚪 Host abandonó → Guest gana ${guestReward}`);
           } else if (abandonedBy === guestId) {
             hostReward = winnerPrize;
-            console.log(`🚪 Guest abandonó → Host gana ${hostReward} diamantes`);
+            console.log(`🚪 Guest abandonó → Host gana ${hostReward}`);
           }
-        } else {
-          if (result === 'draw') {
-            distributionReason = 'draw';
-            hostReward  = drawReturn;
-            guestReward = drawReturn;
-            console.log(`🤝 EMPATE → Cada uno recibe ${drawReturn} diamantes de regreso`);
-          } else if (winnerId === hostId) {
-            distributionReason = 'host_won';
-            hostReward = winnerPrize;
-            console.log(`✅ HOST GANÓ → Host recibe ${hostReward} diamantes`);
-          } else if (winnerId === guestId) {
-            distributionReason = 'guest_won';
-            guestReward = winnerPrize;
-            console.log(`✅ GUEST GANÓ → Guest recibe ${guestReward} diamantes`);
-          }
+          actualHouseCommission = totalPot - hostReward - guestReward;
+        } else if (result === 'draw') {
+          distributionReason = 'draw';
+          hostReward  = drawReturn;
+          guestReward = drawReturn;
+          actualHouseCommission = houseCommissionDraw;
+          console.log(`🤝 EMPATE → Cada uno recibe ${drawReturn} | Casa: ${houseCommissionDraw}`);
+        } else if (winnerId === hostId) {
+          distributionReason = 'host_won';
+          hostReward = winnerPrize;
+          actualHouseCommission = houseCommissionWin;
+          console.log(`✅ HOST GANÓ → ${winnerPrize} | Casa: ${houseCommissionWin}`);
+        } else if (winnerId === guestId) {
+          distributionReason = 'guest_won';
+          guestReward = winnerPrize;
+          actualHouseCommission = houseCommissionWin;
+          console.log(`✅ GUEST GANÓ → ${winnerPrize} | Casa: ${houseCommissionWin}`);
         }
-
-        const actualHouseCommission = totalPot - hostReward - guestReward;
 
         // Verificación matemática — nunca debe fallar
-        if (actualHouseCommission < 0) {
-          throw new Error(`MATH ERROR: houseCommission negativo (${actualHouseCommission}). totalPot=${totalPot}, host=${hostReward}, guest=${guestReward}`);
+        const totalDistributed = hostReward + guestReward + actualHouseCommission;
+        if (totalDistributed !== totalPot) {
+          throw new Error(`MATH ERROR: totalPot(${totalPot}) ≠ distributed(${totalDistributed})`);
         }
 
-        console.log(`\n💎 DISTRIBUCIÓN FINAL DE RECOMPENSAS:`);
-        console.log(`   Host reward: ${hostReward} diamantes`);
-        console.log(`   Guest reward: ${guestReward} diamantes`);
-        console.log(`   House commission: ${actualHouseCommission} diamantes (exacto)`);
+        const hostNetGain  = hostReward  - quotaAmount;
+        const guestNetGain = guestReward - quotaAmount;
 
-        // Aplicar las recompensas
-        const hostNewDiamonds  = hostCurrentDiamonds  + hostReward;
-        const guestNewDiamonds = guestCurrentDiamonds + guestReward;
-
-        console.log(`💎 BALANCES FINALES: Host ${hostCurrentDiamonds}+${hostReward}=${hostNewDiamonds} | Guest ${guestCurrentDiamonds}+${guestReward}=${guestNewDiamonds}`);
-
-        const hostNetGain  = hostReward  - betAmount;
-        const guestNetGain = guestReward - betAmount;
-
+        console.log(`\n💎 DISTRIBUCIÓN FINAL: Host+${hostReward} | Guest+${guestReward} | Casa+${actualHouseCommission}`);
         console.log(`📈 NETO: Host ${hostNetGain >= 0 ? '+' : ''}${hostNetGain} | Guest ${guestNetGain >= 0 ? '+' : ''}${guestNetGain}`);
 
-        transaction.update(hostRef, {
-          diamonds:       hostNewDiamonds,
-          diamondsEarned: (hostData.diamondsEarned  || 0) + Math.max(0, hostNetGain),
-        });
-        transaction.update(guestRef, {
-          diamonds:       guestNewDiamonds,
-          diamondsEarned: (guestData.diamondsEarned || 0) + Math.max(0, guestNetGain),
-        });
+        // FieldValue.increment — atómico, no requiere leer el balance actual
+        if (hostReward > 0) {
+          transaction.update(hostRef, {
+            diamonds:       admin.firestore.FieldValue.increment(hostReward),
+            diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, hostNetGain)),
+          });
+        }
+        if (guestReward > 0) {
+          transaction.update(guestRef, {
+            diamonds:       admin.firestore.FieldValue.increment(guestReward),
+            diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, guestNetGain)),
+          });
+        }
 
         transaction.update(gameRef, {
           rewardsDistributed: true,
           rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
           distribution: {
-            hostReward,
-            guestReward,
+            hostReward, guestReward,
             houseCommission: actualHouseCommission,
-            totalPot,
-            betAmount,
+            totalPot, betAmount: quotaAmount,
             currencyType: 'diamonds',
+            isBetMode: true,
             commissionRate: 0.10,
             reason: distributionReason,
             abandonedBy: abandonedBy || null,
-            hostNetGain,
-            guestNetGain,
+            hostNetGain, guestNetGain,
           },
         });
 
-        console.log(`✅ [${gameId}] Online bet transacción completada | bet:${betAmount} | winner:${winnerPrize} | casa:${actualHouseCommission}\n`);
+        console.log(`✅ [${gameId}] Transacción completada\n`);
       });
 
       return null;
     } catch (error) {
-      console.error(`\n❌ ========== ERROR ==========`);
-      console.error(`Game ID: ${gameId}`);
-      console.error(`Error:`, error);
-      console.error(`==============================\n`);
+      console.error(`❌ [${gameId}] ERROR en distributeOnlineBetGameRewards:`, error);
       throw error;
     }
   }
@@ -770,80 +685,59 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
         const hostRef  = db.collection('users').doc(hostId);
         const guestRef = db.collection('users').doc(guestId);
 
-        const [hostDoc, guestDoc, gameDoc] = await Promise.all([
-          transaction.get(hostRef),
-          transaction.get(guestRef),
-          transaction.get(gameRef),
-        ]);
-
-        if (!hostDoc.exists || !guestDoc.exists) throw new Error('Usuarios no encontrados');
-
+        const gameDoc = await transaction.get(gameRef);
         const currentGameData = gameDoc.data();
         if (currentGameData && currentGameData.rewardsDistributed === true) {
           console.log(`⚠️ [Ludo ${gameId}] Ya distribuido en transacción\n`);
           return;
         }
 
-        const hostData  = hostDoc.data();
-        const guestData = guestDoc.data();
-
-        // Las cuotas deben haberse cobrado en el cliente al unirse el guest
-        // (igual que en chess). Si no están cobradas, salir.
+        // Las cuotas deben haberse cobrado en el cliente al unirse el guest.
         if (currentGameData?.quotasCollected !== true) {
           console.log(`⚠️ [Ludo ${gameId}] Cuotas no cobradas (SALIENDO)\n`);
           return;
         }
 
         const isCoins = currencyType === 'coins';
-        // Los balances ya fueron deducidos cuando se cobró la cuota; aquí solo distribuimos premios.
-        const hostBalance  = isCoins ? (hostData.coins  || 0) : (hostData.diamonds  || 0);
-        const guestBalance = isCoins ? (guestData.coins || 0) : (guestData.diamonds || 0);
 
-        // Apuesta (diamantes): casa cobra 10% del pot → ganador recibe 90% del pot.
-        // Diversión (monedas) : casa cobra 30% del pot → ganador recibe 70% del pot.
-        const isBetDiamonds = !isCoins && betAmount > 0;
-        const pot         = betAmount * 2;
-        const winnerPrize = isBetDiamonds
-          ? Math.floor(pot * 0.90) // apuesta: ganador recibe 90% del pot
-          : Math.floor(pot * 0.70); // diversión: ganador recibe 70% del pot
-        // La comisión es el resto exacto del pot para garantizar math exacta.
-        const houseCommissionWin = (betAmount * 2) - winnerPrize;
+        // Usar calcDistribution — misma fórmula que distributeGameRewards y distributeOnlineBetGameRewards
+        const isBetMode = !isCoins && betAmount > 0;
+        const totalPot  = betAmount * 2;
+        const { winnerPrize, houseCommissionWin } = calcDistribution(betAmount, isBetMode);
 
         let hostReward  = 0;
         let guestReward = 0;
+        let actualHouseCommission = 0;
         let distributionReason = '';
 
         if (gameJustAbandoned) {
           distributionReason = 'abandoned';
           if (abandonedBy === hostId)       { guestReward = winnerPrize; console.log(`   ❌ Host abandonó → Guest gana ${guestReward}`); }
           else if (abandonedBy === guestId) { hostReward  = winnerPrize; console.log(`   ❌ Guest abandonó → Host gana ${hostReward}`); }
+          actualHouseCommission = totalPot - hostReward - guestReward;
         } else {
-          if (winnerId === hostId)       { distributionReason = 'host_won';  hostReward  = winnerPrize; console.log(`   ✅ Host ganó → ${hostReward}`); }
-          else if (winnerId === guestId) { distributionReason = 'guest_won'; guestReward = winnerPrize; console.log(`   ✅ Guest ganó → ${guestReward}`); }
+          if (winnerId === hostId)       { distributionReason = 'host_won';  hostReward  = winnerPrize; actualHouseCommission = houseCommissionWin; console.log(`   ✅ Host ganó → ${hostReward} | Casa: ${houseCommissionWin}`); }
+          else if (winnerId === guestId) { distributionReason = 'guest_won'; guestReward = winnerPrize; actualHouseCommission = houseCommissionWin; console.log(`   ✅ Guest ganó → ${guestReward} | Casa: ${houseCommissionWin}`); }
         }
 
-        const actualHouseCommission = (betAmount * 2) - hostReward - guestReward;
-
-        // Verificación matemática
-        if (actualHouseCommission < 0) {
-          throw new Error(`[Ludo] MATH ERROR: houseCommission negativo (${actualHouseCommission})`);
+        // Verificación matemática estricta — nunca debe fallar
+        const totalDistributed = hostReward + guestReward + actualHouseCommission;
+        if (totalDistributed !== totalPot) {
+          throw new Error(`[Ludo] MATH ERROR: totalPot(${totalPot}) ≠ distributed(${totalDistributed})`);
         }
 
-        const hostNewBalance  = hostBalance  + hostReward;
-        const guestNewBalance = guestBalance + guestReward;
         const hostNetGain  = hostReward  - betAmount;
         const guestNetGain = guestReward - betAmount;
 
-        console.log(`💵 [Ludo] bet:${betAmount} | winner:${winnerPrize} | casa:${actualHouseCommission} | comisión:${isBetDiamonds ? '10%' : '30%'}`);
-        console.log(`   Host:  ${hostBalance}+${hostReward}=${hostNewBalance} (net:${hostNetGain})`);
-        console.log(`   Guest: ${guestBalance}+${guestReward}=${guestNewBalance} (net:${guestNetGain})`);
+        console.log(`💵 [Ludo] bet:${betAmount} | winner:${winnerPrize} | casa:${actualHouseCommission} | comisión:${isBetMode ? '10%' : '30%'}`);
+        console.log(`   Host net: ${hostNetGain >= 0 ? '+' : ''}${hostNetGain} | Guest net: ${guestNetGain >= 0 ? '+' : ''}${guestNetGain}`);
 
         if (isCoins) {
-          transaction.update(hostRef,  { coins: hostNewBalance });
-          transaction.update(guestRef, { coins: guestNewBalance });
+          if (hostReward > 0)  transaction.update(hostRef,  { coins: admin.firestore.FieldValue.increment(hostReward) });
+          if (guestReward > 0) transaction.update(guestRef, { coins: admin.firestore.FieldValue.increment(guestReward) });
         } else {
-          transaction.update(hostRef,  { diamonds: hostNewBalance,  diamondsEarned: (hostData.diamondsEarned  || 0) + Math.max(0, hostNetGain) });
-          transaction.update(guestRef, { diamonds: guestNewBalance, diamondsEarned: (guestData.diamondsEarned || 0) + Math.max(0, guestNetGain) });
+          if (hostReward > 0)  transaction.update(hostRef,  { diamonds: admin.firestore.FieldValue.increment(hostReward),  diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, hostNetGain)) });
+          if (guestReward > 0) transaction.update(guestRef, { diamonds: admin.firestore.FieldValue.increment(guestReward), diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, guestNetGain)) });
         }
         transaction.update(gameRef, {
           rewardsDistributed: true,
@@ -851,8 +745,9 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
           distribution: {
             hostReward, guestReward,
             houseCommission: actualHouseCommission,
-            totalPot: betAmount * 2, betAmount, currencyType,
-            commissionRate: isBetDiamonds ? 0.10 : 0.30,
+            totalPot, betAmount, currencyType,
+            isBetMode,
+            commissionRate: isBetMode ? 0.10 : 0.30,
             reason: distributionReason,
             abandonedBy: abandonedBy || null,
             hostNetGain, guestNetGain,
