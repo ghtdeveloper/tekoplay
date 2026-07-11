@@ -53,6 +53,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   int _playerTimeSeconds = 60;
   bool _hasPlayerMovedOnce = false;
   bool _gameStarted = false;
+  DateTime? _pausedAt;
 
   int? _userCoins;
   int? _userDiamonds;
@@ -390,10 +391,33 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   void _handleAppPause() {
     _reconnectTimer?.cancel();
+    if (!_gameEnded && _isMyTurn && _gameStarted) {
+      _pausedAt = DateTime.now();
+      _playerTimer?.cancel();
+      _initialMoveTimer?.cancel();
+    }
   }
 
   void _handleAppResume() {
     _checkConnectionAndSync();
+    if (_pausedAt != null && !_gameEnded && _isMyTurn) {
+      final elapsed = DateTime.now().difference(_pausedAt!).inSeconds;
+      _pausedAt = null;
+      if (!_hasPlayerMovedOnce) {
+        // Reiniciar timer inicial dando tiempo fresco al jugador
+        _startInitialMoveTimer();
+      } else {
+        final remaining = (_playerTimeSeconds - elapsed).clamp(0, 60);
+        if (remaining > 0) {
+          setState(() => _playerTimeSeconds = remaining);
+          _startPlayerTimer();
+        } else {
+          _timeOut(isInitialTimeout: false);
+        }
+      }
+    } else {
+      _pausedAt = null;
+    }
   }
 
   void _checkConnectionAndSync() {

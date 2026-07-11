@@ -76,7 +76,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   bool get _isMyTurn  => _currentPlayer == _myColor;
   bool get _isBotTurn => _isPlayingAgainstBot && !_isMyTurn;
   String get _currentBotName  => _botNames[_currentPlayer]  ?? _opponentName;
-  String get _currentBotEmoji => _botEmojis[_currentPlayer] ?? _opponentEmoji;
 
   int _dice1Value = 0;
   int _dice2Value = 0;
@@ -101,12 +100,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   bool _isBotThinking = false;
   bool _botExecuting = false;
   Timer? _botSafetyTimer;
-  final Map<String, bool> _botMissedFive = {};
+  final Map<String, int> _botMissedFive = {};
+  int _humanHomeDoubles = 0;
+  final Map<String, int> _botHomeDoubles = {};
   Timer? _awayTimer;
 
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
-  static const int _turnTimeoutSeconds = 30;
+  static const int _turnTimeoutSeconds = 20;
+  DateTime? _turnStartedAt;
 
   String _toastMessage = '';
   bool _showToast = false;
@@ -196,12 +198,27 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      if (_isScreenKeepOnActive) _enableWakeLock();
+      if (!_gameEnded && _screenState == _LudoOnlineState.gameActive) _enableWakeLock();
       _awayTimer?.cancel();
       _awayTimer = null;
+      if (_turnStartedAt != null && !_gameEnded && _isMyTurn) {
+        final elapsed = DateTime.now().difference(_turnStartedAt!).inSeconds;
+        final remaining = (_turnTimeoutSeconds - elapsed).clamp(0, _turnTimeoutSeconds);
+        _turnTimer?.cancel();
+        if (remaining > 0) {
+          _startTurnTimer(remaining);
+        } else {
+          _autoAction();
+        }
+      } else if (!_gameEnded && _isBotTurn && !_botExecuting) {
+        _scheduleBotMove();
+      }
     }
     if (state == AppLifecycleState.paused) {
       _disableWakeLock();
+      if (_isMyTurn && !_gameEnded) {
+        _turnTimer?.cancel();
+      }
       if (!_gameEnded && _screenState == _LudoOnlineState.gameActive) {
         _awayTimer?.cancel();
         _awayTimer = Timer(const Duration(minutes: 2), () {
@@ -219,10 +236,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   Future<void> _enableWakeLock() async {
     try {
-      if (!await WakelockPlus.enabled) {
-        await WakelockPlus.enable();
-        if (mounted) setState(() => _isScreenKeepOnActive = true);
-      }
+      await WakelockPlus.enable();
+      if (mounted) setState(() => _isScreenKeepOnActive = true);
     } catch (_) {}
   }
 
@@ -287,16 +302,16 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     });
     _enableWakeLock();
 
-    _matchmakingTimer = Timer.periodic(const Duration(seconds: 2), (t) {
+    _matchmakingTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
-      setState(() => _matchmakingSeconds += 2);
+      setState(() => _matchmakingSeconds++);
 
       if (_screenState == _LudoOnlineState.gameActive || _navigated) {
         t.cancel();
         return;
       }
 
-      const int maxWait = 30;
+      const int maxWait = 60;
       if (_matchmakingSeconds >= maxWait &&
           !_isPlayingAgainstBot &&
           (_screenState == _LudoOnlineState.matchmaking ||
@@ -308,6 +323,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       }
 
       if (!_isPlayingAgainstBot &&
+          _matchmakingSeconds % 3 == 0 &&
           (_screenState == _LudoOnlineState.matchmaking ||
            _screenState == _LudoOnlineState.waitingRoom)) {
         _tryJoinExistingGame();
@@ -319,6 +335,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   Future<void> _tryJoinExistingGame() async {
     if (_isPlayingAgainstBot || _navigated || _isJoiningGame) return;
+    if (_myPlayerNumber != null && _myPlayerNumber! > 1) return;
     final isSearching = _screenState == _LudoOnlineState.matchmaking ||
         _screenState == _LudoOnlineState.waitingRoom;
     if (!isSearching) return;
@@ -426,7 +443,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (!success || !mounted) { await _createNewGame(); return; }
       _activeGameId = game.id;
       _myPlayerNumber = game.playerCount + 1;
-      _matchmakingTimer?.cancel();
       setState(() => _screenState = _LudoOnlineState.waitingRoom);
       _listenToRoomGame(game.id);
       _startKeepAlive(game.id);
@@ -458,6 +474,13 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             );
           }
         });
+      } else if (game.status == 'cancelled' && !_navigated) {
+        // The host cancelled the waiting room (e.g. their timeout fired).
+        // Fall back to a local bot game so the guest isn't left stranded.
+        _gameSubscription?.cancel();
+        _keepAliveTimer?.cancel();
+        _activeGameId = null;
+        _startBotGame();
       }
     });
   }
@@ -476,6 +499,16 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   void _onMatchmakingTimeout() {
     if (!mounted || _navigated || _isPlayingAgainstBot) return;
+    if (_myPlayerNumber == 1 && _activeGameId != null) {
+      final playerCount = _currentRoomGame?.playerCount ?? 1;
+      if (playerCount >= 2) {
+        _gameService.fillBotsAndStart(_activeGameId!);
+        return;
+      }
+    }
+    if (_myPlayerNumber != null && _myPlayerNumber! > 1 && _activeGameId != null) {
+      return;
+    }
     _startBotGame();
   }
 
@@ -526,7 +559,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final isBetMode = _isBetMode;
     _botIsWeak = isBetMode && await BotNameService.shouldBotPlayWeak();
 
-    const allColors = ['yellow', 'red', 'blue', 'green'];
+    const allColors = ['yellow', 'green', 'red', 'blue']; // CCW: Yellow→Green→Red→Blue
     _myColor = 'yellow';
     final botCount = (_selectedPlayerCount) - 1;
     _botColors = allColors.skip(1).take(botCount).toList();
@@ -541,6 +574,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _botEmojis[bc] = profile['emoji']!;
     }
     _botMissedFive.clear();
+    _humanHomeDoubles = 0;
+    _botHomeDoubles.clear();
 
     _opponentName  = _botNames[_botColors.first] ?? 'Bot';
     _opponentEmoji = _botEmojis[_botColors.first] ?? '🤖';
@@ -586,9 +621,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     );
   }
 
-  void _startTurnTimer() {
+  void _startTurnTimer([int? initialSeconds]) {
     _turnTimer?.cancel();
-    setState(() => _turnTimerSeconds = _turnTimeoutSeconds);
+    final secs = initialSeconds ?? _turnTimeoutSeconds;
+    _turnStartedAt = DateTime.now().subtract(Duration(seconds: _turnTimeoutSeconds - secs));
+    setState(() => _turnTimerSeconds = secs);
     _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted || _gameEnded || !_isMyTurn) { t.cancel(); return; }
       setState(() => _turnTimerSeconds--);
@@ -630,14 +667,47 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (!_isMyTurn || _gameEnded || _isRollingDice || _bonusSelectionActive) return;
     if (_dice1Value != 0 || _dice2Value != 0) return;
 
-    setState(() => _isRollingDice = true);
-    _diceAnimController.repeat();
-    await Future.delayed(const Duration(milliseconds: 600));
-    _diceAnimController.stop();
-    _diceAnimController.reset();
+    final myPieces = _gameState.getPiecesByColor(_myColor);
+    final allInHome = myPieces.every((p) => p.isHome);
+    int d1 = 0, d2 = 0;
 
-    final d1 = _random.nextInt(6) + 1;
-    final d2 = _random.nextInt(6) + 1;
+    do {
+      setState(() => _isRollingDice = true);
+      _diceAnimController.repeat();
+      await Future.delayed(const Duration(milliseconds: 600));
+      _diceAnimController.stop();
+      _diceAnimController.reset();
+
+      d1 = _random.nextInt(6) + 1;
+      d2 = _random.nextInt(6) + 1;
+
+      final hasHomePieces = myPieces.any((p) => p.isHome);
+      final humanMissed = _botMissedFive[_myColor] ?? 0;
+      if (humanMissed >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
+        if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+      }
+      _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
+
+      if (allInHome && d1 == d2 && d1 != 5) {
+        _humanHomeDoubles++;
+        setState(() { _dice1Value = d1; _dice2Value = d2; _isRollingDice = false; });
+        if (_humanHomeDoubles >= 3) {
+          _humanHomeDoubles = 0;
+          _consecutiveDoubles = 0;
+          _showEventToast('¡Tres dobles en casa! Turno perdido.');
+          await Future.delayed(const Duration(milliseconds: 1500));
+          setState(() { _dice1Value = 0; _dice2Value = 0; });
+          _nextTurn();
+          return;
+        }
+        _showEventToast('¡Doble en casa! Vuelves a tirar.');
+        await Future.delayed(const Duration(milliseconds: 1200));
+        setState(() { _dice1Value = 0; _dice2Value = 0; });
+        continue;
+      }
+      _humanHomeDoubles = 0;
+      break;
+    } while (true);
 
     if (d1 == d2) {
       _consecutiveDoubles++;
@@ -773,10 +843,17 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     bool captured = false;
     if (newPos < 52 && !_isSafeForColor(newPos, color)) {
+      final isBarrierBreak = piece.isHome && newPos == _getStartPosition(color);
       for (final ec in _activePlayers) {
         if (ec == color) continue;
-        for (final ep in _gameState.getPiecesByColor(ec)) {
-          if (!ep.isHome && !ep.isFinished && ep.position == newPos) {
+        final enemyPiecesHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
+            .toList();
+        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+          enemyPiecesHere.last.position = -1;
+          captured = true;
+        } else {
+          for (final ep in enemyPiecesHere) {
             ep.position = -1; captured = true;
           }
         }
@@ -794,7 +871,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     setState(() {});
 
     if (_checkVictory(color)) {
-      Future.delayed(const Duration(milliseconds: 400), () => _endGame(color));
+      _clearBotExecution();
+      _endGame(color);
       return;
     }
 
@@ -815,7 +893,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (color == _myColor) {
         _startTurnTimer();
       } else {
-        Future.delayed(Duration(milliseconds: 400 + _random.nextInt(400)), _executeBotBestMove);
+        Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)), _executeBotBestMove);
       }
       return;
     }
@@ -907,7 +985,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     setState(() {});
 
     if (_checkVictory(color)) {
-      Future.delayed(const Duration(milliseconds: 300), () => _endGame(color));
+      _clearBotExecution();
+      _endGame(color);
       return;
     }
 
@@ -936,6 +1015,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (_gameEnded || !mounted) return;
     final idx = _activePlayers.indexOf(_currentPlayer);
     final next = _activePlayers[(idx + 1) % _activePlayers.length];
+    _humanHomeDoubles = 0;
     setState(() => _currentPlayer = next);
 
     if (next == _myColor) {
@@ -946,7 +1026,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         'Turno de ${_botNames[next] ?? _opponentName}',
         _getPlayerColor(next),
       );
-      Future.delayed(const Duration(milliseconds: 800), _scheduleBotMove);
+      Future.delayed(const Duration(milliseconds: 2800), _scheduleBotMove);
     }
   }
 
@@ -1064,7 +1144,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _botExecuting = true;
     setState(() => _isBotThinking = true);
     _botSafetyTimer?.cancel();
-    _botSafetyTimer = Timer(const Duration(seconds: 6), () {
+    _botSafetyTimer = Timer(const Duration(seconds: 25), () {
       if (!mounted || _gameEnded) return;
       _botExecuting = false;
       _dice1Value = 0;
@@ -1075,7 +1155,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       setState(() => _isBotThinking = false);
       if (_isBotTurn) _nextTurn();
     });
-    final thinkTime = 600 + _random.nextInt(800);
+    final thinkTime = 2600 + _random.nextInt(800);
     Future.delayed(Duration(milliseconds: thinkTime), () {
       if (mounted) setState(() => _isBotThinking = false);
       _executeBotTurn();
@@ -1113,21 +1193,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     int bestD1 = 1, bestD2 = 1;
     for (int d1 = 1; d1 <= 6; d1++) {
       for (int d2 = 1; d2 <= 6; d2++) {
+        if (_consecutiveDoubles >= 2 && d1 == d2) continue;
         final score = _scoreDicePair(d1, d2);
         if (score > bestScore) { bestScore = score; bestD1 = d1; bestD2 = d2; }
       }
-    }
-    if (_random.nextInt(5) == 0) {
-      final candidates = <(int, int, int)>[];
-      for (int d1 = 1; d1 <= 6; d1++) {
-        for (int d2 = 1; d2 <= 6; d2++) {
-          candidates.add((d1, d2, _scoreDicePair(d1, d2)));
-        }
-      }
-      candidates.sort((a, b) => b.$3.compareTo(a.$3));
-      final top = candidates.take(3).toList();
-      final pick = top[_random.nextInt(top.length)];
-      return (pick.$1, pick.$2);
     }
     return (bestD1, bestD2);
   }
@@ -1186,10 +1255,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         }
       }
     }
-    if (np == 57) s += 900;
-    else if (np >= 52 && piece.position < 52) s += 450;
-    else if (np >= 52) s += np * 20;
-    if (piece.isHome) s += 300;
+    if (np == 57) {
+      s += 900;
+    } else if (np >= 52 && piece.position < 52) {s += 450;}
+    else if (np >= 52) {s += np * 20;}
+    if (piece.isHome) s += 600;
     if (!piece.isHome && piece.position < 52) {
       s += _stepsFromStart(piece.position, _getStartPosition(bc)) * 6;
     }
@@ -1207,15 +1277,41 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (_gameEnded || !mounted || _isMyTurn) { _clearBotExecution(); return; }
     final bc = _currentPlayer;
 
-    var (d1, d2) = _chooseBotDice();
-
     final botPieces = _gameState.getPiecesByColor(bc);
-    final hasHomePieces = botPieces.any((p) => p.isHome);
-    final missedFive = _botMissedFive[bc] ?? false;
-    if (missedFive && hasHomePieces && d1 != 5 && d2 != 5) {
-      if (_random.nextBool()) d1 = 5; else d2 = 5;
-    }
-    _botMissedFive[bc] = hasHomePieces && d1 != 5 && d2 != 5;
+    final allInHome = botPieces.every((p) => p.isHome);
+    int d1 = 0, d2 = 0;
+
+    do {
+      (d1, d2) = _chooseBotDice();
+
+      final hasHomePieces = botPieces.any((p) => p.isHome);
+      final missedCount = _botMissedFive[bc] ?? 0;
+      if (missedCount >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
+        if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+      }
+      _botMissedFive[bc] = (hasHomePieces && d1 != 5 && d2 != 5) ? missedCount + 1 : 0;
+
+      if (allInHome && d1 == d2 && d1 != 5) {
+        _botHomeDoubles[bc] = (_botHomeDoubles[bc] ?? 0) + 1;
+        setState(() { _dice1Value = d1; _dice2Value = d2; });
+        if ((_botHomeDoubles[bc] ?? 0) >= 3) {
+          _botHomeDoubles[bc] = 0;
+          _consecutiveDoubles = 0;
+          _showEventToast('$_currentBotName: tres dobles en casa, pierde turno');
+          await Future.delayed(const Duration(milliseconds: 1500));
+          setState(() { _dice1Value = 0; _dice2Value = 0; });
+          _clearBotExecution();
+          _nextTurn();
+          return;
+        }
+        _showEventToast('$_currentBotName: doble en casa, vuelve a tirar');
+        await Future.delayed(const Duration(milliseconds: 1200));
+        setState(() { _dice1Value = 0; _dice2Value = 0; });
+        continue;
+      }
+      _botHomeDoubles[bc] = 0;
+      break;
+    } while (true);
 
     if (d1 == d2) {
       _consecutiveDoubles++;
@@ -1239,7 +1335,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _hasUsedDice1 = false; _hasUsedDice2 = false;
     });
 
-    await Future.delayed(Duration(milliseconds: 400 + _random.nextInt(400)));
+    await Future.delayed(Duration(milliseconds: 4200 + _random.nextInt(800)));
 
     _calculateMovablePieces();
 
@@ -1284,7 +1380,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
       int score = _scoreSingleAction(piece, np);
 
-      if (np < 52 && !_isSafeForColor(np, bc)) {
+      if (np < 52 && !_isSafeForColor(np, bc) && !piece.isHome) {
         int threatCount = 0;
         for (final ec in _activePlayers) {
           if (ec == bc) continue;
@@ -1302,7 +1398,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (better) { bestScore = score; bestMove = move; }
     }
     bestMove ??= _movablePieces.first;
-    await Future.delayed(Duration(milliseconds: 300 + _random.nextInt(300)));
+    await Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)));
 
     if (mounted && !_gameEnded) {
       _executePieceMove(
@@ -1391,16 +1487,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         .where((p) => p != moving && !p.isHome && !p.isFinished && p.position == newPos)
         .length;
     if (myCount >= 2) return false;
-    if (_isEnemyBarrierAt(newPos, color)) return false;
-    for (final oc in _activePlayers) {
-      if (oc == color) continue;
-      final ownerStart = _getStartPosition(oc);
-      if (newPos == ownerStart) {
-        final ownerCount = _gameState.getPiecesByColor(oc)
-            .where((p) => !p.isHome && !p.isFinished && p.position == ownerStart).length;
-        if (ownerCount > 0) return false;
-      }
+    // Regla especial: salida de casa con barrera enemiga en tu casilla de salida → permitido (rompe barrera)
+    if (moving.isHome && newPos == _getStartPosition(color) && _isEnemyBarrierAt(newPos, color)) {
+      return true;
     }
+    if (_isEnemyBarrierAt(newPos, color)) return false;
     return true;
   }
 
@@ -1506,7 +1597,13 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     if (isWin && _currentUser != null) {
       final betAmount = isBet ? (_selectedBetAmount ?? 25) : 100;
-      final prize = (betAmount * 2 * 0.9).floor();
+      final hasBots = _botColors.isNotEmpty;
+      final int playerCount = _activePlayers.length;
+      final int prize = hasBots
+          ? (isBet ? (betAmount + (betAmount * 0.7).ceil()) : (betAmount * 2))
+          : (isBet
+              ? (betAmount * playerCount * 0.9).floor()
+              : (betAmount * playerCount * 0.7).floor());
       if (isBet) {
         _firestoreService.incrementUserDiamonds(_currentUser!.uid, prize);
         if (mounted) setState(() => _userDiamonds = (_userDiamonds ?? 0) + prize);
@@ -1543,7 +1640,14 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final isWin = message.contains('GANASTE');
     final isBet = _isBetMode;
     final betAmt = isBet ? (_selectedBetAmount ?? 25) : 100;
-    final netGain = (betAmt * 2 * 0.9).floor() - betAmt;
+    final hasBots = _botColors.isNotEmpty;
+    final int playerCount = _activePlayers.length;
+    final int totalPrize = hasBots
+        ? (isBet ? (betAmt + (betAmt * 0.7).ceil()) : (betAmt * 2))
+        : (isBet
+            ? (betAmt * playerCount * 0.9).floor()
+            : (betAmt * playerCount * 0.7).floor());
+    final netGain = totalPrize - betAmt;
     showDialog(
       context: context, barrierDismissible: false,
       builder: (ctx) => Dialog(
@@ -1670,6 +1774,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _gameEnded = false;
       _gameStartTime = DateTime.now();
       _botMissedFive.clear();
+      _humanHomeDoubles = 0;
+      _botHomeDoubles.clear();
     });
     _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
     _startTurnTimer();
@@ -2397,13 +2503,24 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             const Text('Buscando partida...',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('$_matchmakingSeconds s · $_selectedPlayerCount jugadores',
-                style: const TextStyle(fontSize: 14, color: Colors.grey)),
+            Text(
+              '${(60 - _matchmakingSeconds).clamp(0, 60)}"',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: _matchmakingSeconds >= 50 ? Colors.red : const Color(0xFFEC7A34),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text('$_selectedPlayerCount jugadores · buscando...',
+                style: const TextStyle(fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 12),
             Text(
-              _matchmakingSeconds < 6
+              _matchmakingSeconds < 10
                   ? 'Conectando con otros jugadores...'
-                  : '¡Ya casi! Ampliando búsqueda...',
+                  : _matchmakingSeconds < 50
+                      ? '¡Ya casi! Ampliando búsqueda...'
+                      : 'Completando con bots...',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 40),
@@ -2467,6 +2584,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                     const SizedBox(height: 6),
                     Text('Esperando $remaining ${remaining == 1 ? 'jugador más' : 'jugadores más'}...',
                         style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Iniciando en ${(60 - _matchmakingSeconds).clamp(0, 60)}"',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: _matchmakingSeconds >= 50 ? FontWeight.bold : FontWeight.normal,
+                        color: _matchmakingSeconds >= 50 ? Colors.orange.shade700 : Colors.grey,
+                      ),
+                    ),
                   ] else ...[
                     const Icon(Icons.check_circle, color: Colors.green, size: 28),
                     const Text('¡Todos listos! Iniciando...',

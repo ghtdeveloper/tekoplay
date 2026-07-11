@@ -40,26 +40,36 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   bool _canRollDice = true;
   bool _gameEnded = false;
   final Random _random = Random();
+  final Map<String, int> _missedFive = {};
+  int _humanHomeDoubles = 0;
+  int _cpuHomeDoubles = 0;
 
   bool get _isUltra => widget.difficulty.toLowerCase().contains('ultra');
 
   int _rollCpuDice() {
     final r = _random.nextDouble();
     if (_isUltra) {
-      if (r < 0.02) return 1;
-      if (r < 0.05) return 2;
-      if (r < 0.10) return 3;
-      if (r < 0.18) return 4;
-      if (r < 0.50) return 5;
+      if (r < 0.01) return 1;
+      if (r < 0.03) return 2;
+      if (r < 0.06) return 3;
+      if (r < 0.12) return 4;
+      if (r < 0.52) return 5;
       return 6;
     }
-    if (r < 0.05) return 1;
-    if (r < 0.13) return 2;
-    if (r < 0.25) return 3;
-    if (r < 0.40) return 4;
-    if (r < 0.68) return 5;
+    if (r < 0.02) return 1;
+    if (r < 0.05) return 2;
+    if (r < 0.10) return 3;
+    if (r < 0.18) return 4;
+    if (r < 0.55) return 5;
     return 6;
   }
+
+  int _rollCpuDiceNoDouble(int exclude) {
+    int v;
+    do { v = _rollCpuDice(); } while (v == exclude);
+    return v;
+  }
+
   DateTime? _gameStartTime;
   double _boardSize = 0;
 
@@ -84,6 +94,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
   Timer? _afkRollTimer;
   static const int _afkRollTimeoutSeconds = 15;
+  DateTime? _pausedAt;
+  int _savedMoveTimerSeconds = 0;
 
   late AnimationController _diceAnimationController;
   late Animation<double> _diceRotation;
@@ -210,14 +222,26 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _enableWakeLock();
+      if (_pausedAt != null && !_gameEnded && _currentPlayer == 'yellow') {
+        final elapsed = DateTime.now().difference(_pausedAt!).inSeconds;
+        _pausedAt = null;
+        if (_savedMoveTimerSeconds > 0) {
+          final remaining = (_savedMoveTimerSeconds - elapsed).clamp(0, _moveTimeoutSeconds);
+          if (remaining > 0) {
+            _startMoveTimer(remaining);
+          } else {
+            _autoMove();
+          }
+        }
+      } else {
+        _pausedAt = null;
+      }
     } else if (state == AppLifecycleState.paused) {
       _disableWakeLock();
-    }
-    if (state == AppLifecycleState.paused &&
-        widget.matchType == 'Apuesta' &&
-        !_gameEnded &&
-        mounted) {
-      _handleBetModeBackground();
+      _savedMoveTimerSeconds = _moveTimerSeconds;
+      _pausedAt = DateTime.now();
+      _moveTimer?.cancel();
+      _afkRollTimer?.cancel();
     }
   }
 
@@ -232,16 +256,52 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     }
   }
 
-  void _autoRollAndMove() {
+  Future<void> _autoRollAndMove() async {
     if (_gameEnded || _currentPlayer != 'yellow') return;
+    final autoPieces = _gameState.getPiecesByColor(_currentPlayer);
+    final allInHome = autoPieces.every((p) => p.isHome);
+    int d1auto = 0, d2auto = 0;
+
+    do {
+      d1auto = _random.nextInt(6) + 1;
+      d2auto = _random.nextInt(6) + 1;
+      final autoHasHome = autoPieces.any((p) => p.isHome);
+      final autoMissed = _missedFive[_currentPlayer] ?? 0;
+      if (autoMissed >= 3 && autoHasHome && d1auto != 5 && d2auto != 5) {
+        if (_random.nextBool()) { d1auto = 5; } else { d2auto = 5; }
+      }
+      _missedFive[_currentPlayer] = (autoHasHome && d1auto != 5 && d2auto != 5) ? autoMissed + 1 : 0;
+
+      if (allInHome && d1auto == d2auto && d1auto != 5) {
+        _humanHomeDoubles++;
+        setState(() {
+          _dice1Value = d1auto; _dice2Value = d2auto;
+          _totalDiceValue = d1auto + d2auto;
+          _canRollDice = false; _hasUsedDice1 = false; _hasUsedDice2 = false;
+        });
+        if (_humanHomeDoubles >= 3) {
+          _humanHomeDoubles = 0;
+          _consecutiveDoubles = 0;
+          _showEventToast('¡Tres dobles en casa! Turno perdido.');
+          await Future.delayed(const Duration(milliseconds: 1500));
+          setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
+          _nextTurn();
+          return;
+        }
+        _showEventToast('¡Doble en casa! Vuelves a tirar.');
+        await Future.delayed(const Duration(milliseconds: 1000));
+        setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
+        continue;
+      }
+      _humanHomeDoubles = 0;
+      break;
+    } while (true);
+
     setState(() {
-      _dice1Value = _random.nextInt(6) + 1;
-      _dice2Value = _random.nextInt(6) + 1;
-      _totalDiceValue = _dice1Value + _dice2Value;
-      _canRollDice = false;
-      _hasUsedDice1 = false;
-      _hasUsedDice2 = false;
-      _updateConsecutiveDoubles(_dice1Value, _dice2Value);
+      _dice1Value = d1auto; _dice2Value = d2auto;
+      _totalDiceValue = d1auto + d2auto;
+      _canRollDice = false; _hasUsedDice1 = false; _hasUsedDice2 = false;
+      _updateConsecutiveDoubles(d1auto, d2auto);
     });
     _calculateMovablePieces();
     if (_movablePieces.isNotEmpty) {
@@ -257,7 +317,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     _cancelAfkRollTimer();
 
     setState(() {
-      _isRollingDice = true;
       _canRollDice = false;
       _movablePieces.clear();
       _selectedPieceColor = null;
@@ -266,20 +325,56 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       _hasUsedDice2 = false;
     });
 
-    _diceAnimationController.repeat();
-    await Future.delayed(const Duration(milliseconds: 600));
-    _diceAnimationController.stop();
-    _diceAnimationController.reset();
+    final humanPieces = _gameState.getPiecesByColor(_currentPlayer);
+    final allInHome = humanPieces.every((p) => p.isHome);
+    int d1r = 0, d2r = 0;
 
-    final d1r = _random.nextInt(6) + 1;
-    final d2r = _random.nextInt(6) + 1;
+    do {
+      setState(() { _isRollingDice = true; });
+      _diceAnimationController.repeat();
+      await Future.delayed(const Duration(milliseconds: 600));
+      _diceAnimationController.stop();
+      _diceAnimationController.reset();
+
+      d1r = _random.nextInt(6) + 1;
+      d2r = _random.nextInt(6) + 1;
+      final humanHasHome = humanPieces.any((p) => p.isHome);
+      final humanMissed = _missedFive[_currentPlayer] ?? 0;
+      if (humanMissed >= 3 && humanHasHome && d1r != 5 && d2r != 5) {
+        if (_random.nextBool()) { d1r = 5; } else { d2r = 5; }
+      }
+      _missedFive[_currentPlayer] = (humanHasHome && d1r != 5 && d2r != 5) ? humanMissed + 1 : 0;
+
+      if (allInHome && d1r == d2r && d1r != 5) {
+        _humanHomeDoubles++;
+        setState(() {
+          _dice1Value = d1r; _dice2Value = d2r;
+          _totalDiceValue = d1r + d2r; _isRollingDice = false;
+        });
+        if (_humanHomeDoubles >= 3) {
+          _humanHomeDoubles = 0;
+          _consecutiveDoubles = 0;
+          _showEventToast('¡Tres dobles en casa! Turno perdido.');
+          await Future.delayed(const Duration(milliseconds: 1500));
+          setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
+          _nextTurn();
+          return;
+        }
+        _showEventToast('¡Doble en casa! Vuelves a tirar.');
+        await Future.delayed(const Duration(milliseconds: 1200));
+        setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
+        continue;
+      }
+      _humanHomeDoubles = 0;
+      break;
+    } while (true);
+
     _bridgeBreakPieceIds = (d1r == d2r) ? _getBarreraIndices(_currentPlayer) : {};
     setState(() {
-      _dice1Value = d1r;
-      _dice2Value = d2r;
-      _totalDiceValue = _dice1Value + _dice2Value;
+      _dice1Value = d1r; _dice2Value = d2r;
+      _totalDiceValue = d1r + d2r;
       _isRollingDice = false;
-      _updateConsecutiveDoubles(_dice1Value, _dice2Value);
+      _updateConsecutiveDoubles(d1r, d2r);
     });
     _bounceController.forward(from: 0);
 
@@ -345,10 +440,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     });
   }
 
-  void _startMoveTimer() {
+  void _startMoveTimer([int? initialSeconds]) {
     _moveTimer?.cancel();
     if (!mounted) return;
-    setState(() => _moveTimerSeconds = _moveTimeoutSeconds);
+    setState(() => _moveTimerSeconds = initialSeconds ?? _moveTimeoutSeconds);
     _moveTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || _gameEnded || _currentPlayer != 'yellow') {
         timer.cancel();
@@ -566,24 +661,16 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   bool _canLandOn(String color, int newPos, LudoPiece movingPiece) {
     if (newPos >= 52) return true;
 
+    // Regla especial: salida de casa con barrera enemiga en tu casilla de salida → permitido (rompe barrera)
+    if (movingPiece.isHome && newPos == _getStartPosition(color) && _isEnemyBarrierAt(newPos, color)) {
+      return true;
+    }
     if (_isEnemyBarrierAt(newPos, color)) return false;
 
     final sameColorCount = _gameState.getPiecesByColor(color)
         .where((p) => p != movingPiece && !p.isHome && !p.isFinished && p.position == newPos)
         .length;
     if (sameColorCount >= 2) return false;
-
-    for (final ownerColor in _activePlayers) {
-      if (ownerColor == color) continue;
-      final ownerStart = _getStartPosition(ownerColor);
-      if (newPos == ownerStart) {
-        final ownerPieces = _gameState.getPiecesByColor(ownerColor);
-        final ownerCount = ownerPieces.where(
-                (p) => !p.isHome && !p.isFinished && p.position == ownerStart
-        ).length;
-        if (ownerCount > 0) return false;
-      }
-    }
 
     return true;
   }
@@ -895,12 +982,18 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     bool captured = false;
 
     if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
+      final isBarrierBreak = piece.isHome && newPosition == _getStartPosition(color);
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
-        final enemyPieces = _gameState.getPiecesByColor(enemyColor);
-        for (final enemyPiece in enemyPieces) {
-          if (!enemyPiece.isHome && !enemyPiece.isFinished && enemyPiece.position == newPosition) {
-            setState(() { enemyPiece.position = -1; });
+        final enemyPiecesHere = _gameState.getPiecesByColor(enemyColor)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPosition)
+            .toList();
+        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+          setState(() { enemyPiecesHere.last.position = -1; });
+          captured = true;
+        } else {
+          for (final ep in enemyPiecesHere) {
+            setState(() { ep.position = -1; });
             captured = true;
           }
         }
@@ -1088,16 +1181,53 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     await Future.delayed(const Duration(milliseconds: 800));
     if (_gameEnded || _currentPlayer != cpuColor || !mounted) return;
 
-    final int d1cpu = _rollCpuDice();
-    final int d2cpu = _rollCpuDice();
+    final cpuPieces = _gameState.getPiecesByColor(cpuColor);
+    final cpuAllInHome = cpuPieces.every((p) => p.isHome);
+    int d1cpu = 0, d2cpu = 0;
+
+    do {
+      d1cpu = _rollCpuDice();
+      d2cpu = (_consecutiveDoubles >= 2) ? _rollCpuDiceNoDouble(d1cpu) : _rollCpuDice();
+      final cpuHasHome = cpuPieces.any((p) => p.isHome);
+      final cpuMissed = _missedFive[cpuColor] ?? 0;
+      if (cpuMissed >= 3 && cpuHasHome && d1cpu != 5 && d2cpu != 5) {
+        if (_random.nextBool()) { d1cpu = 5; } else { d2cpu = 5; }
+      }
+      _missedFive[cpuColor] = (cpuHasHome && d1cpu != 5 && d2cpu != 5) ? cpuMissed + 1 : 0;
+
+      if (cpuAllInHome && d1cpu == d2cpu && d1cpu != 5) {
+        _cpuHomeDoubles++;
+        setState(() {
+          _dice1Value = d1cpu; _dice2Value = d2cpu;
+          _totalDiceValue = d1cpu + d2cpu;
+          _canRollDice = false; _hasUsedDice1 = false; _hasUsedDice2 = false;
+        });
+        if (_cpuHomeDoubles >= 3) {
+          _cpuHomeDoubles = 0;
+          _consecutiveDoubles = 0;
+          _showEventToast('CPU: tres dobles en casa, pierde turno.');
+          await Future.delayed(const Duration(milliseconds: 1500));
+          setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
+          if (!_gameEnded && mounted) _nextTurn();
+          return;
+        }
+        _showEventToast('CPU: doble en casa, vuelve a tirar.');
+        await Future.delayed(const Duration(milliseconds: 1000));
+        setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (_gameEnded || _currentPlayer != cpuColor || !mounted) return;
+        continue;
+      }
+      _cpuHomeDoubles = 0;
+      break;
+    } while (true);
+
     _bridgeBreakPieceIds = (d1cpu == d2cpu) ? _getBarreraIndices(_currentPlayer) : {};
     setState(() {
-      _dice1Value = d1cpu;
-      _dice2Value = d2cpu;
-      _totalDiceValue = _dice1Value + _dice2Value;
-      _canRollDice = false;
-      _hasUsedDice1 = false; _hasUsedDice2 = false;
-      _updateConsecutiveDoubles(_dice1Value, _dice2Value);
+      _dice1Value = d1cpu; _dice2Value = d2cpu;
+      _totalDiceValue = d1cpu + d2cpu;
+      _canRollDice = false; _hasUsedDice1 = false; _hasUsedDice2 = false;
+      _updateConsecutiveDoubles(d1cpu, d2cpu);
     });
 
     if (_consecutiveDoubles >= 3) {
@@ -1182,11 +1312,18 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     bool captured = false;
 
     if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
+      final isBarrierBreak = piece.isHome && newPosition == _getStartPosition(color);
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
-        for (final enemyPiece in _gameState.getPiecesByColor(enemyColor)) {
-          if (!enemyPiece.isHome && !enemyPiece.isFinished && enemyPiece.position == newPosition) {
-            setState(() => enemyPiece.position = -1);
+        final enemyPiecesHere = _gameState.getPiecesByColor(enemyColor)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPosition)
+            .toList();
+        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+          setState(() => enemyPiecesHere.last.position = -1);
+          captured = true;
+        } else {
+          for (final ep in enemyPiecesHere) {
+            setState(() => ep.position = -1);
             captured = true;
           }
         }
@@ -1618,6 +1755,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                           _movablePieces.clear();
                           _hasUsedDice1 = false; _hasUsedDice2 = false;
                           _consecutiveDoubles = 0;
+                          _missedFive.clear();
+                          _humanHomeDoubles = 0;
+                          _cpuHomeDoubles = 0;
                           _setupActivePlayers();
                         });
                       },
@@ -2040,12 +2180,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    if (_moveTimerSeconds > 0 && !_bonusSelectionActive) ...[
+                    if (_moveTimerSeconds > 0) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: _moveTimerSeconds <= 5 ? Colors.red : Colors.blue.shade700,
+                          color: _moveTimerSeconds <= 5 ? Colors.red : (_bonusSelectionActive ? Colors.green.shade700 : Colors.blue.shade700),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(

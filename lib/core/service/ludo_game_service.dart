@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/ludo_game_match.dart';
+import 'bot_name_service.dart';
 import 'game_quota_service.dart';
 
 class LudoGameService {
@@ -39,7 +40,9 @@ class LudoGameService {
         final oppositePairs = [['red', 'yellow'], ['blue', 'green']];
         colors = List<String>.from(oppositePairs[_random.nextInt(2)])..shuffle(_random);
       } else {
-        colors = ['red', 'blue', 'green', 'yellow']..shuffle(_random);
+        const ccwOrder = ['green', 'red', 'blue', 'yellow'];
+        final startIdx = _random.nextInt(4);
+        colors = List.generate(numberOfPlayers, (i) => ccwOrder[(startIdx + i) % 4]);
       }
 
       final game = LudoGameMatch(
@@ -100,7 +103,8 @@ class LudoGameService {
 
       final game = LudoGameMatch.fromFirestore(gameDoc);
 
-      // Verificar si hay espacio
+      // Verificar si el juego aún está disponible
+      if (game.status != 'waiting') return false;
       if (game.playerCount >= 4) return false;
       if (game.hostId == playerId) return false;
 
@@ -143,8 +147,8 @@ class LudoGameService {
 
       await gameRef.update(updates);
 
-      // Cobrar cuotas al unirse (igual que chess) cuando es juego de apuesta con 2 jugadores
-      final isBetGame = (game.betAmount ?? 0) > 0 && newPlayerCount == 2;
+      // Cobrar cuotas solo cuando el juego arranca (todos los jugadores unidos)
+      final isBetGame = (game.betAmount ?? 0) > 0 && newPlayerCount >= expectedPlayers;
       if (isBetGame) {
         final quotaService = GameQuotaService();
         final result = await quotaService.collectQuotas(
@@ -183,6 +187,52 @@ class LudoGameService {
       if (kDebugMode) {
         print('💥 Error uniéndose al juego Ludo: $e');
       }
+      return false;
+    }
+  }
+
+  /// Llena slots vacíos con bots e inicia la partida (llamado por el host tras timeout)
+  Future<bool> fillBotsAndStart(String gameId) async {
+    try {
+      final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
+      final gameDoc = await gameRef.get();
+      if (!gameDoc.exists) return false;
+
+      final game = LudoGameMatch.fromFirestore(gameDoc);
+      if (game.status != 'waiting') return false;
+
+      final expectedPlayers = game.gameSettings?['numberOfPlayers'] ?? 4;
+      final Map<String, dynamic> updates = {
+        'status': 'active',
+        'startedAt': FieldValue.serverTimestamp(),
+      };
+
+      final rng = Random();
+      int botNum = 1;
+      if (game.guest2Id == null && expectedPlayers >= 2) {
+        final p = await BotNameService.pickUnseenProfile(rng);
+        updates['guest2Id'] = 'bot_$botNum';
+        updates['guest2Name'] = p['name'];
+        botNum++;
+      }
+      if (game.guest3Id == null && expectedPlayers >= 3) {
+        final p = await BotNameService.pickUnseenProfile(rng);
+        updates['guest3Id'] = 'bot_$botNum';
+        updates['guest3Name'] = p['name'];
+        botNum++;
+      }
+      if (game.guest4Id == null && expectedPlayers >= 4) {
+        final p = await BotNameService.pickUnseenProfile(rng);
+        updates['guest4Id'] = 'bot_$botNum';
+        updates['guest4Name'] = p['name'];
+        botNum++;
+      }
+
+      await gameRef.update(updates);
+      if (kDebugMode) print('🤖 Bots añadidos al juego $gameId, partida iniciada');
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('💥 Error añadiendo bots: $e');
       return false;
     }
   }

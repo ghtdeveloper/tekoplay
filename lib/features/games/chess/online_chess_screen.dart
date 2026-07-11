@@ -263,13 +263,15 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             setState(() {
               if (_isMyTurn) {
                 _myTimeSeconds = (_myTimeSeconds - elapsed).clamp(0, _myTimeSeconds);
-                if (_myTimeSeconds <= 0) _timeOut(isMyTimeout: true);
+                if (_myTimeSeconds <= 0) { _backgroundedAt = null; _timeOut(isMyTimeout: true); return; }
               } else {
                 _opponentTimeSeconds = (_opponentTimeSeconds - elapsed).clamp(0, _opponentTimeSeconds);
-                if (_opponentTimeSeconds <= 0) _timeOut(isMyTimeout: false);
+                if (_opponentTimeSeconds <= 0) { _backgroundedAt = null; _timeOut(isMyTimeout: false); return; }
               }
             });
           }
+          // Reanudar el timer después de ajustar los tiempos
+          _startPlayerTimer();
         }
         _backgroundedAt = null;
         break;
@@ -277,6 +279,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _disableWakeLock();
         if (_gameStarted && !_gameEnded && _firstMoveDone && _selectedTimeMinutes != null) {
           _backgroundedAt = DateTime.now();
+          _playerTimer?.cancel(); // Pausa el reloj para evitar doble conteo
         }
         break;
       case AppLifecycleState.detached:

@@ -1090,6 +1090,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     );
   }
 
+  DateTime? _pausedAt;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -1099,9 +1101,31 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
+        if (_pausedAt != null && !_gameEnded && _isPlayerTurn) {
+          final elapsed = DateTime.now().difference(_pausedAt!).inSeconds;
+          _pausedAt = null;
+          if (!_hasPlayerMovedOnce) {
+            _startInitialMoveTimer();
+          } else {
+            final remaining = (_playerTimeSeconds - elapsed).clamp(0, 60);
+            if (remaining > 0) {
+              setState(() => _playerTimeSeconds = remaining);
+              _startPlayerTimer();
+            } else {
+              _timeOut(isInitialTimeout: false);
+            }
+          }
+        } else {
+          _pausedAt = null;
+        }
         break;
       case AppLifecycleState.paused:
         _disableWakeLock();
+        if (!_gameEnded && _isPlayerTurn) {
+          _pausedAt = DateTime.now();
+          _playerTimer?.cancel();
+          _initialMoveTimer?.cancel();
+        }
         break;
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
