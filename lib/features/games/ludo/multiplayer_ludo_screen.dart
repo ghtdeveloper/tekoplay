@@ -122,7 +122,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
   static const int _turnTimeoutSeconds = 20;
-  DateTime? _turnStartedAt;
 
   Timer? _waitRoomTimer;
   int _waitRoomCountdown = 60;
@@ -219,14 +218,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       } else {
         _waitRoomPausedAt = null;
       }
-      if (_turnStartedAt != null && !_gameEnded && _isMyTurn) {
-        final elapsed = DateTime.now().difference(_turnStartedAt!).inSeconds;
-        final remaining = (_turnTimeoutSeconds - elapsed).clamp(0, _turnTimeoutSeconds);
-        _turnTimer?.cancel();
-        if (remaining > 0) {
-          _startTurnTimer(remaining);
-        } else {
-          _autoAction();
+      if (!_gameEnded && _screenState == _FriendLudoState.gameActive) {
+        final deadline = _currentGame?.turnDeadline;
+        if (deadline != null) {
+          _syncTimerToDeadline(deadline);
         }
       }
     } else if (state == AppLifecycleState.paused) {
@@ -352,9 +347,18 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     if (isMyTurnNow && !_bonusSelectionActive) _calculateMovablePieces();
 
-    if (prevTurn != _currentTurn && !_gameEnded) {
-      if (_isMyTurn) _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
-      _startTurnTimer();
+    // Sync turn timer from server-side deadline so all clients see the same countdown
+    final prevDeadline = prevGame?.turnDeadline;
+    final newDeadline = game.turnDeadline;
+    final turnChanged = prevTurn != _currentTurn;
+    final deadlineChanged = newDeadline != null && newDeadline != prevDeadline;
+    if ((turnChanged || deadlineChanged) && !_gameEnded) {
+      if (turnChanged && _isMyTurn) _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
+      if (newDeadline != null) {
+        _syncTimerToDeadline(newDeadline);
+      } else if (turnChanged) {
+        _startTurnTimer();
+      }
     }
 
     // Host maneja turnos de bots
@@ -437,7 +441,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   void _startTurnTimer([int? initialSeconds]) {
     _turnTimer?.cancel();
     final secs = initialSeconds ?? _turnTimeoutSeconds;
-    _turnStartedAt = DateTime.now().subtract(Duration(seconds: _turnTimeoutSeconds - secs));
     setState(() => _turnTimerSeconds = secs);
     _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted || _gameEnded) { t.cancel(); return; }
@@ -447,6 +450,42 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         if (_isMyTurn) _autoAction();
       }
     });
+  }
+
+  /// Sincroniza el timer local a un deadline del servidor. Todos los clientes
+  /// llaman esto cuando reciben un `turnDeadline` actualizado desde Firestore.
+  void _syncTimerToDeadline(DateTime deadline) {
+    _turnTimer?.cancel();
+    final remaining = deadline.difference(DateTime.now()).inSeconds.clamp(0, _turnTimeoutSeconds);
+    if (remaining <= 0) {
+      setState(() => _turnTimerSeconds = 0);
+      if (_isMyTurn && !_gameEnded) _autoAction();
+      return;
+    }
+    setState(() => _turnTimerSeconds = remaining);
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || _gameEnded) { t.cancel(); return; }
+      final rem = deadline.difference(DateTime.now()).inSeconds.clamp(0, _turnTimeoutSeconds);
+      setState(() => _turnTimerSeconds = rem);
+      if (rem <= 0) {
+        t.cancel();
+        if (_isMyTurn && !_gameEnded) _autoAction();
+      }
+    });
+  }
+
+  /// Escribe el turnDeadline en Firestore para que todos los clientes lo vean.
+  Future<void> _writeTurnDeadline() async {
+    if (_activeGameId == null) return;
+    try {
+      await _firestore.collection('ludo_games').doc(_activeGameId!).update({
+        'turnDeadline': Timestamp.fromDate(
+          DateTime.now().add(const Duration(seconds: _turnTimeoutSeconds)),
+        ),
+      });
+    } catch (e) {
+      if (kDebugMode) print('Error writing turnDeadline: $e');
+    }
   }
 
   Future<void> _autoAction() async {
@@ -554,7 +593,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) await _advanceTurn();
     } else {
+      // Start timer locally immediately and also update Firestore so
+      // opponents can see the countdown even if we leave the app.
       _startTurnTimer();
+      unawaited(_writeTurnDeadline());
     }
   }
 
@@ -963,6 +1005,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         updates['dice2'] = 0;
         updates['hasUsedDice1'] = false;
         updates['hasUsedDice2'] = false;
+        updates['turnDeadline'] = Timestamp.fromDate(
+          DateTime.now().add(const Duration(seconds: _turnTimeoutSeconds)),
+        );
       }
 
       await _firestore.collection('ludo_games').doc(_activeGameId!).update(updates);
@@ -1190,6 +1235,30 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       }
       _botMissedFive[botColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? missedCount + 1 : 0;
 
+      // Home-stretch bias: when bot has pieces in recta final (pos >= 52),
+      // favor the exact values those pieces need to advance without overshooting.
+      final piecesInStretch = botPieces
+          .where((p) => p.position >= 52 && !p.isFinished)
+          .toList();
+      if (piecesInStretch.isNotEmpty && _random.nextDouble() < 0.80) {
+        final usefulValues = <int>{};
+        for (final p in piecesInStretch) {
+          final rem = 57 - p.position;
+          if (rem >= 1 && rem <= 6) usefulValues.add(rem);
+        }
+        if (usefulValues.isNotEmpty) {
+          final list = usefulValues.toList()..sort();
+          d1 = list[_random.nextInt(list.length)];
+          int d2c = list.length > 1
+              ? list[_random.nextInt(list.length)]
+              : (_random.nextInt(3) + 1); // 1-3 fallback
+          if (_consecutiveDoubles >= 2 && d2c == d1) {
+            d2c = d1 == 1 ? 2 : d1 - 1;
+          }
+          d2 = d2c;
+        }
+      }
+
       if (allInHome && d1 == d2 && d1 != 5) {
         _botHomeDoubles[botColor] = (_botHomeDoubles[botColor] ?? 0) + 1;
         setState(() { _dice1Value = d1; _dice2Value = d2; });
@@ -1416,17 +1485,105 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   void _handleAbandon(LudoGameMatch game) {
-    final data = game.toFirestore();
-    final abandonedBy = data['abandonedBy'] as String?;
+    final abandonedBy = game.abandonedBy;
     if (abandonedBy != null && abandonedBy != _currentUser?.uid) {
-      _recordResult(GameResultModel.win);
-      _showEndDialog('Un jugador abandonó. ¡Ganaste! 🎉', game);
+      // This player did NOT abandon — game cancelled, no loss, bet will be refunded
+      _showCancelledByOtherDialog(game);
     } else {
+      // This player abandoned
       if (!_hasUserExited) {
         _recordResult(GameResultModel.loss);
       }
       _showEndDialog('Partida abandonada.', game);
     }
+  }
+
+  void _showCancelledByOtherDialog(LudoGameMatch game) {
+    if (!mounted) return;
+    final betAmount = game.betAmount;
+    final isBetGame = betAmount != null && betAmount > 0;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey.shade400, width: 2),
+            boxShadow: [BoxShadow(
+              color: Colors.grey.withValues(alpha: 0.25),
+              blurRadius: 24, spreadRadius: 4,
+            )],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('❌', style: TextStyle(fontSize: 64)),
+              const SizedBox(height: 12),
+              Text(
+                'PARTIDA CANCELADA',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Un jugador abandonó la partida.',
+                style: TextStyle(color: Colors.black87, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              if (isBetGame) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.diamond, color: Colors.blue, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Tu apuesta de $betAmount 💎 será devuelta',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Salir', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _reloadUserCurrency() async {
@@ -1454,15 +1611,15 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final isWin = message.contains('GANASTE') || message.contains('Ganaste');
     final betAmount = game?.betAmount;
     final isBetGame = betAmount != null && betAmount > 0 && game?.currencyType == 'diamonds';
-    final hasBots = _botColors.isNotEmpty;
-    final int playerCount = _activePlayers.length;
-    // Con bots: fórmula VS CPU (bots no aportan fondos reales).
-    // Sin bots: 90% del pot total entre todos los jugadores reales.
+    // Solo cuentan jugadores reales (los bots no aportan apuesta real).
+    // Mismo cálculo que la Cloud Function: pot = betAmount * realPlayers * 90%.
+    final int realPlayerCount = _activePlayers
+        .where((c) => !_botColors.contains(c))
+        .length
+        .clamp(1, 4);
     final winnerPrize = !isBetGame
         ? 0
-        : hasBots
-            ? (betAmount + (betAmount * 0.7).ceil())
-            : ((betAmount * playerCount) * 0.90).floor();
+        : (betAmount * realPlayerCount * 0.90).floor();
     final netGain = isBetGame ? winnerPrize - betAmount : 0;
 
     showDialog(

@@ -31,6 +31,8 @@ class LudoGameMatch {
   final DateTime? finishedAt;
 
   final String? winnerId;
+  final String? abandonedBy;
+  final DateTime? turnDeadline;
   final List<String> finishedPlayers; // IDs de jugadores que terminaron (en orden)
   final String? reason; // 'normal', 'timeout', 'abandoned'
 
@@ -91,6 +93,8 @@ class LudoGameMatch {
     this.startedAt,
     this.finishedAt,
     this.winnerId,
+    this.abandonedBy,
+    this.turnDeadline,
     this.finishedPlayers = const [],
     this.reason,
     this.isRanked = false,
@@ -151,6 +155,10 @@ class LudoGameMatch {
           ? (data['finishedAt'] as Timestamp).toDate()
           : null,
       winnerId: data['winnerId'],
+      abandonedBy: data['abandonedBy'],
+      turnDeadline: data['turnDeadline'] != null
+          ? (data['turnDeadline'] as Timestamp).toDate()
+          : null,
       finishedPlayers: List<String>.from(data['finishedPlayers'] ?? []),
       reason: data['reason'],
       isRanked: data['isRanked'] ?? false,
@@ -210,6 +218,8 @@ class LudoGameMatch {
       'startedAt': startedAt != null ? Timestamp.fromDate(startedAt!) : null,
       'finishedAt': finishedAt != null ? Timestamp.fromDate(finishedAt!) : null,
       'winnerId': winnerId,
+      'abandonedBy': abandonedBy,
+      'turnDeadline': turnDeadline != null ? Timestamp.fromDate(turnDeadline!) : null,
       'finishedPlayers': finishedPlayers,
       'reason': reason,
       'isRanked': isRanked,

@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../../core/models/domino_tile.dart';
@@ -180,7 +179,6 @@ class _DominoImmersiveTutorialScreenState
       setState(() => _currentStep++);
       _resetStepForStep();
     } else {
-      // Fin del tutorial
       if (!mounted) return;
       await showDialog(
         context: context,
@@ -271,28 +269,41 @@ class _DominoImmersiveTutorialScreenState
     );
   }
 
+  static const Color _tableColor = Color(0xFF1B5E20);
+  static const Color _tableDark = Color(0xFF1A4C1C);
+  static const Color _tileColor = Color(0xFFFFF8E1);
+  static const Color _tileBorder = Color(0xFF4A3728);
+  static const Color _accentOrange = Color(0xFFEC7A34);
+
   @override
   Widget build(BuildContext context) {
     final step = _steps[_currentStep];
     final total = _steps.length;
 
     return Scaffold(
-      backgroundColor: const ui.Color(0xFFEC7A34),
+      backgroundColor: _tableColor,
       appBar: AppBar(
-        backgroundColor: const ui.Color(0xFFEC7A34),
+        backgroundColor: _tableDark,
         elevation: 0,
-        title:  Text(
+        title: Text(
           S.of(context).dominoTutorial,
-          style: TextStyle(color: Colors.white),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                '${S.of(context).passed} ${_currentStep + 1} / $total',
-                style: const TextStyle(color: Colors.white),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white12,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_currentStep + 1} / $total',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ),
@@ -302,81 +313,32 @@ class _DominoImmersiveTutorialScreenState
         child: Column(
           children: [
             const BannerAdWidget(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    step['title']!,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    step['description']!,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _demoMove,
-                        icon: const Icon(Icons.play_arrow),
-                        label: Text(S.of(context).watchMovement),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: _resetStepForStep,
-                        icon: const Icon(Icons.replay),
-                        label: Text(S.of(context).resetPassed),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white70),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
+            _buildInstructionCard(step),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                 child: Column(
                   children: [
                     Expanded(
-                      flex: 2,
+                      flex: 3,
                       child: Container(
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: Colors.green[800],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white24, width: 2),
+                          color: const Color(0xFF2E7D32),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white24, width: 1.5),
+                          boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 3))],
                         ),
-                        child: _buildPlayArea(),
+                        child: _buildPlayArea(context),
                       ),
                     ),
-
-                    const SizedBox(height: 16),
-
+                    const SizedBox(height: 10),
                     Container(
-                      height: 100,
+                      height: 110,
                       decoration: BoxDecoration(
-                        color: Colors.brown[800],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white24, width: 2),
+                        color: _tableDark,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white12, width: 1),
                       ),
                       child: _buildPlayerTiles(),
                     ),
@@ -384,76 +346,154 @@ class _DominoImmersiveTutorialScreenState
                 ),
               ),
             ),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Row(
-                children: [
-                  if (_currentStep > 0)
-                    TextButton.icon(
-                      onPressed: () {
-                        setState(() => _currentStep--);
-                        _resetStepForStep();
-                      },
-                      icon: const Icon(Icons.chevron_left),
-                      label: Text(S.of(context).back),
-                      style: TextButton.styleFrom(foregroundColor: Colors.white),
-                    ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _nextStep,
-                    icon: const Icon(Icons.chevron_right),
-                    label: Text(_currentStep == total - 1 ? S.of(context).finish : S.of(context).next),
-                    style: TextButton.styleFrom(foregroundColor: Colors.white),
-                  ),
-                ],
-              ),
-            ),
+            _buildNavBar(context, total),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPlayArea() {
+  Widget _buildInstructionCard(Map<String, dynamic> step) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _tableDark,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            step['title']!,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            step['description']!,
+            style: const TextStyle(fontSize: 14, color: Colors.white70, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _demoMove,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: Text(S.of(context).watchMovement, style: const TextStyle(fontSize: 13)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: _resetStepForStep,
+                icon: const Icon(Icons.replay, size: 18),
+                label: Text(S.of(context).resetPassed, style: const TextStyle(fontSize: 13)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white38),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavBar(BuildContext context, int total) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Row(
+        children: [
+          if (_currentStep > 0)
+            OutlinedButton.icon(
+              onPressed: () {
+                setState(() => _currentStep--);
+                _resetStepForStep();
+              },
+              icon: const Icon(Icons.chevron_left, color: Colors.white70),
+              label: Text(S.of(context).back, style: const TextStyle(color: Colors.white70)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white24),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          const Spacer(),
+          ElevatedButton.icon(
+            onPressed: _nextStep,
+            icon: Icon(_currentStep == total - 1 ? Icons.check : Icons.chevron_right),
+            label: Text(_currentStep == total - 1 ? S.of(context).finish : S.of(context).next),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accentOrange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayArea(BuildContext context) {
     return Stack(
       children: [
         if (_controller.playedTiles.isNotEmpty) ...[
           Positioned(
-            left: 20,
+            left: 8,
             top: 0,
             bottom: 0,
             child: GestureDetector(
               onTap: () => _onPlayAreaTapped(true),
               child: Container(
-                width: 60,
+                width: 48,
+                margin: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
-                  color: Colors.white12,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white38, width: 1),
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white30, width: 1.5),
                 ),
-                child: const Center(
-                  child: Icon(Icons.arrow_back, color: Colors.white70),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.arrow_back_ios_new, color: Colors.white54, size: 16),
+                    SizedBox(height: 4),
+                    Text('IZQ', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ],
                 ),
               ),
             ),
           ),
-          // Zona derecha
           Positioned(
-            right: 20,
+            right: 8,
             top: 0,
             bottom: 0,
             child: GestureDetector(
               onTap: () => _onPlayAreaTapped(false),
               child: Container(
-                width: 60,
+                width: 48,
+                margin: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
-                  color: Colors.white12,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white38, width: 1),
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white30, width: 1.5),
                 ),
-                child: const Center(
-                  child: Icon(Icons.arrow_forward, color: Colors.white70),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
+                    SizedBox(height: 4),
+                    Text('DER', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ],
                 ),
               ),
             ),
@@ -465,15 +505,20 @@ class _DominoImmersiveTutorialScreenState
             child: GestureDetector(
               onTap: () => _onPlayAreaTapped(true),
               child: Container(
-                width: 80,
-                height: 60,
+                width: 90,
+                height: 70,
                 decoration: BoxDecoration(
-                  color: Colors.white12,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white38, width: 2),
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _accentOrange, width: 2),
                 ),
-                child: const Center(
-                  child: Icon(Icons.add, color: Colors.white70, size: 30),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_circle_outline, color: Colors.white70, size: 28),
+                    SizedBox(height: 4),
+                    Text('Colocar', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  ],
                 ),
               ),
             ),
@@ -482,32 +527,33 @@ class _DominoImmersiveTutorialScreenState
         Center(
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 12),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: _controller.playedTiles.map((tile) =>
-                  _buildDominoTile(tile, isInPlay: true)
-              ).toList(),
+              children: _controller.playedTiles.map((tile) => _buildChainTile(tile)).toList(),
             ),
           ),
         ),
 
-        if (_controller.playedTiles.isNotEmpty) ...[
+        if (_controller.playedTiles.isNotEmpty)
           Positioned(
-            top: 10,
-            left: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${S.of(context).extremes}: ${_controller.leftEnd} - ${_controller.rightEnd}',
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+            top: 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${S.of(context).extremes}: ${_controller.leftEnd}  —  ${_controller.rightEnd}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
-        ],
       ],
     );
   }
@@ -515,98 +561,106 @@ class _DominoImmersiveTutorialScreenState
   Widget _buildPlayerTiles() {
     return ListView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.all(8),
-      children: _controller.playerTiles.map((tile) =>
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: GestureDetector(
-              onTap: () => _onTileSelected(tile),
-              child: _buildDominoTile(tile, isSelected: _selectedTile == tile),
-            ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      children: _controller.playerTiles.map((tile) {
+        final isSelected = _selectedTile == tile;
+        return GestureDetector(
+          onTap: () => _onTileSelected(tile),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            transform: isSelected ? (Matrix4.identity()..translate(0.0, -6.0)) : Matrix4.identity(),
+            child: _buildHandTile(tile, isSelected: isSelected),
           ),
-      ).toList(),
+        );
+      }).toList(),
     );
   }
 
-  Widget _buildDominoTile(DominoTile tile, {bool isSelected = false, bool isInPlay = false}) {
+  Widget _buildHandTile(DominoTile tile, {bool isSelected = false}) {
     return Container(
-      width: 60,
-      height: 80,
-      margin: const EdgeInsets.symmetric(horizontal: 2),
+      width: 44,
+      height: 88,
       decoration: BoxDecoration(
-        color: isSelected ? Colors.yellow[700] : Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        color: isSelected ? const Color(0xFFFFF176) : _tileColor,
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: isSelected ? Colors.yellow[900]! : Colors.grey[400]!,
-          width: isSelected ? 3 : 1,
+          color: isSelected ? _accentOrange : _tileBorder,
+          width: isSelected ? 2.5 : 1.5,
         ),
-        boxShadow: isSelected ? [
+        boxShadow: [
           BoxShadow(
-            color: Colors.yellow.withValues(alpha: 0.5),
-            blurRadius: 8,
-            spreadRadius: 2,
-          )
-        ] : null,
+            color: isSelected ? _accentOrange.withValues(alpha: 0.4) : Colors.black45,
+            blurRadius: isSelected ? 8 : 3,
+            offset: const Offset(1, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(7)),
-              ),
-              child: Center(
-                child: _buildDots(tile.left),
-              ),
-            ),
-          ),
-          Container(
-            height: 2,
-            color: Colors.grey[600],
-          ),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
-              ),
-              child: Center(
-                child: _buildDots(tile.right),
-              ),
-            ),
-          ),
+          Expanded(child: _buildPipArea(tile.left)),
+          Container(height: 1.5, color: _tileBorder),
+          Expanded(child: _buildPipArea(tile.right)),
         ],
       ),
     );
   }
 
-  Widget _buildDots(int number) {
-    const dotPositions = {
-      0: <Alignment>[],
-      1: [Alignment.center],
-      2: [Alignment.topLeft, Alignment.bottomRight],
-      3: [Alignment.topLeft, Alignment.center, Alignment.bottomRight],
-      4: [Alignment.topLeft, Alignment.topRight, Alignment.bottomLeft, Alignment.bottomRight],
-      5: [Alignment.topLeft, Alignment.topRight, Alignment.center, Alignment.bottomLeft, Alignment.bottomRight],
-      6: [Alignment.topLeft, Alignment.topRight, Alignment.centerLeft, Alignment.centerRight, Alignment.bottomLeft, Alignment.bottomRight],
-    };
-
-    return Stack(
-      children: dotPositions[number]!.map((alignment) =>
-          Align(
-            alignment: alignment,
-            child: Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-      ).toList(),
+  Widget _buildChainTile(DominoTile tile) {
+    return Container(
+      width: 72,
+      height: 36,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+        color: _tileColor,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: _tileBorder, width: 1.5),
+        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 3, offset: Offset(1, 1))],
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _buildPipArea(tile.left)),
+          Container(width: 1.5, color: _tileBorder),
+          Expanded(child: _buildPipArea(tile.right)),
+        ],
+      ),
     );
   }
+
+  Widget _buildPipArea(int count) {
+    return Padding(
+      padding: const EdgeInsets.all(3),
+      child: CustomPaint(
+        painter: _PipPainter(count),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _PipPainter extends CustomPainter {
+  final int count;
+  _PipPainter(this.count);
+
+  static const _positions = {
+    0: <List<double>>[],
+    1: [[0.5, 0.5]],
+    2: [[0.25, 0.25], [0.75, 0.75]],
+    3: [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]],
+    4: [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]],
+    5: [[0.25, 0.25], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.75, 0.75]],
+    6: [[0.25, 0.2], [0.75, 0.2], [0.25, 0.5], [0.75, 0.5], [0.25, 0.8], [0.75, 0.8]],
+  };
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = const Color(0xFF1A1A1A);
+    final radius = (size.shortestSide * 0.18).clamp(2.0, 5.0);
+    for (final pos in (_positions[count] ?? [])) {
+      canvas.drawCircle(Offset(size.width * pos[0], size.height * pos[1]), radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PipPainter old) => old.count != count;
 }

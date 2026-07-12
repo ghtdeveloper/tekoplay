@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'dart:math';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -10,145 +9,240 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/Interstitial_ad_helper.dart';
 
-enum GameState { playerTurn, computerTurn, gameOver, roundEnd }
-enum GameResult { playerWins, computerWins, draw, none }
-enum Direction { left, right, up, down }
-enum RoundResult { playerWon, computerWon, blocked }
+enum _GamePhase { playerTurn, cpuTurn, roundEnd, gameOver }
+enum _RoundResult { playerWon, cpuWon, blocked }
 
-class PlayedDominoTile {
+class _PlayedTile {
   final DominoTile tile;
-  final bool isVertical;
-  final Offset position;
-  final Direction direction;
-  final int connectingValue;
+  final int displayLeft;
+  final int displayRight;
+  bool get isDouble => displayLeft == displayRight;
 
-  PlayedDominoTile({
-    required this.tile,
-    required this.isVertical,
-    required this.position,
-    required this.direction,
-    required this.connectingValue,
-  });
+  _PlayedTile({required this.tile, required this.displayLeft, required this.displayRight});
 }
 
-class RoundInfo {
-  final int roundNumber;
-  final RoundResult result;
-  final int playerPoints;
-  final int computerPoints;
-  final int playerRemainingTiles;
-  final int computerRemainingTiles;
-
-  RoundInfo({
-    required this.roundNumber,
-    required this.result,
-    required this.playerPoints,
-    required this.computerPoints,
-    required this.playerRemainingTiles,
-    required this.computerRemainingTiles,
-  });
-}
-
-class DominoVsComputerController {
-  List<DominoTile> playerTiles = [];
-  List<DominoTile> computerTiles = [];
-  List<PlayedDominoTile> playedTiles = [];
+class _DominoController {
+  List<DominoTile> playerHand = [];
+  List<DominoTile> cpuHand = [];
+  List<_PlayedTile> chain = [];
   List<DominoTile> boneyard = [];
 
-  // Valores abiertos en cada dirección
-  int? leftEnd;
-  int? rightEnd;
-  int? topEnd;
-  int? bottomEnd;
+  int? leftOpen;
+  int? rightOpen;
 
-  GameState gameState = GameState.playerTurn;
-  GameResult gameResult = GameResult.none;
-  String difficulty = 'muy fácil';
+  _GamePhase phase = _GamePhase.playerTurn;
+  int openingDoubleValue = -1;
+  int playerScore = 0;
+  int cpuScore = 0;
+  int roundNumber = 1;
+  int consecutivePasses = 0;
+  int targetScore = 100;
+  String difficulty = 'normal';
 
-  // Sistema de rondas
-  int currentRound = 1;
-  int maxRounds = 3;
-  int playerRoundWins = 0;
-  int computerRoundWins = 0;
-  List<RoundInfo> roundHistory = [];
-
-  double boardWidth = 0;
-  double boardHeight = 0;
-
-  // Constantes para el tamaño de las fichas (aumentadas para mejor visualización)
-  static const double TILE_WIDTH = 50.0; // Aumentar de 45 a 50
-  static const double TILE_HEIGHT = 80.0; // Aumentar de 70 a 80
-  static const double TILE_SPACING = 4.0; // Aumentar spacing de 3 a 4
-  static const double BOARD_MARGIN = 10.0; // Reducir margen de 15 a 10
-
-  // Variables para tracking de bloqueo
-  int turnsWithoutPlay = 0;
-  bool lastPlayerCouldPlay = true;
-  bool lastComputerCouldPlay = true;
-
-  // Control de primera jugada
-  bool isFirstMove = true;
-  bool canCrossNow = false;
-
-  // Timer variables
-  Timer? _turnTimer;
+  Timer? _timer;
   int timeLeft = 30;
-  bool isTimerActive = false;
-  Function? onTimeOut;
-  Function? onTimeUpdate;
+  bool timerActive = false;
+  VoidCallback? onTimeUpdate;
+  VoidCallback? onTimeOut;
 
-  // Pool variables
-  bool canUsePool = true;
-  int poolUsageCount = 0;
-  int maxPoolUsage = 3; // Máximo 3 usos del pool por ronda
-
-  void initializeGame({required String selectedDifficulty, required int selectedMaxRounds}) {
-    difficulty = selectedDifficulty;
-    maxRounds = selectedMaxRounds;
-    currentRound = 1;
-    playerRoundWins = 0;
-    computerRoundWins = 0;
-    roundHistory.clear();
-    gameResult = GameResult.none;
-    startNewRound();
+  void init({required String diff, required int target}) {
+    difficulty = diff;
+    targetScore = target;
+    playerScore = 0;
+    cpuScore = 0;
+    roundNumber = 1;
+    _startRound();
   }
 
-  void startNewRound() {
-    playerTiles.clear();
-    computerTiles.clear();
-    playedTiles.clear();
+  void _startRound() {
+    playerHand.clear();
+    cpuHand.clear();
+    chain.clear();
     boneyard.clear();
+    leftOpen = null;
+    rightOpen = null;
+    consecutivePasses = 0;
 
-    turnsWithoutPlay = 0;
-    lastPlayerCouldPlay = true;
-    lastComputerCouldPlay = true;
-    isFirstMove = true;
-    canCrossNow = false;
-    leftEnd = null;
-    rightEnd = null;
-    topEnd = null;
-    bottomEnd = null;
+    int id = 0;
+    for (int i = 0; i <= 6; i++) {
+      for (int j = i; j <= 6; j++) {
+        boneyard.add(DominoTile(left: i, right: j, id: 'r${roundNumber}_$id'));
+        id++;
+      }
+    }
+    boneyard.shuffle(Random());
 
-    // Reset timer and pool
-    _stopTimer();
-    poolUsageCount = 0;
-    canUsePool = true;
+    for (int i = 0; i < 7; i++) {
+      playerHand.add(boneyard.removeAt(0));
+      cpuHand.add(boneyard.removeAt(0));
+    }
 
-    _createDominoSet();
-    _dealTiles();
+    phase = _determineFirst();
+  }
 
-    gameState = _determineFirstPlayer();
+  _GamePhase _determineFirst() {
+    int pHigh = -1, cHigh = -1;
+    for (final t in playerHand) {
+      if (t.isDouble && t.left > pHigh) pHigh = t.left;
+    }
+    for (final t in cpuHand) {
+      if (t.isDouble && t.left > cHigh) cHigh = t.left;
+    }
+    if (pHigh != -1 || cHigh != -1) {
+      if (pHigh >= cHigh) {
+        openingDoubleValue = pHigh;
+        return _GamePhase.playerTurn;
+      } else {
+        openingDoubleValue = cHigh;
+        return _GamePhase.cpuTurn;
+      }
+    }
+    openingDoubleValue = -1;
+    final pMax = playerHand.map((t) => t.total).reduce(max);
+    final cMax = cpuHand.map((t) => t.total).reduce(max);
+    return pMax >= cMax ? _GamePhase.playerTurn : _GamePhase.cpuTurn;
+  }
+
+  bool canPlay(DominoTile tile) {
+    if (chain.isEmpty) {
+      if (openingDoubleValue != -1) {
+        return tile.isDouble && tile.left == openingDoubleValue;
+      }
+      return true;
+    }
+    return tile.canConnectTo(leftOpen!) || tile.canConnectTo(rightOpen!);
+  }
+
+  bool canPlayerPlayAny() => playerHand.any(canPlay);
+  bool canCpuPlayAny() => cpuHand.any(canPlay);
+
+  bool playTile(DominoTile tile, String side) {
+    if (!canPlay(tile)) return false;
+    tile.isPlayed = true;
+
+    int displayLeft, displayRight;
+    if (chain.isEmpty) {
+      displayLeft = tile.left;
+      displayRight = tile.right;
+      leftOpen = tile.left;
+      rightOpen = tile.right;
+      chain.add(_PlayedTile(tile: tile, displayLeft: displayLeft, displayRight: displayRight));
+    } else if (side == 'left') {
+      if (tile.right == leftOpen) {
+        displayLeft = tile.left;
+        displayRight = tile.right;
+        leftOpen = tile.isDouble ? tile.left : tile.left;
+      } else {
+        displayLeft = tile.right;
+        displayRight = tile.left;
+        leftOpen = tile.isDouble ? tile.right : tile.right;
+      }
+      chain.insert(0, _PlayedTile(tile: tile, displayLeft: displayLeft, displayRight: displayRight));
+    } else {
+      if (tile.left == rightOpen) {
+        displayLeft = tile.left;
+        displayRight = tile.right;
+        rightOpen = tile.isDouble ? tile.right : tile.right;
+      } else {
+        displayLeft = tile.right;
+        displayRight = tile.left;
+        rightOpen = tile.isDouble ? tile.left : tile.left;
+      }
+      chain.add(_PlayedTile(tile: tile, displayLeft: displayLeft, displayRight: displayRight));
+    }
+
+    if (side == 'left' && chain.isNotEmpty && !tile.isDouble) {
+      leftOpen = chain.first.displayLeft;
+    } else if (side == 'right' && chain.isNotEmpty && !tile.isDouble) {
+      rightOpen = chain.last.displayRight;
+    } else if (chain.length == 1) {
+      leftOpen = chain.first.displayLeft;
+      rightOpen = chain.first.displayRight;
+    }
+
+    consecutivePasses = 0;
+    return true;
+  }
+
+  bool drawFromBoneyard(bool isPlayer) {
+    if (boneyard.isEmpty) return false;
+    final drawn = boneyard.removeAt(0);
+    if (isPlayer) {
+      playerHand.add(drawn);
+    } else {
+      cpuHand.add(drawn);
+    }
+    return true;
+  }
+
+  _RoundResult? checkRoundEnd() {
+    if (playerHand.isEmpty) {
+      final pip = cpuHand.fold(0, (s, t) => s + t.total);
+      playerScore += pip;
+      return _RoundResult.playerWon;
+    }
+    if (cpuHand.isEmpty) {
+      final pip = playerHand.fold(0, (s, t) => s + t.total);
+      cpuScore += pip;
+      return _RoundResult.cpuWon;
+    }
+    if (consecutivePasses >= 2) {
+      final pPip = playerHand.fold(0, (s, t) => s + t.total);
+      final cPip = cpuHand.fold(0, (s, t) => s + t.total);
+      if (pPip < cPip) {
+        playerScore += cPip;
+        return _RoundResult.playerWon;
+      } else if (cPip < pPip) {
+        cpuScore += pPip;
+        return _RoundResult.cpuWon;
+      } else {
+        return _RoundResult.blocked;
+      }
+    }
+    return null;
+  }
+
+  bool isGameOver() => playerScore >= targetScore || cpuScore >= targetScore;
+
+  void startNextRound() {
+    roundNumber++;
+    _startRound();
+  }
+
+  DominoTile? getBestCpuMove() {
+    final playable = cpuHand.where(canPlay).toList();
+    if (playable.isEmpty) return null;
+
+    switch (difficulty) {
+      case 'muy fácil':
+        return playable[Random().nextInt(playable.length)];
+      case 'difícil':
+        playable.sort((a, b) => b.total.compareTo(a.total));
+        return playable.first;
+      default:
+        final doubles = playable.where((t) => t.isDouble).toList();
+        if (doubles.isNotEmpty) {
+          doubles.sort((a, b) => a.left.compareTo(b.left));
+          return doubles.first;
+        }
+        playable.sort((a, b) => b.total.compareTo(a.total));
+        return playable.first;
+    }
+  }
+
+  String getCpuPlaySide(DominoTile tile) {
+    if (chain.isEmpty) return 'right';
+    if (tile.canConnectTo(leftOpen!)) return 'left';
+    return 'right';
   }
 
   void startTimer() {
     _stopTimer();
     timeLeft = 30;
-    isTimerActive = true;
-
-    _turnTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    timerActive = true;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       timeLeft--;
       onTimeUpdate?.call();
-
       if (timeLeft <= 0) {
         _stopTimer();
         onTimeOut?.call();
@@ -157,616 +251,9 @@ class DominoVsComputerController {
   }
 
   void _stopTimer() {
-    _turnTimer?.cancel();
-    _turnTimer = null;
-    isTimerActive = false;
-  }
-
-  void handleTimeOut() {
-    if (gameState == GameState.playerTurn) {
-      // Si el jugador no puede jugar, pasa el turno
-      if (!hasAvailableMoves(true)) {
-        lastPlayerCouldPlay = false;
-        turnsWithoutPlay++;
-        checkForBlockedGame();
-
-        if (gameState != GameState.gameOver && gameState != GameState.roundEnd) {
-          gameState = GameState.computerTurn;
-        }
-      } else {
-        // Si tiene jugadas disponibles pero se quedó sin tiempo, pierde la ronda
-        computerRoundWins++;
-        _finishRound(RoundResult.computerWon,
-            playerTiles.fold(0, (sum, tile) => sum + tile.total),
-            computerTiles.fold(0, (sum, tile) => sum + tile.total));
-      }
-    }
-  }
-
-  bool canDrawFromPool() {
-    return canUsePool && poolUsageCount < maxPoolUsage && boneyard.isNotEmpty;
-  }
-
-  bool drawFromPool() {
-    if (!canDrawFromPool()) return false;
-
-    if (boneyard.isNotEmpty) {
-      DominoTile drawnTile = boneyard.removeAt(0);
-      playerTiles.add(drawnTile);
-      poolUsageCount++;
-
-      // Si ya no puede usar más el pool en esta ronda
-      if (poolUsageCount >= maxPoolUsage) {
-        canUsePool = false;
-      }
-
-      return true;
-    }
-    return false;
-  }
-
-  GameState _determineFirstPlayer() {
-    DominoTile? playerHighestDouble;
-    DominoTile? computerHighestDouble;
-
-    for (var tile in playerTiles) {
-      if (tile.isDouble && (playerHighestDouble == null || tile.left > playerHighestDouble.left)) {
-        playerHighestDouble = tile;
-      }
-    }
-
-    for (var tile in computerTiles) {
-      if (tile.isDouble && (computerHighestDouble == null || tile.left > computerHighestDouble.left)) {
-        computerHighestDouble = tile;
-      }
-    }
-
-    if (playerHighestDouble != null && computerHighestDouble != null) {
-      return playerHighestDouble.left > computerHighestDouble.left
-          ? GameState.playerTurn
-          : GameState.computerTurn;
-    }
-
-    if (playerHighestDouble != null) return GameState.playerTurn;
-    if (computerHighestDouble != null) return GameState.computerTurn;
-
-    DominoTile playerHighest = playerTiles.reduce((a, b) => a.total > b.total ? a : b);
-    DominoTile computerHighest = computerTiles.reduce((a, b) => a.total > b.total ? a : b);
-
-    return playerHighest.total >= computerHighest.total
-        ? GameState.playerTurn
-        : GameState.computerTurn;
-  }
-
-  void _createDominoSet() {
-    boneyard.clear();
-
-    int id = 0;
-    for (int i = 0; i <= 6; i++) {
-      for (int j = i; j <= 6; j++) {
-        boneyard.add(DominoTile(
-            left: i,
-            right: j,
-            id: 'tile_${currentRound}_$id'
-        ));
-        id++;
-      }
-    }
-
-    boneyard.shuffle(Random());
-  }
-
-  void _dealTiles() {
-    for (int i = 0; i < 7; i++) {
-      playerTiles.add(boneyard.removeAt(0));
-      computerTiles.add(boneyard.removeAt(0));
-    }
-  }
-
-  bool canPlayTile(DominoTile tile) {
-    if (playedTiles.isEmpty) return true;
-
-    return tile.canConnectTo(leftEnd!) ||
-        tile.canConnectTo(rightEnd!) ||
-        (topEnd != null && tile.canConnectTo(topEnd!)) ||
-        (bottomEnd != null && tile.canConnectTo(bottomEnd!));
-  }
-
-  Direction? getBestDirection(DominoTile tile) {
-    if (playedTiles.isEmpty) return Direction.left;
-
-    List<Direction> validDirections = [];
-
-    // Verificar conexión izquierda
-    if (leftEnd != null && tile.canConnectTo(leftEnd!)) {
-      final leftmostTile = _getLeftmostTile();
-      final newPosition = _calculateNewPosition(leftmostTile, Direction.left);
-      if (_isPositionValid(newPosition, tile.isDouble)) {
-        validDirections.add(Direction.left);
-      }
-    }
-
-    // Verificar conexión derecha
-    if (rightEnd != null && tile.canConnectTo(rightEnd!)) {
-      final rightmostTile = _getRightmostTile();
-      final newPosition = _calculateNewPosition(rightmostTile, Direction.right);
-      if (_isPositionValid(newPosition, tile.isDouble)) {
-        validDirections.add(Direction.right);
-      }
-    }
-
-    // Verificar conexiones verticales (simplificado)
-    if (canCrossNow && playedTiles.length >= 3) {
-      final centerTile = _findCenterDoubleTile();
-      if (centerTile != null) {
-        // Permitir cualquier ficha que conecte con el doble central
-        if (tile.canConnectTo(centerTile.tile.left)) {
-          if (topEnd == null) {
-            final newPosition = Offset(
-                centerTile.position.dx,
-                centerTile.position.dy - DominoVsComputerController.TILE_HEIGHT - DominoVsComputerController.TILE_SPACING
-            );
-            if (_isPositionValid(newPosition, false)) {
-              validDirections.add(Direction.up);
-            }
-          }
-
-          if (bottomEnd == null) {
-            final newPosition = Offset(
-                centerTile.position.dx,
-                centerTile.position.dy + DominoVsComputerController.TILE_HEIGHT + DominoVsComputerController.TILE_SPACING
-            );
-            if (_isPositionValid(newPosition, false)) {
-              validDirections.add(Direction.down);
-            }
-          }
-        }
-      }
-    }
-
-    if (validDirections.isEmpty) return null;
-
-    // Priorizar direcciones horizontales para mejor flujo de juego
-    if (validDirections.contains(Direction.left)) return Direction.left;
-    if (validDirections.contains(Direction.right)) return Direction.right;
-    if (validDirections.contains(Direction.up)) return Direction.up;
-    if (validDirections.contains(Direction.down)) return Direction.down;
-
-    return validDirections.first;
-  }
-
-  int _calculatePointsForDirection(DominoTile tile, Direction direction) {
-    int? newLeft = leftEnd, newRight = rightEnd, newTop = topEnd, newBottom = bottomEnd;
-
-    switch (direction) {
-      case Direction.left:
-        newLeft = tile.getOppositeNumber(leftEnd!);
-        break;
-      case Direction.right:
-        newRight = tile.getOppositeNumber(rightEnd!);
-        break;
-      case Direction.up:
-        final centerTile = _findCenterDoubleTile();
-        if (centerTile != null) {
-          newTop = tile.getOppositeNumber(centerTile.tile.left);
-        }
-        break;
-      case Direction.down:
-        final centerTile = _findCenterDoubleTile();
-        if (centerTile != null) {
-          newBottom = tile.getOppositeNumber(centerTile.tile.left);
-        }
-        break;
-    }
-
-    return _calculatePotentialPoints(newLeft, newRight, newTop, newBottom);
-  }
-
-  PlayedDominoTile? _findCenterDoubleTile() {
-    for (var tile in playedTiles) {
-      if (tile.tile.isDouble &&
-          tile.position.dx > boardWidth * 0.3 &&
-          tile.position.dx < boardWidth * 0.7) {
-        return tile;
-      }
-    }
-    return null;
-  }
-
-  int _calculatePotentialPoints(int? left, int? right, int? top, int? bottom) {
-    int sum = 0;
-    if (left != null) sum += left;
-    if (right != null && right != left) sum += right;
-    if (top != null) sum += top;
-    if (bottom != null) sum += bottom;
-
-    return (sum % 5 == 0 && sum > 0) ? sum : 0;
-  }
-
-  bool _isPositionValid(Offset position, bool isVertical) {
-    double width = isVertical ? TILE_HEIGHT : TILE_WIDTH;
-    double height = isVertical ? TILE_WIDTH : TILE_HEIGHT;
-
-    return position.dx >= BOARD_MARGIN &&
-        position.dx + width <= boardWidth - BOARD_MARGIN &&
-        position.dy >= BOARD_MARGIN &&
-        position.dy + height <= boardHeight - BOARD_MARGIN;
-  }
-
-  bool playTileAutomatically(DominoTile tile) {
-    if (!canPlayTile(tile)) return false;
-
-    Direction? direction = getBestDirection(tile);
-    if (direction == null) return false;
-
-    if (playedTiles.isEmpty) {
-      _playFirstTile(tile, true);
-    } else {
-      _placeTileAtDirection(tile, direction);
-    }
-
-    tile.isPlayed = true;
-    playerTiles.remove(tile);
-
-    turnsWithoutPlay = 0;
-    lastPlayerCouldPlay = true;
-
-    if (playedTiles.length >= 3) {
-      canCrossNow = true;
-    }
-
-    _checkRoundEnd();
-    return true;
-  }
-
-  void _playFirstTile(DominoTile tile, bool isPlayer) {
-    final centerPosition = Offset(
-        (boardWidth / 2) - (TILE_WIDTH / 2),
-        (boardHeight / 2) - (TILE_HEIGHT / 2)
-    );
-
-    // Aplicar nueva regla: dobles verticales, no dobles horizontales
-    bool shouldBeVertical = tile.isDouble;
-
-    playedTiles.add(PlayedDominoTile(
-      tile: tile,
-      isVertical: shouldBeVertical,
-      position: centerPosition,
-      direction: Direction.left,
-      connectingValue: tile.left,
-    ));
-
-    leftEnd = tile.left;
-    rightEnd = tile.right;
-
-    if (tile.isDouble) {
-      topEnd = null;
-      bottomEnd = null;
-    }
-
-    tile.isPlayed = true;
-    isFirstMove = false;
-
-    if (isPlayer) {
-      playerTiles.remove(tile);
-    } else {
-      computerTiles.remove(tile);
-    }
-  }
-
-  void _placeTileAtDirection(DominoTile tile, Direction direction) {
-    Offset newPosition;
-    bool isVertical = false;
-    int connectingValue;
-
-    switch (direction) {
-      case Direction.left:
-        final leftmostTile = _getLeftmostTile();
-        newPosition = _calculateNewPosition(leftmostTile, direction);
-        connectingValue = leftEnd!;
-        leftEnd = tile.getOppositeNumber(connectingValue);
-        // Aplicar nueva regla: dobles verticales, no dobles horizontales
-        isVertical = tile.isDouble;
-        break;
-
-      case Direction.right:
-        final rightmostTile = _getRightmostTile();
-        newPosition = _calculateNewPosition(rightmostTile, direction);
-        connectingValue = rightEnd!;
-        rightEnd = tile.getOppositeNumber(connectingValue);
-        // Aplicar nueva regla: dobles verticales, no dobles horizontales
-        isVertical = tile.isDouble;
-        break;
-
-      case Direction.up:
-        final centerTile = _findCenterDoubleTile()!;
-        newPosition = Offset(
-            centerTile.position.dx,
-            centerTile.position.dy - TILE_HEIGHT - TILE_SPACING
-        );
-        connectingValue = centerTile.tile.left;
-        topEnd = tile.getOppositeNumber(connectingValue);
-        // En dirección vertical siempre son horizontales las fichas conectadas
-        isVertical = false;
-        break;
-
-      case Direction.down:
-        final centerTile = _findCenterDoubleTile()!;
-        newPosition = Offset(
-            centerTile.position.dx,
-            centerTile.position.dy + TILE_HEIGHT + TILE_SPACING
-        );
-        connectingValue = centerTile.tile.left;
-        bottomEnd = tile.getOppositeNumber(connectingValue);
-        // En dirección vertical siempre son horizontales las fichas conectadas
-        isVertical = false;
-        break;
-    }
-
-    playedTiles.add(PlayedDominoTile(
-      tile: tile,
-      isVertical: isVertical,
-      position: newPosition,
-      direction: direction,
-      connectingValue: connectingValue,
-    ));
-  }
-
-  bool hasAvailableMoves(bool isPlayer) {
-    List<DominoTile> tiles = isPlayer ? playerTiles : computerTiles;
-    if (tiles.isEmpty) return false;
-
-    for (var tile in tiles) {
-      if (canPlayTile(tile)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  void checkForBlockedGame() {
-    bool playerCanPlay = hasAvailableMoves(true);
-    bool computerCanPlay = hasAvailableMoves(false);
-
-    if (!playerCanPlay && gameState == GameState.playerTurn) {
-      lastPlayerCouldPlay = false;
-      turnsWithoutPlay++;
-    }
-
-    if (!computerCanPlay && gameState == GameState.computerTurn) {
-      lastComputerCouldPlay = false;
-      turnsWithoutPlay++;
-    }
-
-    if (!playerCanPlay && !computerCanPlay) {
-      _endBlockedRound();
-    }
-
-    if (turnsWithoutPlay >= 2 && !lastPlayerCouldPlay && !lastComputerCouldPlay) {
-      _endBlockedRound();
-    }
-  }
-
-  void _endBlockedRound() {
-    int playerPoints = playerTiles.fold(0, (sum, tile) => sum + tile.total);
-    int computerPoints = computerTiles.fold(0, (sum, tile) => sum + tile.total);
-
-    RoundResult roundResult;
-    if (playerPoints < computerPoints) {
-      roundResult = RoundResult.playerWon;
-      playerRoundWins++;
-    } else if (computerPoints < playerPoints) {
-      roundResult = RoundResult.computerWon;
-      computerRoundWins++;
-    } else {
-      roundResult = RoundResult.blocked;
-    }
-
-    _finishRound(roundResult, playerPoints, computerPoints);
-  }
-
-  void _finishRound(RoundResult result, int playerRemainingPoints, int computerRemainingPoints) {
-    _stopTimer(); // Detener timer al finalizar ronda
-
-    roundHistory.add(RoundInfo(
-      roundNumber: currentRound,
-      result: result,
-      playerPoints: playerRemainingPoints,
-      computerPoints: computerRemainingPoints,
-      playerRemainingTiles: playerTiles.length,
-      computerRemainingTiles: computerTiles.length,
-    ));
-
-    if (currentRound >= maxRounds || playerRoundWins > maxRounds ~/ 2 || computerRoundWins > maxRounds ~/ 2) {
-      _endGame();
-    } else {
-      gameState = GameState.roundEnd;
-    }
-  }
-
-  void _endGame() {
-    _stopTimer(); // Asegurar que el timer esté detenido
-
-    if (playerRoundWins > computerRoundWins) {
-      gameResult = GameResult.playerWins;
-    } else if (computerRoundWins > playerRoundWins) {
-      gameResult = GameResult.computerWins;
-    } else {
-      gameResult = GameResult.draw;
-    }
-    gameState = GameState.gameOver;
-  }
-
-  void startNextRound() {
-    currentRound++;
-    startNewRound();
-  }
-
-  PlayedDominoTile _getLeftmostTile() {
-    return playedTiles.where((t) => t.direction == Direction.left || t.direction == Direction.right)
-        .reduce((a, b) => a.position.dx < b.position.dx ? a : b);
-  }
-
-  PlayedDominoTile _getRightmostTile() {
-    return playedTiles.where((t) => t.direction == Direction.left || t.direction == Direction.right)
-        .reduce((a, b) => a.position.dx > b.position.dx ? a : b);
-  }
-
-  Offset _calculateNewPosition(PlayedDominoTile referenceTile, Direction direction) {
-    double newX, newY;
-
-    switch (direction) {
-      case Direction.left:
-      // Ajustar para fichas dobles que pueden ser verticales
-        double referenceWidth = referenceTile.isVertical ? TILE_HEIGHT : TILE_WIDTH;
-        newX = referenceTile.position.dx - TILE_WIDTH - TILE_SPACING;
-        newY = referenceTile.position.dy;
-        break;
-      case Direction.right:
-      // Ajustar para fichas dobles que pueden ser verticales
-        double referenceWidth = referenceTile.isVertical ? TILE_HEIGHT : TILE_WIDTH;
-        newX = referenceTile.position.dx + referenceWidth + TILE_SPACING;
-        newY = referenceTile.position.dy;
-        break;
-      case Direction.up:
-        newX = referenceTile.position.dx;
-        newY = referenceTile.position.dy - TILE_HEIGHT - TILE_SPACING;
-        break;
-      case Direction.down:
-        newX = referenceTile.position.dx;
-        newY = referenceTile.position.dy + TILE_HEIGHT + TILE_SPACING;
-        break;
-    }
-
-    return Offset(newX, newY);
-  }
-
-  void _checkRoundEnd() {
-    if (playerTiles.isEmpty) {
-      playerRoundWins++;
-      _finishRound(RoundResult.playerWon, 0, computerTiles.fold(0, (sum, tile) => sum + tile.total));
-      return;
-    }
-
-    if (computerTiles.isEmpty) {
-      computerRoundWins++;
-      _finishRound(RoundResult.computerWon, playerTiles.fold(0, (sum, tile) => sum + tile.total), 0);
-      return;
-    }
-
-    checkForBlockedGame();
-  }
-
-  DominoTile? getBestComputerMove() {
-    List<DominoTile> playableTiles = computerTiles.where((tile) => canPlayTile(tile)).toList();
-
-    if (playableTiles.isEmpty) {
-      lastComputerCouldPlay = false;
-      turnsWithoutPlay++;
-      return null;
-    }
-
-    lastComputerCouldPlay = true;
-    turnsWithoutPlay = 0;
-
-    switch (difficulty) {
-      case 'muy fácil':
-        return _getEasyMove(playableTiles);
-      case 'normal':
-        return _getMediumMove(playableTiles);
-      case 'difícil':
-        return _getHardMove(playableTiles);
-      default:
-        return _getMediumMove(playableTiles);
-    }
-  }
-
-  DominoTile _getEasyMove(List<DominoTile> playableTiles) {
-    return playableTiles[Random().nextInt(playableTiles.length)];
-  }
-
-  DominoTile _getMediumMove(List<DominoTile> playableTiles) {
-    List<DominoTile> scoringTiles = [];
-
-    for (var tile in playableTiles) {
-      Direction? direction = getBestDirection(tile);
-      if (direction != null) {
-        int points = _calculatePointsForDirection(tile, direction);
-        if (points > 0) {
-          scoringTiles.add(tile);
-        }
-      }
-    }
-
-    if (scoringTiles.isNotEmpty) {
-      return scoringTiles[Random().nextInt(scoringTiles.length)];
-    }
-
-    // Si no hay fichas que den puntos, jugar la de mayor valor
-    playableTiles.sort((a, b) => b.total.compareTo(a.total));
-    return playableTiles.first;
-  }
-
-  DominoTile _getHardMove(List<DominoTile> playableTiles) {
-    DominoTile? bestTile;
-    int maxPoints = -1;
-
-    for (var tile in playableTiles) {
-      Direction? direction = getBestDirection(tile);
-      if (direction != null) {
-        int points = _calculatePointsForDirection(tile, direction);
-        if (points > maxPoints) {
-          maxPoints = points;
-          bestTile = tile;
-        }
-      }
-    }
-
-    if (bestTile != null && maxPoints > 0) {
-      return bestTile;
-    }
-
-    // Priorizar dobles
-    var doubles = playableTiles.where((tile) => tile.isDouble).toList();
-    if (doubles.isNotEmpty) {
-      doubles.sort((a, b) => b.total.compareTo(a.total));
-      return doubles.first;
-    }
-
-    // Jugar la ficha de mayor valor
-    playableTiles.sort((a, b) => b.total.compareTo(a.total));
-    return playableTiles.first;
-  }
-
-  bool playComputerTile(DominoTile tile) {
-    if (!canPlayTile(tile)) return false;
-
-    Direction? direction = getBestDirection(tile);
-    if (direction == null) return false;
-
-    if (playedTiles.isEmpty) {
-      _playFirstTile(tile, false);
-    } else {
-      _placeTileAtDirection(tile, direction);
-    }
-
-    tile.isPlayed = true;
-    computerTiles.remove(tile);
-
-    turnsWithoutPlay = 0;
-    lastComputerCouldPlay = true;
-
-    if (playedTiles.length >= 3) {
-      canCrossNow = true;
-    }
-
-    _checkRoundEnd();
-    return true;
-  }
-
-  void setBoardDimensions(double width, double height) {
-    boardWidth = width;
-    boardHeight = height;
+    _timer?.cancel();
+    _timer = null;
+    timerActive = false;
   }
 
   void dispose() {
@@ -776,8 +263,13 @@ class DominoVsComputerController {
 
 class DominoVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
+  final String matchType;
 
-  const DominoVsComputerScreen(this.selectedDifficulty, {super.key});
+  const DominoVsComputerScreen(
+    this.selectedDifficulty, {
+    super.key,
+    this.matchType = 'Diversión',
+  });
 
   @override
   State<DominoVsComputerScreen> createState() => _DominoVsComputerScreenState();
@@ -785,907 +277,719 @@ class DominoVsComputerScreen extends StatefulWidget {
 
 class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     with TickerProviderStateMixin {
-  final DominoVsComputerController _controller = DominoVsComputerController();
-  bool _isLoading = false;
-  DateTime? _gameStartTime;
-  User? get currentUser => FirebaseAuth.instance.currentUser;
-  final FirestoreService _firestoreService = FirestoreService();
-  late InterstitialAdHelper _interstitialHelper;
+  final _DominoController _ctrl = _DominoController();
+  final ScrollController _chainScrollCtrl = ScrollController();
+  bool _gameStarted = false;
+  late InterstitialAdHelper _adHelper;
 
-  // Animaciones
-  late AnimationController _pointsAnimationController;
-  late Animation<double> _pointsScaleAnimation;
-  late Animation<double> _pointsOpacityAnimation;
-  String _animatedPoints = '';
-  bool _showPointsAnimation = false;
+  User? get _currentUser => FirebaseAuth.instance.currentUser;
+  final FirestoreService _firestoreService = FirestoreService();
+
+  late AnimationController _cpuTileAnimCtrl;
+  late AnimationController _playerTileAnimCtrl;
+  late Animation<double> _pulseAnim;
+
+  DominoTile? _selectedTile;
+  bool _needsSideChoice = false;
+  bool _isCpuThinking = false;
+  bool _gameEnded = false;
+  int _userDiamonds = 0;
+  int _userCoins = 0;
+
+  static const Color _tableColor = Color(0xFFD4A850);
+  static const Color _panelColor = Color(0xDD1A0800);
+  static const Color _tileColor = Color(0xFFFFF8E1);
+  static const Color _tileBorder = Color(0xFF4A3728);
+  static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
   void initState() {
     super.initState();
 
-    _pointsAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+    _cpuTileAnimCtrl = AnimationController(
       vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+
+    _playerTileAnimCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _playerTileAnimCtrl, curve: Curves.easeInOut),
     );
 
-    _pointsScaleAnimation = Tween<double>(
-      begin: 0.5,
-      end: 1.5,
-    ).animate(CurvedAnimation(
-      parent: _pointsAnimationController,
-      curve: Curves.elasticOut,
-    ));
+    _adHelper = InterstitialAdHelper(showFrequency: 3);
 
-    _pointsOpacityAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.0,
-    ).animate(CurvedAnimation(
-      parent: _pointsAnimationController,
-      curve: const Interval(0.7, 1.0, curve: Curves.easeOut),
-    ));
-
-    // Configurar callbacks del timer
-    _controller.onTimeOut = _handleTimeOut;
-    _controller.onTimeUpdate = () {
+    _ctrl.onTimeUpdate = () {
       if (mounted) setState(() {});
     };
+    _ctrl.onTimeOut = _handleTimeOut;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showRoundSelectionDialog();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadAndDeductGameCost();
+      if (mounted) _showStartDialog();
     });
-    _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
   }
 
   @override
   void dispose() {
-    _pointsAnimationController.dispose();
-    _interstitialHelper.dispose();
-    _controller.dispose();
+    _ctrl.dispose();
+    _chainScrollCtrl.dispose();
+    _cpuTileAnimCtrl.dispose();
+    _playerTileAnimCtrl.dispose();
+    _adHelper.dispose();
     super.dispose();
   }
 
-  void _handleTimeOut() {
-    if (mounted) {
-      _controller.handleTimeOut();
-
-      if (_controller.gameState == GameState.roundEnd) {
-        _showRoundEndDialog();
-      } else if (_controller.gameState == GameState.gameOver) {
-        _showGameOverDialog();
-      } else if (_controller.gameState == GameState.computerTurn) {
-        _showSnack("Se acabó el tiempo. Turno del CPU", isSuccess: false);
-        _checkComputerTurn();
-      }
-
-      setState(() {});
-    }
-  }
-
-  void _showRoundSelectionDialog() {
-    _interstitialHelper.showAdIfReady(onComplete: () {
+  void _showStartDialog() {
+    _adHelper.showAdIfReady(onComplete: () {
+      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: Text('Selecciona las rondas'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('¿Al mejor de cuántas rondas quieres jugar?',
-                  style: TextStyle(fontSize: 16)),
-              SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildRoundButton(3),
-                  _buildRoundButton(5),
-                  _buildRoundButton(7),
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Dominó vs CPU',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: _accentOrange,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Dificultad: ${widget.selectedDifficulty}',
+                  style: const TextStyle(fontSize: 14, color: Colors.black54),
+                ),
+                if (widget.matchType == 'Apuesta') ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Apuesta: ${_getGameCost()} 💎 — Premio: ${(_getGameCost() * 2 * 0.9).floor()} 💎',
+                    style: const TextStyle(fontSize: 13, color: _accentOrange, fontWeight: FontWeight.w600),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Costo: ${_getGameCost()} 🪙 — Premio: ${(_getGameCost() * 2 * 0.9).floor()} 🪙',
+                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  ),
                 ],
-              ),
-            ],
+                const SizedBox(height: 20),
+                Text(
+                  '¿Meta de puntos?',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [50, 100, 150, 200].map((pts) {
+                    return ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _startGame(pts);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accentOrange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      child: Text('$pts\npuntos', textAlign: TextAlign.center),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
           ),
         ),
       );
     });
   }
 
-  Widget _buildRoundButton(int rounds) {
-    return ElevatedButton(
-      onPressed: () {
-        Navigator.pop(context);
-        _initializeGameWithDimensions(rounds);
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const ui.Color(0xFFEC7A34),
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-      child: Text(
-        'Mejor\nde $rounds',
-        textAlign: TextAlign.center,
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  void _initializeGameWithDimensions(int maxRounds) {
-    final size = MediaQuery.of(context).size;
-    // Aumentar significativamente el área del tablero
-    _controller.setBoardDimensions(size.width - 20, 350); // Más ancho y más alto
-    _controller.initializeGame(
-      selectedDifficulty: widget.selectedDifficulty,
-      selectedMaxRounds: maxRounds,
-    );
-    _gameStartTime = DateTime.now();
-    setState(() {});
-
-    if (_controller.gameState == GameState.computerTurn) {
-      _checkComputerTurn();
-    } else if (_controller.gameState == GameState.playerTurn) {
-      _controller.startTimer();
+  void _startGame(int target) {
+    _ctrl.init(diff: widget.selectedDifficulty, target: target);
+    setState(() {
+      _gameStarted = true;
+      _selectedTile = null;
+      _needsSideChoice = false;
+    });
+    if (_ctrl.phase == _GamePhase.cpuTurn) {
+      _scheduleCpuTurn();
+    } else {
+      _ctrl.startTimer();
     }
   }
 
-  void _checkComputerTurn() async {
-    if (_controller.gameState == GameState.computerTurn) {
-      // Delay basado en la dificultad
-      int delayMs = 200; // base
-      switch (_controller.difficulty) {
-        case 'muy fácil':
-          delayMs = 200;
-          break;
-        case 'normal':
-          delayMs = 300;
-          break;
-        case 'difícil':
-          delayMs = 400;
-          break;
+  void _handleTimeOut() {
+    if (!mounted) return;
+    if (_ctrl.phase == _GamePhase.playerTurn) {
+      _passPlayerTurn();
+    }
+  }
+
+  void _onTileTap(DominoTile tile) {
+    if (_ctrl.phase != _GamePhase.playerTurn) return;
+    if (!_ctrl.canPlay(tile)) {
+      if (_ctrl.chain.isEmpty && _ctrl.openingDoubleValue != -1) {
+        _showSnack('Debes abrir con el doble ${_ctrl.openingDoubleValue}-${_ctrl.openingDoubleValue}', success: false);
+      } else {
+        _showSnack('Esta ficha no conecta con los extremos disponibles', success: false);
       }
-      await Future.delayed(Duration(milliseconds: delayMs));
-      _makeComputerMove();
+      return;
+    }
+
+    setState(() {
+      _selectedTile = tile;
+    });
+
+    if (_ctrl.chain.isEmpty) {
+      _placeSelectedTile('right');
+      return;
+    }
+
+    final canLeft = tile.canConnectTo(_ctrl.leftOpen!);
+    final canRight = tile.canConnectTo(_ctrl.rightOpen!);
+
+    _placeSelectedTile(canRight ? 'right' : 'left');
+  }
+
+  void _placeSelectedTile(String side) {
+    final tile = _selectedTile;
+    if (tile == null) return;
+
+    _ctrl._stopTimer();
+    final played = _ctrl.playTile(tile, side);
+    if (!played) {
+      setState(() {
+        _selectedTile = null;
+        _needsSideChoice = false;
+      });
+      return;
+    }
+
+    _ctrl.playerHand.remove(tile);
+
+    final roundResult = _ctrl.checkRoundEnd();
+
+    setState(() {
+      _selectedTile = null;
+      _needsSideChoice = false;
+    });
+
+    if (roundResult != null) {
+      _handleRoundEnd(roundResult);
+    } else {
+      setState(() => _ctrl.phase = _GamePhase.cpuTurn);
+      _scheduleCpuTurn();
+    }
+
+    _scrollChainToEnd();
+  }
+
+  void _drawFromBoneyard() {
+    if (_ctrl.phase != _GamePhase.playerTurn) return;
+    if (_ctrl.boneyard.isEmpty) {
+      _showSnack('El pozo está vacío');
+      return;
+    }
+    if (_ctrl.canPlayerPlayAny()) {
+      _showSnack('Tienes fichas que puedes jugar');
+      return;
+    }
+    setState(() {
+      _ctrl.drawFromBoneyard(true);
+    });
+    if (_ctrl.canPlayerPlayAny()) {
+      _showSnack('¡Ficha tomada! Ahora puedes jugar', success: true);
+    } else {
+      _showSnack('Sin opciones, pasa tu turno');
     }
   }
 
-  void _makeComputerMove() async {
-    setState(() => _isLoading = true);
+  void _passPlayerTurn() {
+    if (_ctrl.phase != _GamePhase.playerTurn) return;
+    _ctrl._stopTimer();
+    _ctrl.consecutivePasses++;
 
-    final computerMove = _controller.getBestComputerMove();
+    final roundResult = _ctrl.checkRoundEnd();
+    if (roundResult != null) {
+      _handleRoundEnd(roundResult);
+    } else {
+      setState(() => _ctrl.phase = _GamePhase.cpuTurn);
+      _scheduleCpuTurn();
+    }
+  }
 
-    if (computerMove != null) {
-      bool played = _controller.playComputerTile(computerMove);
+  void _scheduleCpuTurn() {
+    setState(() => _isCpuThinking = true);
 
-      if (played) {
-        setState(() {
-          if (_controller.gameState != GameState.roundEnd && _controller.gameState != GameState.gameOver) {
-            _controller.gameState = GameState.playerTurn;
-            _controller.startTimer(); // Iniciar timer para jugador
+    final delay = widget.selectedDifficulty == 'muy fácil'
+        ? 1200
+        : widget.selectedDifficulty == 'difícil'
+            ? 600
+            : 900;
+
+    Future.delayed(Duration(milliseconds: delay), () {
+      if (!mounted) return;
+      _makeCpuMove();
+    });
+  }
+
+  void _makeCpuMove() {
+    if (!mounted) return;
+
+    final bestTile = _ctrl.getBestCpuMove();
+
+    if (bestTile != null) {
+      final side = _ctrl.getCpuPlaySide(bestTile);
+      _ctrl.playTile(bestTile, side);
+      _ctrl.cpuHand.remove(bestTile);
+
+      final roundResult = _ctrl.checkRoundEnd();
+
+      setState(() => _isCpuThinking = false);
+
+      if (roundResult != null) {
+        _handleRoundEnd(roundResult);
+      } else {
+        setState(() => _ctrl.phase = _GamePhase.playerTurn);
+        _ctrl.startTimer();
+      }
+      _scrollChainToEnd();
+    } else {
+      if (_ctrl.boneyard.isNotEmpty && !_ctrl.canCpuPlayAny()) {
+        _ctrl.drawFromBoneyard(false);
+        setState(() {});
+        if (!_ctrl.canCpuPlayAny()) {
+          _ctrl.consecutivePasses++;
+          final roundResult = _ctrl.checkRoundEnd();
+          setState(() => _isCpuThinking = false);
+          if (roundResult != null) {
+            _handleRoundEnd(roundResult);
+            return;
           }
-        });
-      }
-    } else {
-      _controller.checkForBlockedGame();
-
-      if (_controller.gameState == GameState.roundEnd) {
-        _showRoundEndDialog();
-      } else if (_controller.gameState == GameState.gameOver) {
-        _showGameOverDialog();
-      } else if (_controller.gameState != GameState.gameOver) {
-        setState(() {
-          _controller.gameState = GameState.playerTurn;
-          _controller.startTimer(); // Iniciar timer para jugador
-        });
-        _showSnack("CPU no puede jugar, es tu turno");
-      }
-    }
-
-    setState(() => _isLoading = false);
-
-    if (_controller.gameState == GameState.roundEnd) {
-      _showRoundEndDialog();
-    } else if (_controller.gameState == GameState.gameOver) {
-      _showGameOverDialog();
-    }
-  }
-
-  void _onTileSelected(DominoTile tile) {
-    if (_controller.gameState != GameState.playerTurn) return;
-
-    // Verificar si la ficha se puede jugar
-    if (!_controller.canPlayTile(tile)) {
-      // Mostrar mensaje más específico sobre por qué no se puede jugar
-      String message = _getCannotPlayMessage(tile);
-      _showSnack(message);
-      return;
-    }
-
-    // Intentar obtener la dirección óptima
-    Direction? direction = _controller.getBestDirection(tile);
-    if (direction == null) {
-      _showSnack("No hay espacio disponible para colocar esta ficha");
-      return;
-    }
-
-    bool played = _controller.playTileAutomatically(tile);
-
-    if (played) {
-      _controller._stopTimer(); // Detener timer del jugador
-      setState(() {
-        _controller.gameState = GameState.computerTurn;
-      });
-
-      if (_controller.gameState == GameState.roundEnd) {
-        _showRoundEndDialog();
-      } else if (_controller.gameState == GameState.gameOver) {
-        _showGameOverDialog();
-      } else {
-        _checkComputerTurn();
-      }
-    } else {
-      _showSnack("Error interno al colocar la ficha. Intenta otra.");
-    }
-  }
-
-  String _getCannotPlayMessage(DominoTile tile) {
-    if (_controller.playedTiles.isEmpty) {
-      return "Puedes jugar cualquier ficha para empezar";
-    }
-
-    List<int> availableEnds = [];
-    if (_controller.leftEnd != null) availableEnds.add(_controller.leftEnd!);
-    if (_controller.rightEnd != null) availableEnds.add(_controller.rightEnd!);
-    if (_controller.topEnd != null) availableEnds.add(_controller.topEnd!);
-    if (_controller.bottomEnd != null) availableEnds.add(_controller.bottomEnd!);
-
-    return "Esta ficha (${tile.left}|${tile.right}) no conecta con los extremos disponibles: ${availableEnds.join(', ')}";
-  }
-
-
-  void _drawFromPool() {
-    if (!_controller.canDrawFromPool()) {
-      if (_controller.poolUsageCount >= _controller.maxPoolUsage) {
-        _showSnack("Ya usaste el pool ${_controller.maxPoolUsage} veces en esta ronda");
-      } else {
-        _showSnack("No hay fichas en el pool");
-      }
-      return;
-    }
-
-    bool drawn = _controller.drawFromPool();
-    if (drawn) {
-      setState(() {});
-      _showSnack("Ficha tomada del pool. Usos restantes: ${_controller.maxPoolUsage - _controller.poolUsageCount}",
-          isSuccess: true);
-    }
-  }
-
-  void _passTurn() {
-    if (_controller.gameState != GameState.playerTurn) return;
-
-    if (!_controller.hasAvailableMoves(true)) {
-      _controller._stopTimer(); // Detener timer del jugador
-      setState(() {
-        _controller.lastPlayerCouldPlay = false;
-        _controller.turnsWithoutPlay++;
-        _controller.checkForBlockedGame();
-
-        if (_controller.gameState == GameState.roundEnd) {
-          _showRoundEndDialog();
-        } else if (_controller.gameState == GameState.gameOver) {
-          _showGameOverDialog();
-        } else if (_controller.gameState != GameState.gameOver) {
-          _controller.gameState = GameState.computerTurn;
-          _showSnack("Turno pasado al CPU");
-          _checkComputerTurn();
+        } else {
+          _makeCpuMove();
+          return;
         }
+      } else {
+        _ctrl.consecutivePasses++;
+        final roundResult = _ctrl.checkRoundEnd();
+        setState(() => _isCpuThinking = false);
+        if (roundResult != null) {
+          _handleRoundEnd(roundResult);
+          return;
+        }
+      }
+      setState(() {
+        _isCpuThinking = false;
+        _ctrl.phase = _GamePhase.playerTurn;
       });
-    } else {
-      _showSnack("Tienes jugadas disponibles");
+      _ctrl.startTimer();
+      _showSnack('CPU pasó. ¡Tu turno!', success: true);
     }
   }
 
-  void _showRoundEndDialog() {
-    _controller._stopTimer(); // Asegurar que el timer esté detenido
-    final lastRound = _controller.roundHistory.last;
-    String title;
-    String message;
+  void _handleRoundEnd(_RoundResult result) {
+    if (_ctrl.isGameOver()) {
+      _handleGameOver();
+      return;
+    }
 
-    switch (lastRound.result) {
-      case RoundResult.playerWon:
-        title = "¡Ronda ganada!";
-        message = 'Has ganado la ronda ${lastRound.roundNumber}\n'
-            'Puntos restantes: Tú ${lastRound.playerPoints} - CPU ${lastRound.computerPoints}\n'
-            'Marcador: ${_controller.playerRoundWins} - ${_controller.computerRoundWins}';
+    String msg;
+    switch (result) {
+      case _RoundResult.playerWon:
+        msg = '¡Ganaste la ronda!\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}';
         break;
-      case RoundResult.computerWon:
-        title = "Ronda perdida";
-        message = 'El CPU ganó la ronda ${lastRound.roundNumber}\n'
-            'Puntos restantes: CPU ${lastRound.computerPoints} - Tú ${lastRound.playerPoints}\n'
-            'Marcador: ${_controller.playerRoundWins} - ${_controller.computerRoundWins}';
+      case _RoundResult.cpuWon:
+        msg = 'CPU ganó la ronda\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}';
         break;
-      case RoundResult.blocked:
-        title = "Ronda empatada";
-        message = 'Ronda ${lastRound.roundNumber} bloqueada\n'
-            'Puntos iguales: ${lastRound.playerPoints}\n'
-            'Marcador: ${_controller.playerRoundWins} - ${_controller.computerRoundWins}';
+      case _RoundResult.blocked:
+        msg = 'Ronda bloqueada\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}';
         break;
     }
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          result == _RoundResult.playerWon ? '🏆 Ronda ganada' : result == _RoundResult.cpuWon ? '😞 Ronda perdida' : '🤝 Bloqueado',
+          textAlign: TextAlign.center,
+        ),
+        content: Text(msg, textAlign: TextAlign.center),
         actions: [
-          if (_controller.currentRound < _controller.maxRounds &&
-              _controller.playerRoundWins <= _controller.maxRounds ~/ 2 &&
-              _controller.computerRoundWins <= _controller.maxRounds ~/ 2)
-            TextButton(
+          Center(
+            child: ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(ctx);
                 setState(() {
-                  _controller.startNextRound();
-                  if (_controller.gameState == GameState.computerTurn) {
-                    _checkComputerTurn();
-                  } else if (_controller.gameState == GameState.playerTurn) {
-                    _controller.startTimer();
-                  }
+                  _ctrl.startNextRound();
+                  _selectedTile = null;
+                  _needsSideChoice = false;
                 });
+                if (_ctrl.phase == _GamePhase.cpuTurn) {
+                  _scheduleCpuTurn();
+                } else {
+                  _ctrl.startTimer();
+                }
               },
-              child: Text("Siguiente ronda"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accentOrange,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Siguiente ronda'),
             ),
-          if (_controller.currentRound >= _controller.maxRounds ||
-              _controller.playerRoundWins > _controller.maxRounds ~/ 2 ||
-              _controller.computerRoundWins > _controller.maxRounds ~/ 2)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showGameOverDialog();
-              },
-              child: Text("Ver resultado final"),
-            ),
+          ),
         ],
       ),
     );
   }
 
-  Future<void> _recordGameResult(GameResult dominoResult) async {
-    if (currentUser == null) {
-      return;
-    }
-
-    if (_gameStartTime == null) {
-      return;
-    }
-
-    try {
-      final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
-      GameResultModel gameResultModel;
-      int pointsEarned = 0;
-
-      switch (dominoResult) {
-        case GameResult.playerWins:
-          gameResultModel = GameResultModel.win;
-          pointsEarned = 20 + (_controller.playerRoundWins * 5);
-          break;
-        case GameResult.computerWins:
-          gameResultModel = GameResultModel.loss;
-          pointsEarned = -8 + (_controller.playerRoundWins * 2);
-          break;
-        case GameResult.draw:
-          gameResultModel = GameResultModel.draw;
-          pointsEarned = 10;
-          break;
-        case GameResult.none:
-          return;
-      }
-
-      // Ajustar puntos según dificultad
-      switch (widget.selectedDifficulty.toLowerCase()) {
-        case 'muy fácil':
-          pointsEarned = (pointsEarned * 0.7).round();
-          break;
-        case 'normal':
-          break;
-        case 'difícil':
-          pointsEarned = (pointsEarned * 1.4).round();
-          break;
-      }
-
-      final success = await _firestoreService.recordGameMatch(
-        userId: currentUser!.uid,
-        gameType: GameTypeModel.domino,
-        result: gameResultModel,
-        pointsEarned: pointsEarned,
-        durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName: 'CPU (${widget.selectedDifficulty})',
-        additionalData: {
-          'difficulty': widget.selectedDifficulty,
-          'gameMode': 'vs_computer_rounds',
-          'totalRounds': _controller.maxRounds,
-          'roundsWon': _controller.playerRoundWins,
-          'roundsLost': _controller.computerRoundWins,
-          'roundHistory': _controller.roundHistory.map((r) => {
-            'round': r.roundNumber,
-            'result': r.result.toString(),
-            'playerPoints': r.playerPoints,
-            'computerPoints': r.computerPoints,
-            'playerTiles': r.playerRemainingTiles,
-            'computerTiles': r.computerRemainingTiles,
-          }).toList(),
-        },
-      );
-
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error al registrar la partida: $e');
-      }
-      if (mounted && currentUser != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al guardar el resultado de la partida'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  void _showGameOverDialog() {
-    _controller._stopTimer(); // Asegurar que el timer esté detenido
-    String title;
-    String message;
-
-    switch (_controller.gameResult) {
-      case GameResult.playerWins:
-        title = "¡Felicidades!";
-        message = '¡Has ganado el juego!\n'
-            'Marcador final: ${_controller.playerRoundWins} - ${_controller.computerRoundWins}\n'
-            'Total de rondas: ${_controller.roundHistory.length}';
-        break;
-      case GameResult.computerWins:
-        title = "Fin del juego";
-        message = 'El CPU ha ganado el juego\n'
-            'Marcador final: ${_controller.computerRoundWins} - ${_controller.playerRoundWins}\n'
-            'Total de rondas: ${_controller.roundHistory.length}';
-        break;
-      case GameResult.draw:
-        title = "¡Empate!";
-        message = 'Juego empatado\n'
-            'Marcador final: ${_controller.playerRoundWins} - ${_controller.computerRoundWins}\n'
-            'Total de rondas: ${_controller.roundHistory.length}';
-        break;
-      default:
-        return;
-    }
-
-    _recordGameResult(_controller.gameResult);
+  void _handleGameOver() {
+    final playerWon = _ctrl.playerScore > _ctrl.cpuScore;
+    _recordResult(playerWon);
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(title),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        title: Text(
+          playerWon ? '🏆 ¡Ganaste!' : '😞 Juego terminado',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: playerWon ? _accentOrange : Colors.red[700],
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message),
-            SizedBox(height: 16),
-            Text('Historial de rondas:',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            ..._controller.roundHistory.map((round) {
-              String resultText;
-              Color resultColor;
-              switch (round.result) {
-                case RoundResult.playerWon:
-                  resultText = 'Ganaste';
-                  resultColor = Colors.green;
-                  break;
-                case RoundResult.computerWon:
-                  resultText = 'Perdiste';
-                  resultColor = Colors.red;
-                  break;
-                case RoundResult.blocked:
-                  resultText = 'Empate';
-                  resultColor = Colors.orange;
-                  break;
-              }
-              return Text(
-                'Ronda ${round.roundNumber}: $resultText (${round.playerPoints}-${round.computerPoints})',
-                style: TextStyle(color: resultColor, fontSize: 12),
-              );
-            }),
+            Text(
+              'Puntuación final\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Meta: ${_ctrl.targetScore} puntos',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            if (widget.matchType == 'Apuesta' && playerWon) ...[
+              const SizedBox(height: 12),
+              Text(
+                '+${(_getGameCost() * 2 * 0.9).floor()} 💎',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _accentOrange),
+              ),
+            ],
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _showRoundSelectionDialog();
-            },
-            child: Text("Nueva partida"),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: Text("Volver"),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Salir'),
+                ),
+              ),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    setState(() => _gameEnded = false);
+                    if (widget.matchType == 'Apuesta') {
+                      await _loadAndDeductGameCost();
+                      if (mounted) _showStartDialog();
+                    } else {
+                      _showStartDialog();
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accentOrange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Nueva partida'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  void _showSnack(String msg, {bool isSuccess = false}) {
+  int _getGameCost() => widget.matchType == 'Apuesta' ? 25 : 100;
+
+  Future<void> _loadAndDeductGameCost() async {
+    if (_currentUser == null) return;
+    try {
+      final userData = await _firestoreService.getUser(_currentUser!.uid);
+      if (userData == null || !mounted) return;
+
+      final isBet = widget.matchType == 'Apuesta';
+      final cost = _getGameCost();
+
+      if (isBet) {
+        if (userData.diamonds < cost) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Diamantes insuficientes (necesitas $cost 💎)'), backgroundColor: Colors.red),
+            );
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+        final newDiamonds = userData.diamonds - cost;
+        await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
+        if (mounted) setState(() => _userDiamonds = newDiamonds);
+      } else {
+        if (userData.coins < cost) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Monedas insuficientes (necesitas $cost 🪙)'), backgroundColor: Colors.red),
+            );
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+        final newCoins = userData.coins - cost;
+        await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
+        if (mounted) setState(() => _userCoins = newCoins);
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error deducting domino game cost: $e');
+    }
+  }
+
+  Future<void> _recordResult(bool playerWon) async {
+    if (_currentUser == null) return;
+    setState(() => _gameEnded = true);
+    try {
+      final isBet = widget.matchType == 'Apuesta';
+      final gameCost = _getGameCost();
+
+      if (playerWon) {
+        final prize = (gameCost * 2 * 0.9).floor();
+        final userData = await _firestoreService.getUser(_currentUser!.uid);
+        if (userData != null && mounted) {
+          if (isBet) {
+            final newDiamonds = userData.diamonds + prize;
+            await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
+            if (mounted) setState(() => _userDiamonds = newDiamonds);
+          } else {
+            final newCoins = userData.coins + prize;
+            await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
+            if (mounted) setState(() => _userCoins = newCoins);
+          }
+        }
+      }
+
+      await _firestoreService.recordGameMatch(
+        userId: _currentUser!.uid,
+        gameType: GameTypeModel.domino,
+        result: playerWon ? GameResultModel.win : GameResultModel.loss,
+        pointsEarned: playerWon ? 20 : -5,
+        durationMinutes: 10,
+        opponentName: 'CPU (${widget.selectedDifficulty})',
+        additionalData: {
+          'playerScore': _ctrl.playerScore,
+          'cpuScore': _ctrl.cpuScore,
+          'matchType': widget.matchType,
+          'gameCost': gameCost,
+          'currencyType': isBet ? 'diamonds' : 'coins',
+        },
+      );
+    } catch (e) {
+      if (kDebugMode) print('Error recording domino result: $e');
+    }
+  }
+
+  void _scrollChainToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_chainScrollCtrl.hasClients) {
+        _chainScrollCtrl.animateTo(
+          _chainScrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _showSnack(String msg, {bool success = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: isSuccess ? Colors.green : Colors.redAccent,
+        backgroundColor: success ? Colors.green[700] : Colors.red[700],
         behavior: SnackBarBehavior.floating,
         duration: const Duration(milliseconds: 1500),
       ),
     );
   }
 
-  Widget _buildPlayerAvatar() {
-    if (currentUser?.photoURL != null) {
-      return CircleAvatar(
-        radius: 20,
-        backgroundColor: Colors.grey[300],
-        backgroundImage: NetworkImage(currentUser!.photoURL!),
-        onBackgroundImageError: (exception, stackTrace) {},
-        child: currentUser!.photoURL == null
-            ? const Icon(Icons.person, color: Colors.white, size: 20)
-            : null,
-      );
-    } else {
-      return CircleAvatar(
-        radius: 20,
-        backgroundColor: Colors.white,
-        child: const Icon(Icons.person, color: Colors.black, size: 20),
-      );
-    }
-  }
-
-  Widget _buildCpuAvatar() {
-    return CircleAvatar(
-      radius: 20,
-      backgroundColor: Colors.grey[700],
-      child: const Icon(Icons.smart_toy, color: Colors.white, size: 20),
-    );
-  }
-
-  Widget _buildTimerWidget() {
-    if (!_controller.isTimerActive) return SizedBox.shrink();
-
-    Color timerColor = _controller.timeLeft <= 10 ? Colors.red :
-    _controller.timeLeft <= 20 ? Colors.orange : Colors.green;
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: timerColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha:0.3),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text(
-            '${_controller.timeLeft}s',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const ui.Color(0xFFEC7A34),
-      appBar: AppBar(
-        backgroundColor: const ui.Color(0xFFEC7A34),
-        elevation: 0,
-        title: Text(
-          'Dominó - Estilo Domino Go',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            onPressed: () => _showRoundSelectionDialog(),
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Timer
-            if (_controller.gameState == GameState.playerTurn && _controller.isTimerActive)
+    final isBetMode = widget.matchType == 'Apuesta';
+    return PopScope(
+      canPop: !isBetMode || _gameEnded,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && isBetMode && !_gameEnded) {
+          _showSnack('No puedes salir en modo apuesta hasta terminar la partida');
+        }
+      },
+      child: Scaffold(
+        backgroundColor: _tableColor,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF3E2007),
+          elevation: 0,
+          title: Row(
+            children: [
+              const Icon(Icons.sports_esports, color: Colors.white70, size: 20),
+              const SizedBox(width: 8),
+              const Text('Dominó', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Center(child: _buildTimerWidget()),
-              ),
-
-            // Marcador de rondas mejorado
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.white, Colors.grey[100]!],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Ronda ${_controller.currentRound} de ${_controller.maxRounds}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildScoreDisplay(
-                        'CPU',
-                        _controller.computerRoundWins,
-                        _controller.gameState == GameState.computerTurn,
-                        _buildCpuAvatar(),
-                        true,
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const ui.Color(0xFFEC7A34),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'VS',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      _buildScoreDisplay(
-                        currentUser?.displayName ?? 'Tú',
-                        _controller.playerRoundWins,
-                        _controller.gameState == GameState.playerTurn,
-                        _buildPlayerAvatar(),
-                        true,
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Fichas restantes: ',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                      Text(
-                        'CPU ${_controller.computerTiles.length}',
-                        style: TextStyle(fontSize: 12, color: Colors.red[600]),
-                      ),
-                      Text(' - ', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                      Text(
-                        'Tú ${_controller.playerTiles.length}',
-                        style: TextStyle(fontSize: 12, color: Colors.blue[600]),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  // Pool info
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.view_in_ar, size: 16, color: Colors.black54),
-                      SizedBox(width: 4),
-                      Text(
-                        'Pool: ${_controller.boneyard.length} fichas',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                      SizedBox(width: 16),
-                      Icon(Icons.casino, size: 16, color: Colors.black54),
-                      SizedBox(width: 4),
-                      Text(
-                        'Usos pool: ${_controller.poolUsageCount}/${_controller.maxPoolUsage}',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Dificultad: ${widget.selectedDifficulty}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.black54,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Área de juego expandida
-            Expanded(
-              flex: 3, // Cambiar de 2 a 3 para más espacio
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 10), // Reducir margen para más espacio
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.green[900]!, Colors.green[700]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white38, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: _buildPlayArea(),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Botones de acción
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Botón de pool
-                  if (_controller.gameState == GameState.playerTurn)
-                    ElevatedButton.icon(
-                      onPressed: _controller.canDrawFromPool() ? _drawFromPool : null,
-                      icon: Icon(Icons.casino),
-                      label: Text('Pool'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _controller.canDrawFromPool() ? Colors.blue[700] : Colors.grey,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                    ),
-
-                  // Botón de pasar turno
-                  if (_controller.gameState == GameState.playerTurn &&
-                      !_controller.hasAvailableMoves(true))
-                    ElevatedButton.icon(
-                      onPressed: _passTurn,
-                      icon: Icon(Icons.skip_next),
-                      label: Text('Pasar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange[700],
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // Fichas del jugador con altura reducida
-            Container(
-              height: 100, // Reducir de 110 a 100 para dar más espacio al tablero
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.brown[900]!, Colors.brown[700]!],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                child: Text(
+                  isBetMode ? 'Apuesta 💎' : widget.selectedDifficulty,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white38, width: 3),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
               ),
-              child: _buildPlayerTiles(),
-            ),
-
-            const SizedBox(height: 16),
+            ],
+          ),
+          iconTheme: const IconThemeData(color: Colors.white),
+          actions: [
+            if (_gameStarted && !isBetMode)
+              TextButton(
+                onPressed: _showStartDialog,
+                child: const Text('Nueva', style: TextStyle(color: Colors.white70)),
+              ),
           ],
         ),
+        body: _gameStarted
+            ? Stack(children: [
+                Positioned.fill(child: CustomPaint(painter: _WoodGrainPainter())),
+                _buildGame(),
+              ])
+            : _buildEmpty(),
       ),
     );
   }
 
-  Widget _buildScoreDisplay(String name, int score, bool isActive, Widget avatar, bool isRounds) {
+  Widget _buildEmpty() {
+    return const Center(
+      child: CircularProgressIndicator(color: Colors.white),
+    );
+  }
+
+  Widget _buildGame() {
+    return SafeArea(
+      child: Column(
+        children: [
+          _buildScoreBar(),
+          _buildCpuArea(),
+          const SizedBox(height: 4),
+          _buildChainArea(),
+          const SizedBox(height: 4),
+          _buildBoneyardBar(),
+          const SizedBox(height: 4),
+          _buildActionButtons(),
+          _buildPlayerArea(),
+          if (_needsSideChoice) _buildSideChoiceBar(),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScoreBar() {
+    final isPlayerTurn = _ctrl.phase == _GamePhase.playerTurn;
     return Container(
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        gradient: isActive
-            ? LinearGradient(colors: [Colors.green[200]!, Colors.green[100]!])
-            : null,
-        borderRadius: BorderRadius.circular(12),
-        border: isActive ? Border.all(color: Colors.green, width: 3) : null,
-        boxShadow: isActive ? [
-          BoxShadow(
-            color: Colors.green.withValues(alpha: 0.3),
-            blurRadius: 8,
-            spreadRadius: 2,
+        color: _panelColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        children: [
+          _buildPlayerScore('CPU', _ctrl.cpuScore, !isPlayerTurn && _isCpuThinking, _buildCpuAvatar()),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  'Meta: ${_ctrl.targetScore}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+                Text(
+                  'Ronda ${_ctrl.roundNumber}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                if (_ctrl.timerActive && isPlayerTurn)
+                  Text(
+                    '⏱ ${_ctrl.timeLeft}s',
+                    style: TextStyle(
+                      color: _ctrl.timeLeft <= 10 ? Colors.red[300] : Colors.green[300],
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ] : null,
+          _buildPlayerScore('Tú', _ctrl.playerScore, isPlayerTurn, _buildUserAvatar()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerScore(String name, int score, bool isActive, Widget avatar) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.white12 : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           avatar,
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
+          Text(name, style: const TextStyle(color: Colors.white70, fontSize: 11)),
           Text(
-            name,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            isRounds ? '$score rondas' : '$score pts',
+            '$score',
             style: TextStyle(
+              color: isActive ? _accentOrange : Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: isActive ? Colors.green[700] : Colors.black87,
             ),
           ),
         ],
@@ -1693,285 +997,539 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     );
   }
 
-  Widget _buildPlayArea() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Stack(
-        children: [
-          if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 4,
-              ),
-            ),
+  Widget _buildCpuAvatar() {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: Colors.grey[700],
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.smart_toy, color: Colors.white, size: 18),
+    );
+  }
 
-          if (_controller.playedTiles.isEmpty && !_isLoading)
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildUserAvatar() {
+    final photoUrl = _currentUser?.photoURL;
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: Colors.grey[600],
+      backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+      child: photoUrl == null ? const Icon(Icons.person, color: Colors.white, size: 18) : null,
+    );
+  }
+
+  Widget _buildCpuArea() {
+    return Container(
+      height: 68,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: _panelColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: _isCpuThinking
+          ? const Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.touch_app,
-                    color: Colors.white70,
-                    size: 48,
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
                   ),
-                  SizedBox(height: 12),
-                  Text(
-                    _controller.gameState == GameState.playerTurn
-                        ? 'Selecciona una ficha para jugar'
-                        : 'Esperando jugada del CPU...',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  SizedBox(width: 8),
+                  Text('CPU pensando...', style: TextStyle(color: Colors.white54, fontSize: 13)),
                 ],
               ),
-            ),
-
-          // Fichas jugadas
-          ..._controller.playedTiles.map((playedTile) => Positioned(
-            left: playedTile.position.dx,
-            top: playedTile.position.dy,
-            child: _buildDominoTile(
-              playedTile.tile,
-              isInPlay: true,
-              isVertical: playedTile.isVertical,
-            ),
-          )),
-
-          // Indicador de estado del juego
-          if (_controller.gameState == GameState.playerTurn &&
-              !_controller.hasAvailableMoves(true) &&
-              _controller.playedTiles.isNotEmpty)
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.orange[600]!, Colors.red[500]!],
-                  ),
-                  borderRadius: BorderRadius.circular(25),
-                  border: Border.all(color: Colors.white, width: 2),
+            )
+          : ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              children: List.generate(
+                _ctrl.cpuHand.length,
+                (i) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: _buildFaceDownTile(width: 28, height: 48),
                 ),
-                child: Row(
+              ),
+            ),
+    );
+  }
+
+  Widget _buildChainArea() {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: _ctrl.chain.isEmpty
+            ? Center(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.block, color: Colors.white, size: 16),
-                    SizedBox(width: 8),
-                    const Text(
-                      'Sin jugadas - Pasa turno',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Icon(Icons.touch_app, color: Colors.white38, size: 36),
+                    const SizedBox(height: 8),
+                    Text(
+                      _ctrl.phase == _GamePhase.playerTurn
+                          ? 'Selecciona una ficha para comenzar'
+                          : 'Turno del CPU...',
+                      style: const TextStyle(color: Colors.white38, fontSize: 14),
                     ),
                   ],
                 ),
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  controller: _chainScrollCtrl,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: _buildSnakeWidget(_ctrl.chain, constraints.maxWidth - 24),
+                ),
               ),
-            ),
-        ],
       ),
     );
   }
 
-  Widget _buildPlayerTiles() {
-    return ListView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.all(12),
-      children: _controller.playerTiles
-          .map((tile) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: GestureDetector(
-          onTap: () => _onTileSelected(tile),
-          child: _buildDominoTile(tile),
-        ),
-      ))
-          .toList(),
-    );
-  }
+  Widget _buildSnakeWidget(List<_PlayedTile> chain, double availW) {
+    const double tW = 44.0;
+    const double tH = 24.0;
+    const double cW = 24.0;
+    const double cH = 44.0;
+    const double g = 3.0;
+    const double dy = (cH - tH) / 2.0;
+    const double rowStep = cH - tH;
 
-  Widget _buildDominoTile(DominoTile tile, {bool isInPlay = false, bool isVertical = false}) {
-    const double tileWidth = 50.0; // Actualizar aquí también
-    const double tileHeight = 80.0; // Actualizar aquí también
+    final items = <Widget>[];
+    double curX = 0;
+    double curY = 0;
+    double totalH = cH;
+    int dir = 1;
 
-    Color baseColor = const Color(0xFFF5F5DC); // Color beige como en la imagen
-    Color borderColor = const Color(0xFFD2691E); // Borde marrón
-    Color shadowColor = Colors.black54;
+    for (int i = 0; i < chain.length; i++) {
+      final pt = chain[i];
+      final bool isLast = i == chain.length - 1;
 
-    // Efecto de hover para fichas jugables
-    bool isPlayable = _controller.gameState == GameState.playerTurn &&
-        _controller.canPlayTile(tile) &&
-        !isInPlay;
+      bool makeCorner = false;
+      if (!isLast) {
+        if (dir == 1) {
+          makeCorner = (curX + tW + g) > (availW - cW - g);
+        } else {
+          makeCorner = curX < (cW + g);
+        }
+      }
 
-    if (isPlayable) {
-      baseColor = const Color(0xFFE6FFE6); // Verde muy claro cuando es jugable
-      borderColor = Colors.green[600]!;
-      shadowColor = Colors.green.withValues(alpha: 0.5);
+      final bool portrait = makeCorner || pt.isDouble;
+      final double w = portrait ? cW : tW;
+      final double h = portrait ? cH : tH;
+      final double topOff = portrait ? 0.0 : dy;
+
+      if (makeCorner) {
+        final double left = dir == 1 ? (availW - cW) : 0.0;
+        items.add(Positioned(
+          left: left, top: curY, width: cW, height: cH,
+          child: _buildDominoTileWidget(
+            left: pt.displayLeft, right: pt.displayRight,
+            isPortrait: true, width: cW, height: cH,
+          ),
+        ));
+        totalH = max(totalH, curY + cH);
+        curY += rowStep;
+        dir = -dir;
+        curX = dir == 1 ? (cW + g) : (availW - cW - g - tW);
+      } else {
+        double left = curX;
+        if (isLast) left = left.clamp(0.0, availW - w);
+        items.add(Positioned(
+          left: left, top: curY + topOff, width: w, height: h,
+          child: _buildDominoTileWidget(
+            left: pt.displayLeft, right: pt.displayRight,
+            isPortrait: portrait, width: w, height: h,
+          ),
+        ));
+        totalH = max(totalH, curY + topOff + h);
+        curX += dir * (w + g);
+      }
     }
 
-    Widget tileWidget = Container(
-      width: isVertical ? tileHeight : tileWidth,
-      height: isVertical ? tileWidth : tileHeight,
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            baseColor,
-            baseColor.withValues(alpha: 0.95),
-            baseColor.withValues(alpha: 0.9),
+    return SizedBox(
+      width: availW,
+      height: max(totalH, cH),
+      child: Stack(clipBehavior: Clip.none, children: items),
+    );
+  }
+
+  Widget _buildBoneyardBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _panelColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.inventory_2, color: Colors.white54, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'Pozo: ${_ctrl.boneyard.length}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (_ctrl.chain.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${_ctrl.leftOpen ?? '-'} ← → ${_ctrl.rightOpen ?? '-'}',
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: [0.0, 0.5, 1.0],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    if (_ctrl.phase != _GamePhase.playerTurn) return const SizedBox.shrink();
+    final canDraw = _ctrl.boneyard.isNotEmpty && !_ctrl.canPlayerPlayAny();
+    final canPass = !_ctrl.canPlayerPlayAny() && _ctrl.boneyard.isEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          if (canDraw)
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _drawFromBoneyard,
+                icon: const Icon(Icons.add_box, size: 16),
+                label: const Text('Tomar del pozo'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          if (canPass) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _passPlayerTurn,
+                icon: const Icon(Icons.skip_next, size: 16),
+                label: const Text('Pasar turno'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange[700],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSideChoiceBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _panelColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _accentOrange, width: 1.5),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          const Text('¿Dónde colocar?', style: TextStyle(color: Colors.white70, fontSize: 13)),
+          ElevatedButton(
+            onPressed: () {
+              setState(() => _needsSideChoice = false);
+              _placeSelectedTile('left');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal[700],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            ),
+            child: Text('← Izquierda (${_ctrl.leftOpen})'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() => _needsSideChoice = false);
+              _placeSelectedTile('right');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple[700],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            ),
+            child: Text('Derecha (${_ctrl.rightOpen}) →'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerArea() {
+    return Container(
+      height: 88,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      decoration: BoxDecoration(
+        color: _panelColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        children: _ctrl.playerHand.map((tile) {
+          final isPlayable = _ctrl.phase == _GamePhase.playerTurn && _ctrl.canPlay(tile);
+          final isSelected = _selectedTile?.id == tile.id;
+
+          return GestureDetector(
+            onTap: () => _onTileTap(tile),
+            child: AnimatedScale(
+              scale: isSelected ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 150),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: _buildDominoTileWidget(
+                  left: tile.left,
+                  right: tile.right,
+                  isPortrait: true,
+                  width: 36,
+                  height: 68,
+                  isPlayable: isPlayable,
+                  isSelected: isSelected,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildFaceDownTile({required double width, required double height}) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: const Color(0xFF4A3728),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: Colors.white24, width: 1),
+        boxShadow: const [
+          BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(1, 1)),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: List.generate(
+          3,
+          (_) => Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(
+              2,
+              (_) => Container(
+                width: 3,
+                height: 3,
+                decoration: const BoxDecoration(
+                  color: Colors.white24,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
         ),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: borderColor,
-          width: isPlayable ? 2.5 : 1.5,
-        ),
+      ),
+    );
+  }
+
+  Widget _buildDominoTileWidget({
+    required int left,
+    required int right,
+    required bool isPortrait,
+    required double width,
+    required double height,
+    bool isPlayable = false,
+    bool isSelected = false,
+  }) {
+    final borderColor = isSelected
+        ? _accentOrange
+        : isPlayable
+            ? Colors.green[400]!
+            : _tileBorder;
+    final borderWidth = (isSelected || isPlayable) ? 2.0 : 1.0;
+
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: _tileColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderColor, width: borderWidth),
         boxShadow: [
           BoxShadow(
-            color: shadowColor,
-            blurRadius: isPlayable ? 8 : 4,
-            offset: Offset(2, 2),
-            spreadRadius: isPlayable ? 1 : 0,
-          ),
-          if (isPlayable)
-            BoxShadow(
-              color: Colors.green.withValues(alpha: 0.3),
-              blurRadius: 12,
-              spreadRadius: 2,
-            ),
-        ],
-      ),
-      child: isVertical
-          ? Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.horizontal(left: Radius.circular(6)),
-              ),
-              child: Center(
-                child: _buildDots(tile.left),
-              ),
-            ),
-          ),
-          Container(
-            width: 1.5,
-            margin: EdgeInsets.symmetric(vertical: 4),
-            decoration: BoxDecoration(
-              color: borderColor,
-              borderRadius: BorderRadius.circular(1),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.horizontal(right: Radius.circular(6)),
-              ),
-              child: Center(
-                child: _buildDots(tile.right),
-              ),
-            ),
-          ),
-        ],
-      )
-          : Column(
-        children: [
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
-              ),
-              child: Center(
-                child: _buildDots(tile.left),
-              ),
-            ),
-          ),
-          Container(
-            height: 1.5,
-            margin: EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: borderColor,
-              borderRadius: BorderRadius.circular(1),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(6)),
-              ),
-              child: Center(
-                child: _buildDots(tile.right),
-              ),
-            ),
+            color: isPlayable ? Colors.green.withValues(alpha: 0.4) : Colors.black38,
+            blurRadius: isPlayable ? 6 : 3,
+            offset: const Offset(1, 2),
           ),
         ],
       ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: isPortrait
+            ? Column(children: [
+                Expanded(child: _buildPips(left)),
+                Container(height: 1.5, color: _tileBorder.withValues(alpha: 0.5)),
+                Expanded(child: _buildPips(right)),
+              ])
+            : Row(children: [
+                Expanded(child: _buildPips(left)),
+                Container(width: 1.5, color: _tileBorder.withValues(alpha: 0.5)),
+                Expanded(child: _buildPips(right)),
+              ]),
+      ),
     );
-
-    return tileWidget;
   }
 
-  Widget _buildDots(int number) {
-    const dotPositions = {
-      0: <Alignment>[],
-      1: [Alignment.center],
-      2: [Alignment.topLeft, Alignment.bottomRight],
-      3: [Alignment.topLeft, Alignment.center, Alignment.bottomRight],
-      4: [Alignment.topLeft, Alignment.topRight, Alignment.bottomLeft, Alignment.bottomRight],
-      5: [Alignment.topLeft, Alignment.topRight, Alignment.center, Alignment.bottomLeft, Alignment.bottomRight],
-      6: [Alignment.topLeft, Alignment.topRight, Alignment.centerLeft, Alignment.centerRight, Alignment.bottomLeft, Alignment.bottomRight],
-    };
-
-    // Colores de puntos más similares a la imagen
-    List<Color> dotColors = [
-      Colors.transparent,
-      const Color(0xFF8B0000), // Rojo oscuro
-      const Color(0xFF0000CD), // Azul medio
-      const Color(0xFF228B22), // Verde bosque
-      const Color(0xFF4B0082), // Índigo
-      const Color(0xFFFF8C00), // Naranja oscuro
-      const Color(0xFF008B8B), // Turquesa oscuro
-    ];
-
-    Color finalDotColor = number == 0 ? Colors.transparent : dotColors[number];
-
-    return Stack(
-      children: dotPositions[number]!
-          .map((alignment) => Align(
-        alignment: alignment,
-        child: Container(
-          width: 8, // Aumentar puntos de 7 a 8 píxeles
-          height: 8,
-          margin: const EdgeInsets.all(1.5),
-          decoration: BoxDecoration(
-            color: finalDotColor,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: finalDotColor == Colors.transparent ? Colors.transparent : Colors.white,
-              width: 0.5,
+  Widget _buildPips(int count) {
+    if (count == 0) return const SizedBox.expand();
+    return LayoutBuilder(builder: (context, constraints) {
+      final side = constraints.maxWidth < constraints.maxHeight
+          ? constraints.maxWidth
+          : constraints.maxHeight;
+      final dotSize = (side * 0.22).clamp(3.0, 7.0);
+      final pad = dotSize * 0.55;
+      return Stack(
+        children: _pipPositions(count).map((align) => Align(
+          alignment: align,
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Container(
+              width: dotSize,
+              height: dotSize,
+              decoration: const BoxDecoration(color: Color(0xFF1A1A1A), shape: BoxShape.circle),
             ),
-            boxShadow: finalDotColor != Colors.transparent ? [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 1,
-                offset: Offset(0.5, 0.5),
-              ),
-            ] : [],
           ),
-        ),
-      ))
-          .toList(),
-    );
+        )).toList(),
+      );
+    });
   }
+
+  List<Alignment> _pipPositions(int count) {
+    switch (count) {
+      case 1:
+        return [Alignment.center];
+      case 2:
+        return [Alignment.topRight, Alignment.bottomLeft];
+      case 3:
+        return [Alignment.topRight, Alignment.center, Alignment.bottomLeft];
+      case 4:
+        return [Alignment.topLeft, Alignment.topRight, Alignment.bottomLeft, Alignment.bottomRight];
+      case 5:
+        return [Alignment.topLeft, Alignment.topRight, Alignment.center, Alignment.bottomLeft, Alignment.bottomRight];
+      case 6:
+        return [
+          const Alignment(-1, -1),
+          const Alignment(1, -1),
+          const Alignment(-1, 0),
+          const Alignment(1, 0),
+          const Alignment(-1, 1),
+          const Alignment(1, 1),
+        ];
+      default:
+        return [];
+    }
+  }
+}
+
+class _WoodGrainPainter extends CustomPainter {
+  static const _baseColors = [
+    Color(0xFFDFB25A), Color(0xFFD4A84E), Color(0xFFE3B660),
+    Color(0xFFCFA24A), Color(0xFFDAB058), Color(0xFFD5A850),
+    Color(0xFFE0B45C), Color(0xFFCCA04C), Color(0xFFDCAE56),
+    Color(0xFFD1A64E), Color(0xFFE1B25A), Color(0xFFCCA24C),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const plankCount = 14;
+    final rng = Random(37);
+    final plankH = size.height / plankCount;
+
+    for (int i = 0; i < plankCount; i++) {
+      final top = i * plankH;
+      final base = _baseColors[i % _baseColors.length];
+
+      final fillPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.lerp(base, Colors.white, 0.12)!,
+            base,
+            Color.lerp(base, Colors.black, 0.07)!,
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(Rect.fromLTWH(0, top, size.width, plankH));
+      canvas.drawRect(Rect.fromLTWH(0, top, size.width, plankH), fillPaint);
+
+      final lineCount = 5 + rng.nextInt(5);
+      for (int g = 0; g < lineCount; g++) {
+        final gy = top + (g + 1) * plankH / (lineCount + 1);
+        final opacity = 0.04 + rng.nextDouble() * 0.14;
+        final isDark = rng.nextDouble() > 0.30;
+        final grainPaint = Paint()
+          ..color = isDark
+              ? Color.fromARGB((opacity * 255).round(), 100, 55, 5)
+              : Color.fromARGB((opacity * 0.5 * 255).round(), 255, 240, 180)
+          ..strokeWidth = 0.4 + rng.nextDouble() * 1.0
+          ..style = PaintingStyle.stroke;
+        final amp = 0.8 + rng.nextDouble() * 2.8;
+        final cx = size.width * (0.2 + rng.nextDouble() * 0.6);
+        final cy = gy + (rng.nextBool() ? amp : -amp);
+        final endY = gy + (rng.nextBool() ? amp * 0.5 : -amp * 0.5);
+        canvas.drawPath(
+          Path()..moveTo(0, gy)..quadraticBezierTo(cx, cy, size.width, endY),
+          grainPaint,
+        );
+      }
+
+      canvas.drawLine(
+        Offset(0, top + 1.5), Offset(size.width, top + 1.5),
+        Paint()..color = const Color(0x1AFFFFFF)..strokeWidth = 2.0,
+      );
+      if (i < plankCount - 1) {
+        canvas.drawLine(
+          Offset(0, top + plankH), Offset(size.width, top + plankH),
+          Paint()..color = const Color(0xFF9B7030)..strokeWidth = 1.5,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WoodGrainPainter old) => false;
 }

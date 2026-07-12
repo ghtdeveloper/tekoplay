@@ -1302,14 +1302,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                 size: cardSize,
                                 isEnabled: true,
                               ),
-                              // Dominó - Deshabilitado
                               GameCard(
                                 imagePath: 'assets/images/domino.png',
                                 title: S.of(context).domino,
                                 onTap: () {
+                                  _showGameTypeDialog(context, S.of(context).domino);
                                 },
                                 size: cardSize,
-                                isEnabled: false,
+                                isEnabled: true,
                               ),
                             ],
                           ),

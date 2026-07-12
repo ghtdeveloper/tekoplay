@@ -35,6 +35,8 @@ import '../chess/multiplayer_chess_screen.dart';
 import '../chess/online_chess_screen.dart';
 import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
+import '../domino/multiplayer_domino_screen.dart';
+import '../domino/online_domino_screen.dart';
 import '../ludo/ludo_vs_cpu_screen.dart';
 import '../ludo/multiplayer_ludo_screen.dart';
 import '../ludo/online_ludo_screen.dart';
@@ -1746,12 +1748,21 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       return;
     }
 
-    // Ludo has its own full setup flow inside MultiplayerLudoScreen
     if (isLudo) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => MultiplayerLudoScreen(matchType: matchType),
+        ),
+      );
+      return;
+    }
+
+    if (isDomino) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MultiplayerDominoScreen(matchType: matchType),
         ),
       );
       return;
@@ -2605,6 +2616,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               builder:
                                   (context) => DominoVsComputerScreen(
                                     selectedDifficulty,
+                                    matchType: widget.matchType,
                                   ),
                             ),
                           );
@@ -2655,136 +2667,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         ),
       );
     } else if (isDomino) {
-      final TextEditingController roomCodeController = TextEditingController();
-      _showOnlineDialogDomino(context, roomCodeController);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OnlineDominoScreen(matchType: matchType),
+        ),
+      );
     }
   }
 
-  void _showOnlineDialogDomino(
-    BuildContext context,
-    TextEditingController roomCodeController,
-  ) {
-    if (_currentUser == null) {
-      _showLoginRequiredDialog(context, S.of(context).online);
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                Text(
-                  S.of(context).playOnline,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: Colors.black87,
-                  ),
-                ),
-                SizedBox(height: 20),
-
-                TextField(
-                  controller: roomCodeController,
-                  decoration: InputDecoration(
-                    labelText: S.of(context).roomCode,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 20),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      final roomCode = roomCodeController.text.trim();
-                      if (roomCode.isNotEmpty) {
-                        Navigator.of(context).pop();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(S.of(context).pleaseEnterValidCode),
-                          ),
-                        );
-                      }
-                    },
-                    icon: Icon(Icons.login),
-                    label: Text(
-                      S.of(context).joinRoom,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC7A34),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: 20),
-
-                Divider(),
-
-                SizedBox(height: 10),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      final generatedRoomCode = 'ROOM12345';
-                      Clipboard.setData(ClipboardData(text: generatedRoomCode));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            '${S.of(context).generatedAndCopiedCode} : $generatedRoomCode',
-                          ),
-                        ),
-                      );
-                      Navigator.of(context).pop();
-                    },
-                    icon: Icon(Icons.add),
-                    label: Text(
-                      S.of(context).createNewRoom,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC7A34),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

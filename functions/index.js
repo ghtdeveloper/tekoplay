@@ -708,7 +708,46 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
         const isBetMode = !isCoins && betAmount > 0;
         const realPlayerCount = realPlayerIds.length;
 
-        // Pot total = apuesta × jugadores reales
+        if (gameJustAbandoned) {
+          // Refund all non-abandoning players; the abandoner's bet goes to the house
+          const nonAbandoningIds = realPlayerIds.filter(id => id !== abandonedBy);
+
+          if (nonAbandoningIds.length === 0) {
+            console.log(`⚠️ [Ludo ${gameId}] Sin jugadores a quienes reembolsar (SALIENDO)\n`);
+            return;
+          }
+
+          console.log(`🔄 [Ludo] Abandono — reembolsando ${nonAbandoningIds.length} jugadores, casa retiene apuesta de: ${abandonedBy}`);
+
+          for (const playerId of nonAbandoningIds) {
+            const playerRef = db.collection('users').doc(playerId);
+            if (isCoins) {
+              transaction.update(playerRef, { coins: admin.firestore.FieldValue.increment(betAmount) });
+            } else {
+              transaction.update(playerRef, { diamonds: admin.firestore.FieldValue.increment(betAmount) });
+            }
+            console.log(`   ↩️ Reembolso a ${playerId}: +${betAmount} ${currencyType}`);
+          }
+
+          transaction.update(gameRef, {
+            rewardsDistributed: true,
+            rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+            distribution: {
+              type: 'abandoned_refund',
+              abandonedBy,
+              refundedPlayers: nonAbandoningIds,
+              refundAmount: betAmount,
+              houseKeeps: betAmount,
+              currencyType,
+              isBetMode,
+            },
+          });
+
+          console.log(`✅ [Ludo ${gameId}] Reembolsos completados (casa retiene: ${betAmount} ${currencyType})\n`);
+          return;
+        }
+
+        // Victoria normal — ganador recibe el pot menos comisión
         const totalPot = betAmount * realPlayerCount;
         const commissionRate = isBetMode ? 0.10 : 0.30;
         const winnerPrize = Math.floor(totalPot * (1 - commissionRate));
@@ -716,23 +755,146 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
 
         console.log(`💵 [Ludo] players:${realPlayerCount} | bet:${betAmount} | totalPot:${totalPot} | winner:${winnerPrize} | casa:${houseCommission} | comisión:${isBetMode ? '10%' : '30%'}`);
 
-        // Determinar ganador real
-        const effectiveWinnerId  = gameJustAbandoned ? (abandonedBy === hostId ? realPlayerIds.find(id => id !== hostId) : hostId) : winnerId;
-        const effectiveAbandonBy = gameJustAbandoned ? abandonedBy : null;
-
-        if (!realPlayerIds.includes(effectiveWinnerId)) {
+        if (!realPlayerIds.includes(winnerId)) {
           console.log(`⚠️ [Ludo ${gameId}] Ganador no es jugador real (SALIENDO)\n`);
           return;
         }
 
-        const winnerRef = db.collection('users').doc(effectiveWinnerId);
+        const winnerRef = db.collection('users').doc(winnerId);
         const winnerNetGain = winnerPrize - betAmount;
-        console.log(`   ✅ Ganador: ${effectiveWinnerId} → +${winnerPrize} (neto ${winnerNetGain >= 0 ? '+' : ''}${winnerNetGain})`);
+        console.log(`   ✅ Ganador: ${winnerId} → +${winnerPrize} (neto ${winnerNetGain >= 0 ? '+' : ''}${winnerNetGain})`);
 
-        // Verificación matemática
         if (winnerPrize + houseCommission !== totalPot) {
           throw new Error(`[Ludo] MATH ERROR: totalPot(${totalPot}) ≠ distributed(${winnerPrize + houseCommission})`);
         }
+
+        if (isCoins) {
+          transaction.update(winnerRef, { coins: admin.firestore.FieldValue.increment(winnerPrize) });
+        } else {
+          transaction.update(winnerRef, {
+            diamonds: admin.firestore.FieldValue.increment(winnerPrize),
+            diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, winnerNetGain)),
+          });
+        }
+
+        transaction.update(gameRef, {
+          rewardsDistributed: true,
+          rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+          distribution: {
+            winnerId,
+            winnerPrize,
+            houseCommission,
+            totalPot,
+            betAmount,
+            realPlayerCount,
+            currencyType,
+            isBetMode,
+            commissionRate,
+            reason: 'win',
+            winnerNetGain,
+          },
+        });
+
+        console.log(`✅ [Ludo ${gameId}] Distribución completada\n`);
+      });
+
+      return null;
+    } catch (error) {
+      console.error(`\n❌ [Ludo ${gameId}] ERROR:`, error);
+      throw error;
+    }
+  }
+);
+
+exports.distributeDominoGameRewards = onDocumentUpdated(
+  {
+    document: 'domino_games/{gameId}',
+    region: 'us-east1',
+  },
+  async (event) => {
+    const gameId = event.params.gameId;
+    const beforeData = event.data?.before.data();
+    const afterData  = event.data?.after.data();
+
+    console.log(`\n🁣 [Domino ${gameId}] === INICIO FUNCIÓN ===`);
+    console.log(`📊 Status: "${beforeData?.status}" → "${afterData?.status}"`);
+    console.log(`💎 rewardsDistributed: ${afterData?.rewardsDistributed}`);
+    console.log(`💰 betAmount: ${afterData?.betAmount}`);
+    console.log(`🏆 winnerId: ${afterData?.winnerId}`);
+    console.log(`💱 currencyType: ${afterData?.currencyType}`);
+
+    if (!beforeData || !afterData) return null;
+
+    const gameJustFinished  = beforeData.status !== 'finished'  && afterData.status === 'finished';
+    const gameJustAbandoned = beforeData.status !== 'abandoned' && afterData.status === 'abandoned';
+
+    if (!gameJustFinished && !gameJustAbandoned) {
+      console.log(`⏭️ [Domino ${gameId}] Sin cambio a finished/abandoned (SALIENDO)\n`);
+      return null;
+    }
+
+    if (afterData.rewardsDistributed === true) {
+      console.log(`⚠️ [Domino ${gameId}] Recompensas ya distribuidas (SALIENDO)\n`);
+      return null;
+    }
+
+    const betAmount    = afterData.betAmount || 0;
+    const currencyType = afterData.currencyType || 'coins';
+    if (betAmount === 0) {
+      console.log(`⏭️ [Domino ${gameId}] Sin apuesta (SALIENDO)\n`);
+      return null;
+    }
+
+    const hostId      = afterData.hostId;
+    const guestId     = afterData.guestId;
+    const winnerId    = afterData.winnerId;
+    const abandonedBy = afterData.abandonedBy;
+
+    const realPlayerIds = [hostId, guestId].filter(id => id && !String(id).startsWith('bot_'));
+
+    if (realPlayerIds.length < 2) {
+      console.log(`❌ [Domino ${gameId}] Menos de 2 jugadores reales (SALIENDO)\n`);
+      return null;
+    }
+
+    console.log(`\n🚀 [Domino ${gameId}] ¡PROCEDIENDO A DISTRIBUIR!`);
+
+    try {
+      await db.runTransaction(async (transaction) => {
+        const gameRef = db.collection('domino_games').doc(gameId);
+        const gameDoc = await transaction.get(gameRef);
+        const currentGameData = gameDoc.data();
+
+        if (currentGameData?.rewardsDistributed === true) {
+          console.log(`⚠️ [Domino ${gameId}] Ya distribuido en transacción\n`);
+          return;
+        }
+
+        if (currentGameData?.quotasCollected !== true) {
+          console.log(`⚠️ [Domino ${gameId}] Cuotas no cobradas (SALIENDO)\n`);
+          return;
+        }
+
+        const isCoins   = currencyType === 'coins';
+        const isBetMode = !isCoins && betAmount > 0;
+        const totalPot  = betAmount * 2;
+        const commissionRate = isBetMode ? 0.10 : 0.30;
+        const winnerPrize    = Math.floor(totalPot * (1 - commissionRate));
+        const houseCommission = totalPot - winnerPrize;
+
+        console.log(`💵 [Domino] bet:${betAmount} | totalPot:${totalPot} | winner:${winnerPrize} | casa:${houseCommission}`);
+
+        const effectiveWinnerId = gameJustAbandoned
+          ? (abandonedBy === hostId ? guestId : hostId)
+          : winnerId;
+
+        if (!realPlayerIds.includes(effectiveWinnerId)) {
+          console.log(`⚠️ [Domino ${gameId}] Ganador no es jugador real (SALIENDO)\n`);
+          return;
+        }
+
+        const winnerRef    = db.collection('users').doc(effectiveWinnerId);
+        const winnerNetGain = winnerPrize - betAmount;
 
         if (isCoins) {
           transaction.update(winnerRef, { coins: admin.firestore.FieldValue.increment(winnerPrize) });
@@ -752,22 +914,20 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
             houseCommission,
             totalPot,
             betAmount,
-            realPlayerCount,
             currencyType,
             isBetMode,
             commissionRate,
             reason: gameJustAbandoned ? 'abandoned' : 'win',
-            abandonedBy: effectiveAbandonBy,
             winnerNetGain,
           },
         });
 
-        console.log(`✅ [Ludo ${gameId}] Distribución completada\n`);
+        console.log(`✅ [Domino ${gameId}] Distribución completada\n`);
       });
 
       return null;
     } catch (error) {
-      console.error(`\n❌ [Ludo ${gameId}] ERROR:`, error);
+      console.error(`\n❌ [Domino ${gameId}] ERROR:`, error);
       throw error;
     }
   }
