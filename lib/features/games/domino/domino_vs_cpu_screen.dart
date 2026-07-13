@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/domino_tile.dart';
 import '../../../core/service/firestore_service.dart';
@@ -9,7 +10,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/Interstitial_ad_helper.dart';
 
-enum _GamePhase { playerTurn, cpuTurn, roundEnd, gameOver }
+enum _GamePhase { playerTurn, cpuTurn }
 enum _RoundResult { playerWon, cpuWon, blocked }
 
 class _PlayedTile {
@@ -287,19 +288,17 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   late AnimationController _cpuTileAnimCtrl;
   late AnimationController _playerTileAnimCtrl;
-  late Animation<double> _pulseAnim;
 
   DominoTile? _selectedTile;
   bool _needsSideChoice = false;
   bool _isCpuThinking = false;
   bool _gameEnded = false;
-  int _userDiamonds = 0;
-  int _userCoins = 0;
 
-  static const Color _tableColor = Color(0xFFD4A850);
-  static const Color _panelColor = Color(0xDD1A0800);
-  static const Color _tileColor = Color(0xFFFFF8E1);
-  static const Color _tileBorder = Color(0xFF4A3728);
+  static const Color _tableColor   = Color(0xFF2A4A30);
+  static const Color _panelColor   = Color(0xEE0D2010);
+  static const Color _feltColor    = Color(0xFF2D7A3A);
+  static const Color _tileColor    = Color(0xFFFFF8E1);
+  static const Color _tileBorder   = Color(0xFF4A3728);
   static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
@@ -316,16 +315,17 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       duration: const Duration(milliseconds: 600),
     )..repeat(reverse: true);
 
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.05).animate(
-      CurvedAnimation(parent: _playerTileAnimCtrl, curve: Curves.easeInOut),
-    );
-
     _adHelper = InterstitialAdHelper(showFrequency: 3);
 
     _ctrl.onTimeUpdate = () {
       if (mounted) setState(() {});
     };
     _ctrl.onTimeOut = _handleTimeOut;
+
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadAndDeductGameCost();
@@ -335,6 +335,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   @override
   void dispose() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     _ctrl.dispose();
     _chainScrollCtrl.dispose();
     _cpuTileAnimCtrl.dispose();
@@ -389,8 +393,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
                   children: [50, 100, 150, 200].map((pts) {
                     return ElevatedButton(
                       onPressed: () {
@@ -456,7 +462,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       return;
     }
 
-    final canLeft = tile.canConnectTo(_ctrl.leftOpen!);
     final canRight = tile.canConnectTo(_ctrl.rightOpen!);
 
     _placeSelectedTile(canRight ? 'right' : 'left');
@@ -761,7 +766,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         }
         final newDiamonds = userData.diamonds - cost;
         await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
-        if (mounted) setState(() => _userDiamonds = newDiamonds);
       } else {
         if (userData.coins < cost) {
           if (mounted) {
@@ -774,7 +778,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         }
         final newCoins = userData.coins - cost;
         await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
-        if (mounted) setState(() => _userCoins = newCoins);
       }
     } catch (e) {
       if (kDebugMode) print('Error deducting domino game cost: $e');
@@ -795,11 +798,9 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           if (isBet) {
             final newDiamonds = userData.diamonds + prize;
             await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
-            if (mounted) setState(() => _userDiamonds = newDiamonds);
           } else {
             final newCoins = userData.coins + prize;
             await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
-            if (mounted) setState(() => _userCoins = newCoins);
           }
         }
       }
@@ -862,7 +863,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       child: Scaffold(
         backgroundColor: _tableColor,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF3E2007),
+          backgroundColor: _accentOrange,
+          toolbarHeight: 44,
           elevation: 0,
           title: Row(
             children: [
@@ -892,12 +894,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
               ),
           ],
         ),
-        body: _gameStarted
-            ? Stack(children: [
-                Positioned.fill(child: CustomPaint(painter: _WoodGrainPainter())),
-                _buildGame(),
-              ])
-            : _buildEmpty(),
+        body: _gameStarted ? _buildGame() : _buildEmpty(),
       ),
     );
   }
@@ -912,402 +909,344 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     return SafeArea(
       child: Column(
         children: [
-          _buildScoreBar(),
-          _buildCpuArea(),
-          const SizedBox(height: 4),
+          _buildLandscapeHeader(),
           _buildChainArea(),
-          const SizedBox(height: 4),
-          _buildBoneyardBar(),
-          const SizedBox(height: 4),
-          _buildActionButtons(),
-          _buildPlayerArea(),
-          if (_needsSideChoice) _buildSideChoiceBar(),
-          const SizedBox(height: 4),
+          _buildLandscapeFooter(),
         ],
       ),
     );
   }
 
-  Widget _buildScoreBar() {
-    final isPlayerTurn = _ctrl.phase == _GamePhase.playerTurn;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
+  /// Compact top strip: round/score info on the left, CPU face-down tiles in
+  /// the center, player score + avatar on the right.
+  Widget _buildLandscapeHeader() {
+    final bool isPlayerTurn = _ctrl.phase == _GamePhase.playerTurn;
+    final bool cpuHasOpening = _ctrl.chain.isEmpty &&
+        _ctrl.openingDoubleValue != -1 &&
+        _ctrl.phase == _GamePhase.cpuTurn;
+
+    return AnimatedBuilder(
+      animation: _cpuTileAnimCtrl,
+      builder: (context, _) => Container(
+        height: 52,
         color: _panelColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        children: [
-          _buildPlayerScore('CPU', _ctrl.cpuScore, !isPlayerTurn && _isCpuThinking, _buildCpuAvatar()),
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  'Meta: ${_ctrl.targetScore}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                ),
-                Text(
-                  'Ronda ${_ctrl.roundNumber}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                if (_ctrl.timerActive && isPlayerTurn)
-                  Text(
-                    '⏱ ${_ctrl.timeLeft}s',
-                    style: TextStyle(
-                      color: _ctrl.timeLeft <= 10 ? Colors.red[300] : Colors.green[300],
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-              ],
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Row(
+          children: [
+            // Round + timer info
+            SizedBox(
+              width: 64,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Ronda ${_ctrl.roundNumber}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text('Meta: ${_ctrl.targetScore}',
+                      style: const TextStyle(color: Colors.white54, fontSize: 9)),
+                  if (_ctrl.timerActive && isPlayerTurn)
+                    Text('⏱ ${_ctrl.timeLeft}s',
+                        style: TextStyle(
+                          color: _ctrl.timeLeft <= 10 ? Colors.red[300] : Colors.green[300],
+                          fontSize: 10, fontWeight: FontWeight.bold,
+                        )),
+                ],
+              ),
             ),
-          ),
-          _buildPlayerScore('Tú', _ctrl.playerScore, isPlayerTurn, _buildUserAvatar()),
-        ],
+            const SizedBox(width: 4),
+            // CPU score chip
+            _buildCompactScore('CPU', _ctrl.cpuScore, !isPlayerTurn, _buildCpuAvatar()),
+            const SizedBox(width: 4),
+            // CPU tiles area (center, expanded)
+            Expanded(
+              child: _isCpuThinking
+                  ? const Center(
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
+                        SizedBox(width: 4),
+                        Text('CPU pensando...', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      ]))
+                  : cpuHasOpening
+                      ? Center(
+                          child: Text(
+                            'CPU sale con ${_ctrl.openingDoubleValue}-${_ctrl.openingDoubleValue}',
+                            style: TextStyle(color: Colors.amber[300], fontSize: 10, fontWeight: FontWeight.bold),
+                          ))
+                      : ListView(
+                          scrollDirection: Axis.horizontal,
+                          reverse: true,
+                          children: List.generate(
+                            _ctrl.cpuHand.length,
+                            (_) => Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: _buildFaceDownTile(width: 16, height: 30),
+                            ),
+                          ),
+                        ),
+            ),
+            const SizedBox(width: 4),
+            // Player score chip
+            _buildCompactScore('Tú', _ctrl.playerScore, isPlayerTurn, _buildUserAvatar()),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPlayerScore(String name, int score, bool isActive, Widget avatar) {
+  Widget _buildCompactScore(String name, int score, bool isActive, Widget avatar) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: isActive ? Colors.white12 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
       ),
-      child: Column(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           avatar,
-          const SizedBox(height: 4),
-          Text(name, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-          Text(
-            '$score',
-            style: TextStyle(
-              color: isActive ? _accentOrange : Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+          const SizedBox(width: 4),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: const TextStyle(color: Colors.white60, fontSize: 9)),
+              Text('$score',
+                  style: TextStyle(
+                    color: isActive ? _accentOrange : Colors.white,
+                    fontSize: 14, fontWeight: FontWeight.bold,
+                  )),
+            ],
           ),
         ],
       ),
     );
   }
 
+  /// Compact bottom strip: boneyard info on the left, player hand in the
+  /// center, action buttons on the right.
+  Widget _buildLandscapeFooter() {
+    final bool isPlayerTurn = _ctrl.phase == _GamePhase.playerTurn;
+    final bool canDraw = isPlayerTurn && _ctrl.boneyard.isNotEmpty && !_ctrl.canPlayerPlayAny();
+    final bool canPass = isPlayerTurn && !_ctrl.canPlayerPlayAny() && _ctrl.boneyard.isEmpty;
+
+    return Container(
+      height: 60,
+      color: _panelColor,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Row(
+        children: [
+          // LEFT: boneyard + open ends
+          SizedBox(
+            width: 72,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _infoChip('Pozo: ${_ctrl.boneyard.length}'),
+                const SizedBox(height: 3),
+                if (_ctrl.chain.isNotEmpty)
+                  _infoChip('${_ctrl.leftOpen ?? '-'} ↔ ${_ctrl.rightOpen ?? '-'}'),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          // CENTER: player hand
+          Expanded(child: _buildPlayerArea()),
+          // RIGHT: action buttons / side choice
+          if (canDraw || canPass || _needsSideChoice) ...[
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 90,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (canDraw)
+                    _actionBtn('Tomar', Icons.add_box, Colors.blue[700]!, _drawFromBoneyard),
+                  if (canPass)
+                    _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
+                  if (_needsSideChoice) ...[
+                    _actionBtn('← (${_ctrl.leftOpen})', Icons.arrow_back, Colors.teal[700]!, () {
+                      setState(() => _needsSideChoice = false);
+                      _placeSelectedTile('left');
+                    }),
+                    const SizedBox(height: 2),
+                    _actionBtn('(${_ctrl.rightOpen}) →', Icons.arrow_forward, Colors.deepPurple[700]!, () {
+                      setState(() => _needsSideChoice = false);
+                      _placeSelectedTile('right');
+                    }),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _infoChip(String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(6)),
+        child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+      );
+
+  Widget _actionBtn(String label, IconData icon, Color color, VoidCallback onTap) =>
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: onTap,
+          icon: Icon(icon, size: 13),
+          label: Text(label, style: const TextStyle(fontSize: 11)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      );
+
   Widget _buildCpuAvatar() {
     return Container(
-      width: 32,
-      height: 32,
+      width: 24,
+      height: 24,
       decoration: BoxDecoration(
         color: Colors.grey[700],
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.smart_toy, color: Colors.white, size: 18),
+      child: const Icon(Icons.smart_toy, color: Colors.white, size: 14),
     );
   }
 
   Widget _buildUserAvatar() {
     final photoUrl = _currentUser?.photoURL;
     return CircleAvatar(
-      radius: 16,
+      radius: 12,
       backgroundColor: Colors.grey[600],
       backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-      child: photoUrl == null ? const Icon(Icons.person, color: Colors.white, size: 18) : null,
-    );
-  }
-
-  Widget _buildCpuArea() {
-    return Container(
-      height: 68,
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: _panelColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: _isCpuThinking
-          ? const Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
-                  ),
-                  SizedBox(width: 8),
-                  Text('CPU pensando...', style: TextStyle(color: Colors.white54, fontSize: 13)),
-                ],
-              ),
-            )
-          : ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-              children: List.generate(
-                _ctrl.cpuHand.length,
-                (i) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: _buildFaceDownTile(width: 28, height: 48),
-                ),
-              ),
-            ),
+      child: photoUrl == null ? const Icon(Icons.person, color: Colors.white, size: 14) : null,
     );
   }
 
   Widget _buildChainArea() {
     return Expanded(
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
+        color: _feltColor,
         child: _ctrl.chain.isEmpty
             ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.touch_app, color: Colors.white38, size: 36),
-                    const SizedBox(height: 8),
+                    const Icon(Icons.touch_app, color: Colors.white38, size: 32),
+                    const SizedBox(height: 6),
                     Text(
                       _ctrl.phase == _GamePhase.playerTurn
                           ? 'Selecciona una ficha para comenzar'
                           : 'Turno del CPU...',
-                      style: const TextStyle(color: Colors.white38, fontSize: 14),
+                      style: const TextStyle(color: Colors.white54, fontSize: 13),
                     ),
                   ],
                 ),
               )
-            : LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  controller: _chainScrollCtrl,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: _buildSnakeWidget(_ctrl.chain, constraints.maxWidth - 24),
-                ),
-              ),
+            : Builder(builder: (ctx) {
+                final screenW = MediaQuery.of(ctx).size.width;
+                return Center(child: _buildSnakeChain(_ctrl.chain, screenW));
+              }),
       ),
     );
   }
 
-  Widget _buildSnakeWidget(List<_PlayedTile> chain, double availW) {
-    const double tW = 44.0;
-    const double tH = 24.0;
-    const double cW = 24.0;
-    const double cH = 44.0;
-    const double g = 3.0;
-    const double dy = (cH - tH) / 2.0;
-    const double rowStep = cH - tH;
+  Widget _buildSnakeChain(List<_PlayedTile> chain, double availWidth) {
+    const double tW = 52.0, tH = 26.0, dW = 26.0, dH = 52.0;
+    const double gap = 2.0, rowGap = 2.0, hPad = 16.0;
+    final double rowW = availWidth - hPad * 2;
 
-    final items = <Widget>[];
-    double curX = 0;
-    double curY = 0;
-    double totalH = cH;
-    int dir = 1;
-
-    for (int i = 0; i < chain.length; i++) {
-      final pt = chain[i];
-      final bool isLast = i == chain.length - 1;
-
-      bool makeCorner = false;
-      if (!isLast) {
-        if (dir == 1) {
-          makeCorner = (curX + tW + g) > (availW - cW - g);
-        } else {
-          makeCorner = curX < (cW + g);
-        }
-      }
-
-      final bool portrait = makeCorner || pt.isDouble;
-      final double w = portrait ? cW : tW;
-      final double h = portrait ? cH : tH;
-      final double topOff = portrait ? 0.0 : dy;
-
-      if (makeCorner) {
-        final double left = dir == 1 ? (availW - cW) : 0.0;
-        items.add(Positioned(
-          left: left, top: curY, width: cW, height: cH,
-          child: _buildDominoTileWidget(
-            left: pt.displayLeft, right: pt.displayRight,
-            isPortrait: true, width: cW, height: cH,
-          ),
-        ));
-        totalH = max(totalH, curY + cH);
-        curY += rowStep;
-        dir = -dir;
-        curX = dir == 1 ? (cW + g) : (availW - cW - g - tW);
+    // Split chain into rows that fit within rowW
+    final rows = <List<_PlayedTile>>[];
+    var current = <_PlayedTile>[];
+    var curW = 0.0;
+    for (final tile in chain) {
+      final w = tile.isDouble ? dW : tW;
+      if (current.isNotEmpty && curW + gap + w > rowW) {
+        rows.add(current);
+        current = [tile];
+        curW = w;
       } else {
-        double left = curX;
-        if (isLast) left = left.clamp(0.0, availW - w);
-        items.add(Positioned(
-          left: left, top: curY + topOff, width: w, height: h,
-          child: _buildDominoTileWidget(
-            left: pt.displayLeft, right: pt.displayRight,
-            isPortrait: portrait, width: w, height: h,
-          ),
-        ));
-        totalH = max(totalH, curY + topOff + h);
-        curX += dir * (w + g);
+        if (current.isNotEmpty) curW += gap;
+        curW += w;
+        current.add(tile);
       }
     }
+    if (current.isNotEmpty) rows.add(current);
 
+    final bool singleRow = rows.length == 1;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int idx = 0; idx < rows.length; idx++) ...[
+            if (idx > 0) const SizedBox(height: rowGap),
+            _buildSnakeRow(rows[idx], idx, rowW, singleRow, tW, tH, dW, dH, gap),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSnakeRow(List<_PlayedTile> rowTiles, int idx, double rowW,
+      bool singleRow, double tW, double tH, double dW, double dH, double gap) {
+    final leftToRight = idx.isEven;
+    final tiles = leftToRight ? rowTiles : rowTiles.reversed.toList();
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (int i = 0; i < tiles.length; i++) ...[
+          if (i > 0) SizedBox(width: gap),
+          _buildDominoTileWidget(
+            left: tiles[i].displayLeft,
+            right: tiles[i].displayRight,
+            isPortrait: tiles[i].isDouble,
+            width: tiles[i].isDouble ? dW : tW,
+            height: tiles[i].isDouble ? dH : tH,
+          ),
+        ],
+      ],
+    );
+    if (singleRow) return row;
     return SizedBox(
-      width: availW,
-      height: max(totalH, cH),
-      child: Stack(clipBehavior: Clip.none, children: items),
-    );
-  }
-
-  Widget _buildBoneyardBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: _panelColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.inventory_2, color: Colors.white54, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  'Pozo: ${_ctrl.boneyard.length}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          if (_ctrl.chain.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white12,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${_ctrl.leftOpen ?? '-'} ← → ${_ctrl.rightOpen ?? '-'}',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    if (_ctrl.phase != _GamePhase.playerTurn) return const SizedBox.shrink();
-    final canDraw = _ctrl.boneyard.isNotEmpty && !_ctrl.canPlayerPlayAny();
-    final canPass = !_ctrl.canPlayerPlayAny() && _ctrl.boneyard.isEmpty;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: [
-          if (canDraw)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _drawFromBoneyard,
-                icon: const Icon(Icons.add_box, size: 16),
-                label: const Text('Tomar del pozo'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-              ),
-            ),
-          if (canPass) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _passPlayerTurn,
-                icon: const Icon(Icons.skip_next, size: 16),
-                label: const Text('Pasar turno'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSideChoiceBar() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: _panelColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _accentOrange, width: 1.5),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          const Text('¿Dónde colocar?', style: TextStyle(color: Colors.white70, fontSize: 13)),
-          ElevatedButton(
-            onPressed: () {
-              setState(() => _needsSideChoice = false);
-              _placeSelectedTile('left');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal[700],
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            ),
-            child: Text('← Izquierda (${_ctrl.leftOpen})'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() => _needsSideChoice = false);
-              _placeSelectedTile('right');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple[700],
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            ),
-            child: Text('Derecha (${_ctrl.rightOpen}) →'),
-          ),
-        ],
+      width: rowW,
+      child: Align(
+        alignment: leftToRight ? Alignment.centerLeft : Alignment.centerRight,
+        child: row,
       ),
     );
   }
 
   Widget _buildPlayerArea() {
+    final bool isOpeningMove = _ctrl.chain.isEmpty &&
+        _ctrl.openingDoubleValue != -1 &&
+        _ctrl.phase == _GamePhase.playerTurn;
+
     return Container(
-      height: 88,
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       decoration: BoxDecoration(
-        color: _panelColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
+        color: const Color(0xFF8B5E3C),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _accentOrange, width: 1.5),
       ),
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         children: _ctrl.playerHand.map((tile) {
           final isPlayable = _ctrl.phase == _GamePhase.playerTurn && _ctrl.canPlay(tile);
           final isSelected = _selectedTile?.id == tile.id;
+          final bool isMandatory = isOpeningMove &&
+              tile.isDouble && tile.left == _ctrl.openingDoubleValue;
 
-          return GestureDetector(
+          final Widget tileWidget = GestureDetector(
             onTap: () => _onTileTap(tile),
             child: AnimatedScale(
               scale: isSelected ? 1.1 : 1.0,
@@ -1318,13 +1257,34 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                   left: tile.left,
                   right: tile.right,
                   isPortrait: true,
-                  width: 36,
-                  height: 68,
+                  width: 24,
+                  height: 44,
                   isPlayable: isPlayable,
                   isSelected: isSelected,
+                  isMandatoryFirst: isMandatory,
                 ),
               ),
             ),
+          );
+
+          if (!isMandatory) return tileWidget;
+
+          return AnimatedBuilder(
+            animation: _playerTileAnimCtrl,
+            builder: (context, child) => Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.amber.withValues(alpha: _playerTileAnimCtrl.value * 0.8),
+                    blurRadius: 18 * _playerTileAnimCtrl.value,
+                    spreadRadius: 5 * _playerTileAnimCtrl.value,
+                  ),
+                ],
+              ),
+              child: child,
+            ),
+            child: tileWidget,
           );
         }).toList(),
       ),
@@ -1374,13 +1334,16 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     required double height,
     bool isPlayable = false,
     bool isSelected = false,
+    bool isMandatoryFirst = false,
   }) {
     final borderColor = isSelected
         ? _accentOrange
-        : isPlayable
-            ? Colors.green[400]!
-            : _tileBorder;
-    final borderWidth = (isSelected || isPlayable) ? 2.0 : 1.0;
+        : isMandatoryFirst
+            ? Colors.amber[400]!
+            : isPlayable
+                ? Colors.green[400]!
+                : _tileBorder;
+    final borderWidth = (isSelected || isPlayable || isMandatoryFirst) ? 2.0 : 1.0;
 
     return Container(
       width: width,
@@ -1465,71 +1428,3 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   }
 }
 
-class _WoodGrainPainter extends CustomPainter {
-  static const _baseColors = [
-    Color(0xFFDFB25A), Color(0xFFD4A84E), Color(0xFFE3B660),
-    Color(0xFFCFA24A), Color(0xFFDAB058), Color(0xFFD5A850),
-    Color(0xFFE0B45C), Color(0xFFCCA04C), Color(0xFFDCAE56),
-    Color(0xFFD1A64E), Color(0xFFE1B25A), Color(0xFFCCA24C),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const plankCount = 14;
-    final rng = Random(37);
-    final plankH = size.height / plankCount;
-
-    for (int i = 0; i < plankCount; i++) {
-      final top = i * plankH;
-      final base = _baseColors[i % _baseColors.length];
-
-      final fillPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color.lerp(base, Colors.white, 0.12)!,
-            base,
-            Color.lerp(base, Colors.black, 0.07)!,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(Rect.fromLTWH(0, top, size.width, plankH));
-      canvas.drawRect(Rect.fromLTWH(0, top, size.width, plankH), fillPaint);
-
-      final lineCount = 5 + rng.nextInt(5);
-      for (int g = 0; g < lineCount; g++) {
-        final gy = top + (g + 1) * plankH / (lineCount + 1);
-        final opacity = 0.04 + rng.nextDouble() * 0.14;
-        final isDark = rng.nextDouble() > 0.30;
-        final grainPaint = Paint()
-          ..color = isDark
-              ? Color.fromARGB((opacity * 255).round(), 100, 55, 5)
-              : Color.fromARGB((opacity * 0.5 * 255).round(), 255, 240, 180)
-          ..strokeWidth = 0.4 + rng.nextDouble() * 1.0
-          ..style = PaintingStyle.stroke;
-        final amp = 0.8 + rng.nextDouble() * 2.8;
-        final cx = size.width * (0.2 + rng.nextDouble() * 0.6);
-        final cy = gy + (rng.nextBool() ? amp : -amp);
-        final endY = gy + (rng.nextBool() ? amp * 0.5 : -amp * 0.5);
-        canvas.drawPath(
-          Path()..moveTo(0, gy)..quadraticBezierTo(cx, cy, size.width, endY),
-          grainPaint,
-        );
-      }
-
-      canvas.drawLine(
-        Offset(0, top + 1.5), Offset(size.width, top + 1.5),
-        Paint()..color = const Color(0x1AFFFFFF)..strokeWidth = 2.0,
-      );
-      if (i < plankCount - 1) {
-        canvas.drawLine(
-          Offset(0, top + plankH), Offset(size.width, top + plankH),
-          Paint()..color = const Color(0xFF9B7030)..strokeWidth = 1.5,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WoodGrainPainter old) => false;
-}

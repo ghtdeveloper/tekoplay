@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/domino_game_match.dart';
 import '../../../core/service/domino_game_service.dart';
@@ -45,7 +46,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
   int _matchmakingSeconds = 0;
   Timer? _matchmakingTimer;
-  bool _isSearching = false;
   bool _navigated = false;
 
   String? _myName;
@@ -66,15 +66,20 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   final ScrollController _chainScrollCtrl = ScrollController();
   bool _isScreenKeepOnActive = false;
 
-  static const Color _tableColor = Color(0xFFD4A850);
-  static const Color _panelColor = Color(0xDD1A0800);
-  static const Color _tileColor = Color(0xFFFFF8E1);
-  static const Color _tileBorder = Color(0xFF4A3728);
+  static const Color _tableColor   = Color(0xFF2A4A30);
+  static const Color _panelColor   = Color(0xEE0D2010);
+  static const Color _woodBorder   = Color(0xFF8B5E3C);
+  static const Color _tileColor    = Color(0xFFFFF8E1);
+  static const Color _tileBorder   = Color(0xFF4A3728);
   static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     WidgetsBinding.instance.addObserver(this);
     _loadUserData();
 
@@ -143,6 +148,10 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
   @override
   void dispose() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     WidgetsBinding.instance.removeObserver(this);
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
@@ -167,7 +176,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
     setState(() {
       _screenState = _DominoOnlineState.matchmaking;
-      _isSearching = true;
       _matchmakingSeconds = 0;
     });
 
@@ -256,8 +264,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     if (!mounted || _navigated) return;
     _navigated = true;
     _matchmakingTimer?.cancel();
-    _isSearching = false;
-
     if (_activeGameId == null) {
       final result = await _gameService.createGame(
         hostId: _currentUser!.uid,
@@ -289,7 +295,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       _activeGameId = gameId;
       _myPlayerNumber = playerNumber;
       _screenState = _DominoOnlineState.gameActive;
-      _isSearching = false;
       _gameEnded = false;
       _selectedTileId = null;
       _needsSideChoice = false;
@@ -436,7 +441,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     }
 
     final tileData = state.tiles[tileId]!;
-    final canLeft = tileData['left'] == state.leftOpen || tileData['right'] == state.leftOpen;
     final canRight = tileData['left'] == state.rightOpen || tileData['right'] == state.rightOpen;
     _placeSelectedTile(tileId, canRight ? 'right' : 'left');
   }
@@ -625,7 +629,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     if (!mounted) return;
     final iWon = game.winnerId == _currentUser!.uid;
     final scores = game.getPlayerScores();
-    final myScore = scores['player$_myPlayerNumber'] ?? 0;
     final scoreLines = StringBuffer();
     for (int p = 1; p <= game.numberOfPlayers; p++) {
       final name = p == _myPlayerNumber ? 'Tú' : game.playerNameOf(p);
@@ -742,7 +745,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       child: Scaffold(
         backgroundColor: _tableColor,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF3E2007),
+          backgroundColor: _accentOrange,
           elevation: 2,
           title: const Text('Dominó Online', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
@@ -754,14 +757,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               ),
           ],
         ),
-        body: inGame
-            ? Stack(
-                children: [
-                  Positioned.fill(child: CustomPaint(painter: _WoodGrainPainter())),
-                  _buildBody(),
-                ],
-              )
-            : _buildBody(),
+        body: _buildBody(),
       ),
     );
   }
@@ -964,7 +960,12 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           children: [
             Container(
               padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(color: _panelColor, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white12)),
+              decoration: BoxDecoration(
+                color: _panelColor,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: _woodBorder.withValues(alpha: 0.6), width: 2),
+                boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 16, offset: Offset(0, 6))],
+              ),
               child: Column(
                 children: [
                   const Icon(Icons.hourglass_top, color: Colors.white54, size: 52),
@@ -1034,386 +1035,306 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     return SafeArea(
       child: Column(
         children: [
-          _buildOnlineScoreBar(
-            myScore: myScore,
+          // TOP: compact header — scores + opponent tiles
+          _buildOnlineLandscapeHeader(
             opponents: opponents,
+            myScore: myScore,
             isMyTurn: isMyTurn,
             targetScore: game.targetScore,
             roundNumber: state.roundNumber,
           ),
-          _buildOnlineOpponentsArea(opponents, isMyTurn),
-          const SizedBox(height: 4),
+          // CENTER: chain (green felt, expanded)
           _buildOnlineChainArea(state),
-          const SizedBox(height: 4),
-          _buildOnlineBoneyardBar(state),
-          const SizedBox(height: 4),
-          if (isMyTurn)
-            _buildOnlineActionButtons(canDraw, canPass),
-          _buildOnlinePlayerArea(myHand, state, isMyTurn),
-          const SizedBox(height: 4),
+          // BOTTOM: boneyard info + player hand + action buttons
+          _buildOnlineLandscapeFooter(
+            hand: myHand,
+            state: state,
+            isMyTurn: isMyTurn,
+            canDraw: canDraw,
+            canPass: canPass,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildOnlineScoreBar({
-    required int myScore,
+  Widget _buildOnlineLandscapeHeader({
     required List<({int playerNum, String name, int handCount, int score, bool isActive})> opponents,
+    required int myScore,
     required bool isMyTurn,
     required int targetScore,
     required int roundNumber,
   }) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xBB1A0800),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Row(
-        children: [
-          for (final opp in opponents)
-            _buildScoreColumn(opp.name, opp.score, opp.isActive, isOpponent: true),
-          Expanded(
-            child: Column(
-              children: [
-                Text('Meta: $targetScore', style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                Text('Ronda $roundNumber', style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                if (isMyTurn && _turnTimer != null)
-                  Text(
-                    '⏱ $_turnSecondsLeft s',
-                    style: TextStyle(
-                      color: _turnSecondsLeft <= 10 ? Colors.red[300] : Colors.white38,
-                      fontSize: 11, fontWeight: FontWeight.bold,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          _buildScoreColumn('Tú', myScore, isMyTurn, isOpponent: false),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScoreColumn(String name, int score, bool isActive, {required bool isOpponent}) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.white12 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: isOpponent ? Colors.grey[700] : Colors.grey[600],
-            child: Icon(
-              isOpponent ? Icons.person_outline : Icons.person,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(name, style: const TextStyle(color: Colors.white70, fontSize: 10)),
-          Text(
-            '$score',
-            style: TextStyle(
-              color: isActive ? _accentOrange : Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOnlineOpponentsArea(
-    List<({int playerNum, String name, int handCount, int score, bool isActive})> opponents,
-    bool isMyTurn,
-  ) {
-    if (opponents.length == 1) {
-      return _buildOpponentRow(opponents.first, isMyTurn);
-    }
-    // Multiple opponents — show in a Row
-    return SizedBox(
       height: 72,
-      child: Row(
-        children: opponents.map((opp) => Expanded(child: _buildOpponentRow(opp, isMyTurn))).toList(),
-      ),
-    );
-  }
-
-  Widget _buildOpponentRow(
-    ({int playerNum, String name, int handCount, int score, bool isActive}) opp,
-    bool isMyTurn,
-  ) {
-    return Container(
-      height: 72,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: opp.isActive ? const Color(0xCC2A1000) : const Color(0xBB1A0800),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: opp.isActive ? _accentOrange : Colors.white12, width: opp.isActive ? 1.5 : 1),
-      ),
+      color: _panelColor,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Row(
         children: [
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
+          // Round/target info
+          SizedBox(
+            width: 70,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(opp.name, style: const TextStyle(color: Colors.white70, fontSize: 10), overflow: TextOverflow.ellipsis),
-                Text('${opp.score}', style: TextStyle(color: opp.isActive ? _accentOrange : Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                Text('Ronda $roundNumber', style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                Text('Meta: $targetScore', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                if (isMyTurn && _turnTimer != null)
+                  Text('⏱ $_turnSecondsLeft"',
+                      style: TextStyle(
+                        color: _turnSecondsLeft <= 10 ? Colors.red[300] : Colors.green[300],
+                        fontSize: 12, fontWeight: FontWeight.bold,
+                      )),
               ],
             ),
           ),
+          const SizedBox(width: 6),
+          // Opponent score + face-down tiles
           Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              children: List.generate(
-                opp.handCount,
-                (i) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                  child: _buildFaceDownTile(width: 26, height: 48),
+            child: Row(
+              children: opponents.map((opp) => Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: opp.isActive ? Colors.white12 : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        border: opp.isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.person_outline, color: Colors.white54, size: 18),
+                          Text(opp.name, style: const TextStyle(color: Colors.white60, fontSize: 9), overflow: TextOverflow.ellipsis),
+                          Text('${opp.score}', style: TextStyle(color: opp.isActive ? _accentOrange : Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: List.generate(
+                          opp.handCount,
+                          (_) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: _buildFaceDownTile(width: 20, height: 38),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+              )).toList(),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // My score
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: isMyTurn ? Colors.white12 : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: isMyTurn ? Border.all(color: _accentOrange, width: 1.5) : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.person, color: Colors.white70, size: 18),
+                const Text('Tú', style: TextStyle(color: Colors.white60, fontSize: 9)),
+                Text('$myScore', style: TextStyle(color: isMyTurn ? _accentOrange : Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildOnlineLandscapeFooter({
+    required List<String> hand,
+    required DominoGameState state,
+    required bool isMyTurn,
+    required bool canDraw,
+    required bool canPass,
+  }) {
+    return Container(
+      height: 92,
+      color: _panelColor,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Row(
+        children: [
+          // LEFT: boneyard + open ends
+          SizedBox(
+            width: 76,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _onlineInfoChip('Pozo: ${state.boneyard.length}'),
+                const SizedBox(height: 3),
+                if (state.chain.isNotEmpty)
+                  _onlineInfoChip('${state.leftOpen ?? '-'} ↔ ${state.rightOpen ?? '-'}'),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          // CENTER: player hand
+          Expanded(child: _buildOnlinePlayerArea(hand, state, isMyTurn)),
+          // RIGHT: action buttons
+          if (isMyTurn && (canDraw || canPass || _needsSideChoice)) ...[
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 90,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (canDraw)
+                    _onlineActionBtn('Tomar', Icons.add_box, Colors.blue[700]!, _drawFromBoneyard),
+                  if (canPass)
+                    _onlineActionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passTurn),
+                  if (_needsSideChoice && _selectedTileId != null) ...[
+                    _onlineActionBtn('← (${state.leftOpen})', Icons.arrow_back, Colors.teal[700]!, () {
+                      final id = _selectedTileId!;
+                      setState(() { _needsSideChoice = false; _selectedTileId = null; });
+                      _placeSelectedTile(id, 'left');
+                    }),
+                    const SizedBox(height: 2),
+                    _onlineActionBtn('(${state.rightOpen}) →', Icons.arrow_forward, Colors.deepPurple[700]!, () {
+                      final id = _selectedTileId!;
+                      setState(() { _needsSideChoice = false; _selectedTileId = null; });
+                      _placeSelectedTile(id, 'right');
+                    }),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _onlineInfoChip(String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(6)),
+        child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+      );
+
+  Widget _onlineActionBtn(String label, IconData icon, Color color, VoidCallback onTap) =>
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: onTap,
+          icon: Icon(icon, size: 13),
+          label: Text(label, style: const TextStyle(fontSize: 11)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      );
 
   Widget _buildOnlineChainArea(DominoGameState state) {
     return Expanded(
-      child: state.chain.isEmpty
-          ? Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text('La cadena aparecerá aquí', style: TextStyle(color: Colors.white54, fontSize: 14)),
-              ),
-            )
-          : LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                controller: _chainScrollCtrl,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: _buildSnakeWidget(state.chain, constraints.maxWidth - 24),
-              ),
-            ),
+      child: Container(
+        color: const Color(0xFF2D7A3A),
+        child: state.chain.isEmpty
+            ? const Center(
+                child: Text('La cadena aparecerá aquí',
+                    style: TextStyle(color: Colors.white54, fontSize: 13)),
+              )
+            : Builder(builder: (ctx) {
+                final screenW = MediaQuery.of(ctx).size.width;
+                return Center(child: _buildOnlineSnakeChain(state.chain, screenW));
+              }),
+      ),
     );
   }
 
-  Widget _buildSnakeWidget(List<DominoChainTile> chain, double availW) {
-    const double tW = 44.0; // landscape tile width
-    const double tH = 24.0; // landscape tile height
-    const double cW = 24.0; // corner/portrait tile width
-    const double cH = 44.0; // corner/portrait tile height
-    const double g = 3.0;   // gap between tiles
-    const double dy = (cH - tH) / 2.0; // vertical centering offset = 10
-    const double rowStep = cH - tH;    // y advance per turn = 20
+  Widget _buildOnlineSnakeChain(List<dynamic> chain, double availWidth) {
+    const double tW = 52.0, tH = 26.0, dW = 26.0, dH = 52.0;
+    const double gap = 2.0, rowGap = 2.0, hPad = 16.0;
+    final double rowW = availWidth - hPad * 2;
 
-    final items = <Widget>[];
-    double curX = 0;
-    double curY = 0;
-    double totalH = cH;
-    int dir = 1; // 1=right, -1=left
-
-    for (int i = 0; i < chain.length; i++) {
-      final ct = chain[i];
-      final bool isLast = i == chain.length - 1;
-
-      bool makeCorner = false;
-      if (!isLast) {
-        if (dir == 1) {
-          makeCorner = (curX + tW + g) > (availW - cW - g);
-        } else {
-          makeCorner = curX < (cW + g);
-        }
-      }
-
-      final bool portrait = makeCorner || ct.isDouble;
-      final double w = portrait ? cW : tW;
-      final double h = portrait ? cH : tH;
-      final double topOff = portrait ? 0.0 : dy;
-
-      if (makeCorner) {
-        final double left = dir == 1 ? (availW - cW) : 0.0;
-        items.add(Positioned(
-          left: left, top: curY, width: cW, height: cH,
-          child: _buildDominoTileWidget(
-            left: ct.displayLeft, right: ct.displayRight,
-            isPortrait: true, width: cW, height: cH,
-          ),
-        ));
-        totalH = max(totalH, curY + cH);
-        curY += rowStep;
-        dir = -dir;
-        curX = dir == 1 ? (cW + g) : (availW - cW - g - tW);
+    final rows = <List<dynamic>>[];
+    var current = <dynamic>[];
+    var curW = 0.0;
+    for (final tile in chain) {
+      final w = tile.isDouble ? dW : tW;
+      if (current.isNotEmpty && curW + gap + w > rowW) {
+        rows.add(current);
+        current = [tile];
+        curW = w;
       } else {
-        double left = curX;
-        if (isLast) left = left.clamp(0.0, availW - w);
-        items.add(Positioned(
-          left: left, top: curY + topOff, width: w, height: h,
-          child: _buildDominoTileWidget(
-            left: ct.displayLeft, right: ct.displayRight,
-            isPortrait: portrait, width: w, height: h,
-          ),
-        ));
-        totalH = max(totalH, curY + topOff + h);
-        curX += dir * (w + g);
+        if (current.isNotEmpty) curW += gap;
+        curW += w;
+        current.add(tile);
       }
     }
+    if (current.isNotEmpty) rows.add(current);
 
+    final bool singleRow = rows.length == 1;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int idx = 0; idx < rows.length; idx++) ...[
+            if (idx > 0) const SizedBox(height: rowGap),
+            _buildOnlineSnakeRow(rows[idx], idx, rowW, singleRow, tW, tH, dW, dH, gap),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnlineSnakeRow(List<dynamic> rowTiles, int idx, double rowW,
+      bool singleRow, double tW, double tH, double dW, double dH, double gap) {
+    final leftToRight = idx.isEven;
+    final tiles = leftToRight ? rowTiles : rowTiles.reversed.toList();
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (int i = 0; i < tiles.length; i++) ...[
+          if (i > 0) SizedBox(width: gap),
+          _buildDominoTileWidget(
+            left: tiles[i].displayLeft,
+            right: tiles[i].displayRight,
+            isPortrait: tiles[i].isDouble,
+            width: tiles[i].isDouble ? dW : tW,
+            height: tiles[i].isDouble ? dH : tH,
+          ),
+        ],
+      ],
+    );
+    if (singleRow) return row;
     return SizedBox(
-      width: availW,
-      height: max(totalH, cH),
-      child: Stack(clipBehavior: Clip.none, children: items),
-    );
-  }
-
-  Widget _buildOnlineBoneyardBar(DominoGameState state) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: _panelColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Text(
-              'Pozo: ${state.boneyard.length}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-          ),
-          if (state.chain.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.white12,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${state.leftOpen ?? '-'} ← → ${state.rightOpen ?? '-'}',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ],
+      width: rowW,
+      child: Align(
+        alignment: leftToRight ? Alignment.centerLeft : Alignment.centerRight,
+        child: row,
       ),
     );
   }
 
-  Widget _buildOnlineActionButtons(bool canDraw, bool canPass) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: [
-          if (canDraw)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _drawFromBoneyard,
-                icon: const Icon(Icons.add_box, size: 16),
-                label: const Text('Tomar del pozo'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-              ),
-            ),
-          if (canPass) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _passTurn,
-                icon: const Icon(Icons.skip_next, size: 16),
-                label: const Text('Pasar turno'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSideChoiceBar(DominoGameState state, String tileId) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: _panelColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _accentOrange, width: 1.5),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          const Text('¿Dónde?', style: TextStyle(color: Colors.white70, fontSize: 13)),
-          ElevatedButton(
-            onPressed: () {
-              setState(() { _needsSideChoice = false; _selectedTileId = null; });
-              _placeSelectedTile(tileId, 'left');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal[700],
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            ),
-            child: Text('← (${state.leftOpen})'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() { _needsSideChoice = false; _selectedTileId = null; });
-              _placeSelectedTile(tileId, 'right');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple[700],
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            ),
-            child: Text('(${state.rightOpen}) →'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildOnlinePlayerArea(List<String> hand, DominoGameState state, bool isMyTurn) {
     return Container(
-      height: 108,
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       decoration: BoxDecoration(
-        color: const Color(0xBB1A0800),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
+        color: const Color(0xFF8B5E3C),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _accentOrange, width: 1.5),
       ),
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         children: hand.map((tileId) {
           final td = state.tiles[tileId];
           if (td == null) return const SizedBox.shrink();
@@ -1431,8 +1352,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                   left: td['left']!,
                   right: td['right']!,
                   isPortrait: true,
-                  width: 46,
-                  height: 86,
+                  width: 34,
+                  height: 64,
                   isPlayable: isPlayable,
                   isSelected: isSelected,
                 ),
@@ -1540,82 +1461,5 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       default: return [];
     }
   }
-}
-
-class _WoodGrainPainter extends CustomPainter {
-  // Natural bamboo / light oak palette — warm honey tones
-  static const _baseColors = [
-    Color(0xFFDFB25A), Color(0xFFD4A84E), Color(0xFFE3B660),
-    Color(0xFFCFA24A), Color(0xFFDAB058), Color(0xFFD5A850),
-    Color(0xFFE0B45C), Color(0xFFCCA04C), Color(0xFFDCAE56),
-    Color(0xFFD1A64E), Color(0xFFE1B25A), Color(0xFFCCA24C),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const plankCount = 14;
-    final rng = Random(37); // fixed seed — deterministic render
-    final plankH = size.height / plankCount;
-
-    for (int i = 0; i < plankCount; i++) {
-      final top = i * plankH;
-      final base = _baseColors[i % _baseColors.length];
-
-      // Base fill: subtle top-to-bottom gradient per plank
-      final fillPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color.lerp(base, Colors.white, 0.12)!,
-            base,
-            Color.lerp(base, Colors.black, 0.07)!,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(Rect.fromLTWH(0, top, size.width, plankH));
-      canvas.drawRect(Rect.fromLTWH(0, top, size.width, plankH), fillPaint);
-
-      // Wavy grain lines using quadratic bezier curves
-      final lineCount = 5 + rng.nextInt(5);
-      for (int g = 0; g < lineCount; g++) {
-        final gy = top + (g + 1) * plankH / (lineCount + 1);
-        final opacity = 0.04 + rng.nextDouble() * 0.14;
-        final isDark = rng.nextDouble() > 0.30;
-        final grainPaint = Paint()
-          ..color = isDark
-              ? Color.fromARGB((opacity * 255).round(), 100, 55, 5)
-              : Color.fromARGB((opacity * 0.5 * 255).round(), 255, 240, 180)
-          ..strokeWidth = 0.4 + rng.nextDouble() * 1.0
-          ..style = PaintingStyle.stroke;
-        final amp = 0.8 + rng.nextDouble() * 2.8;
-        final cx = size.width * (0.2 + rng.nextDouble() * 0.6);
-        final cy = gy + (rng.nextBool() ? amp : -amp);
-        final endY = gy + (rng.nextBool() ? amp * 0.5 : -amp * 0.5);
-        canvas.drawPath(
-          Path()
-            ..moveTo(0, gy)
-            ..quadraticBezierTo(cx, cy, size.width, endY),
-          grainPaint,
-        );
-      }
-
-      // Soft highlight at top of each plank
-      canvas.drawLine(
-        Offset(0, top + 1.5), Offset(size.width, top + 1.5),
-        Paint()..color = const Color(0x1AFFFFFF)..strokeWidth = 2.0,
-      );
-
-      // Seam between planks
-      if (i < plankCount - 1) {
-        canvas.drawLine(
-          Offset(0, top + plankH), Offset(size.width, top + plankH),
-          Paint()..color = const Color(0xFF9B7030)..strokeWidth = 1.5,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WoodGrainPainter old) => false;
 }
 
