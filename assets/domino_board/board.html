@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:transparent}
+canvas{display:block;touch-action:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── Sprite-sheet frame map [x,y,w,h] ─────────────────────────────────────
+const F={
+  '0-0':[630,586,99,188],'0-1':[769,586,99,188],'0-2':[980,0,99,188],
+  '0-3':[980,228,99,188],'0-4':[980,456,99,188],'0-5':[980,684,99,188],
+  '0-6':[980,912,99,188],'1-1':[1119,0,99,188],'1-2':[1119,228,99,188],
+  '1-3':[490,586,100,188],'1-4':[1119,456,99,188],'1-5':[1119,684,99,188],
+  '1-6':[1119,912,99,188],'2-2':[1119,1140,99,188],'2-3':[1258,0,99,188],
+  '2-4':[1258,228,99,188],'2-5':[1258,456,99,188],'2-6':[1258,684,99,188],
+  '3-3':[1258,912,99,188],'3-4':[1258,1140,99,188],'3-5':[1397,0,99,188],
+  '3-6':[1397,228,99,188],'4-4':[1397,456,99,188],'4-5':[1397,684,99,188],
+  '4-6':[1397,912,99,188],'5-5':[1397,1140,99,188],'5-6':[0,1412,99,188],
+  '6-6':[139,1412,99,188],'back':[980,1140,99,188]
+};
+const TW=99,TH=188;
+
+const cv=document.getElementById('c');
+const ctx=cv.getContext('2d');
+let chain=[],imgOk=false;
+
+// ── Sprite image ─────────────────────────────────────────────────────────
+const img=new Image();
+img.onload=function(){imgOk=true;render();};
+img.onerror=function(){imgOk=false;render();};
+
+// ── Chunk-based image loading ────────────────────────────────────────────
+let _buf=null;
+window.setImgSrc=function(src){img.src=src;};
+window._imgStart=function(){_buf=[];};
+window._imgChunk=function(c){if(_buf)_buf.push(c);};
+window._imgEnd=function(){
+  if(!_buf)return;
+  const b64=_buf.join('');
+  _buf=null;
+  img.onload=function(){imgOk=true;render();};
+  img.onerror=function(){imgOk=false;render();};
+  try{
+    const bin=atob(b64);
+    const arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    img.src=URL.createObjectURL(new Blob([arr],{type:'image/png'}));
+  }catch(e){
+    img.src='data:image/png;base64,'+b64;
+  }
+};
+
+// ── Layout: CodeCanyon snake from center outward ──────────────────────────
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+
+// Directions: same as CodeCanyon tilesRotationMatrixLeft/Right
+const DIRS=[
+  {a:-Math.PI/2,dx:-TH,dy:0},  // 0: horizontal-left
+  {a:0,         dx:0,  dy:-TH}, // 1: vertical-up
+  {a:Math.PI/2, dx:TH, dy:0},   // 2: horizontal-right
+  {a:Math.PI,   dx:0,  dy:TH},  // 3: vertical-down
+];
+
+function layout(tiles){
+  if(!tiles.length)return[];
+  const mid=Math.floor(tiles.length/2);
+  const f=tiles.slice(0,mid);   // left half
+  const g=tiles.slice(mid);     // right half
+  const pos=[];
+
+  // ── LEFT half: placed reversed, growing from center outward to the left
+  let ai=0,ex=DIRS[0].dx/2,ky=0;
+  for(let d=0;d<f.length;d++){
+    const t=f[f.length-1-d]; // reversed
+    pos.push({cx:ex,cy:ky,a:DIRS[ai].a,l:t.l,r:t.r});
+    ex+=DIRS[ai].dx; ky+=DIRS[ai].dy;
+    const dxc=clamp(DIRS[ai].dx,-1,1);
+    if(d===2||d===5){
+      ex-=(TW/2)*dxc; ky+=(TW/2)*dxc;
+      ai++; if(ai>3)ai-=3;
+      ex+=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+      ky+=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+    }
+    if(d===12){
+      ex-=(TW/2)*3*dxc; ky-=(TW/2)*3*dxc;
+      ai--; if(ai<0)ai+=3;
+      ex-=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+      ky-=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+    }
+  }
+
+  // ── RIGHT half: growing from center outward to the right
+  ai=0; ex=-DIRS[0].dx/2; ky=0;
+  for(let d=0;d<g.length;d++){
+    const t=g[d];
+    pos.push({cx:ex,cy:ky,a:DIRS[ai].a,l:t.l,r:t.r});
+    ex-=DIRS[ai].dx; ky-=DIRS[ai].dy;
+    const dxc=clamp(DIRS[ai].dx,-1,1);
+    if(d===2||d===5){
+      ex+=(TW/2)*dxc; ky-=(TW/2)*dxc;
+      ai++; if(ai>3)ai-=3;
+      ex-=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+      ky-=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+    }
+    if(d===12){
+      ex+=(TW/2)*3*dxc; ky+=(TW/2)*3*dxc;
+      ai--; if(ai<0)ai+=3;
+      ex-=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+      ky+=(TW/2)*clamp(DIRS[ai].dx,-1,1);
+    }
+  }
+
+  return pos;
+}
+
+// ── Wood background — pine table like the reference image ────────────────
+function rng(seed){
+  let s=(seed^0x9e3779b9)>>>0;
+  return function(){
+    s=Math.imul(s^(s>>>16),0x45d9f3b)>>>0;
+    s=Math.imul(s^(s>>>16),0x45d9f3b)>>>0;
+    s^=s>>>16;
+    return(s>>>0)/0xFFFFFFFF;
+  };
+}
+
+function drawWoodBg(W,H){
+  // Grass green background — same tone as the reference game
+  const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*0.7);
+  g.addColorStop(0,'#52B043');
+  g.addColorStop(0.6,'#429936');
+  g.addColorStop(1,'#347A2A');
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,W,H);
+}
+
+// ── Frame lookup ─────────────────────────────────────────────────────────
+function fr(l,r){const a=Math.min(l,r),b=Math.max(l,r);return F[a+'-'+b]||F.back;}
+
+// ── Sprite draw ───────────────────────────────────────────────────────────
+// flip=true when l>r: sprite sheet stores min-value on top, so we rotate 180°
+function drawS(frame,cx,cy,ang,s,flip){
+  const[fx,fy,fw,fh]=frame;
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(flip?ang+Math.PI:ang);
+  ctx.drawImage(img,fx,fy,fw,fh,-fw*s/2,-fh*s/2,fw*s,fh*s);
+  ctx.restore();
+}
+
+// ── Fallback pip draw ────────────────────────────────────────────────────
+const PIP={0:[],1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],
+  4:[[-1,-1],[1,-1],[-1,1],[1,1]],5:[[-1,-1],[1,-1],[0,0],[-1,1],[1,1]],
+  6:[[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]};
+function drawP(l,r,cx,cy,ang,s){
+  // Tile in portrait (TW×TH), rotated by ang to match sprite orientation
+  const w=TW*s,h=TH*s,pr=Math.max(2,TW*s*.07);
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);
+  ctx.fillStyle='#F5F5DC';ctx.strokeStyle='#444';ctx.lineWidth=Math.max(1,s*1.5);
+  ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,4*s);ctx.fill();ctx.stroke();
+  // Horizontal dividing line (l on top, r on bottom — matches sprite sheet layout)
+  ctx.beginPath();ctx.moveTo(-w/2+4,0);ctx.lineTo(w/2-4,0);
+  ctx.strokeStyle='#888';ctx.lineWidth=Math.max(.5,s*.8);ctx.stroke();
+  ctx.fillStyle='#111';const cell=w*.28;
+  for(const[val,by]of[[l,-h/4],[r,h/4]])
+    for(const[px,py]of(PIP[val]||[])){
+      ctx.beginPath();ctx.arc(px*cell,py*cell+by,pr,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function render(){
+  const W=window.innerWidth,H=window.innerHeight;
+  cv.width=W;cv.height=H;ctx.clearRect(0,0,W,H);
+  drawWoodBg(W,H);
+  if(!chain.length)return;
+  const pos=layout(chain);
+  if(!pos.length)return;
+
+  // Compute bounding box in layout coords (all positions are tile centers)
+  // For a tile at angle a, the bounding box contribution depends on rotation
+  // Approx: use TH for the dimension in the layout direction
+  let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
+  for(const p of pos){
+    // rough half-extents based on rotation
+    const cosA=Math.abs(Math.cos(p.a)),sinA=Math.abs(Math.sin(p.a));
+    const hw=(TW/2)*cosA+(TH/2)*sinA;
+    const hh=(TW/2)*sinA+(TH/2)*cosA;
+    mnX=Math.min(mnX,p.cx-hw); mxX=Math.max(mxX,p.cx+hw);
+    mnY=Math.min(mnY,p.cy-hh); mxY=Math.max(mxY,p.cy+hh);
+  }
+
+  const PAD=12;
+  const s=Math.min((W-2*PAD)/(mxX-mnX),(H-2*PAD)/(mxY-mnY),0.38);
+  const ox=W/2-(mxX+mnX)/2*s;
+  const oy=H/2-(mxY+mnY)/2*s;
+
+  for(const p of pos){
+    const dx=p.cx*s+ox,dy=p.cy*s+oy;
+    if(imgOk) drawS(fr(p.l,p.r),dx,dy,p.a,s,p.l>p.r);
+    else       drawP(p.l,p.r,dx,dy,p.a,s);
+  }
+}
+
+// ── Public API ────────────────────────────────────────────────────────────
+window.updateBoard=function(data){
+  try{chain=typeof data==='string'?JSON.parse(data):data;}catch(e){chain=[];}
+  render();
+};
+window.clearBoard=function(){chain=[];render();};
+window.addEventListener('resize',render);
+
+setTimeout(function(){try{FlutterChannel.postMessage('ready');}catch(e){}},80);
+</script>
+</body>
+</html>

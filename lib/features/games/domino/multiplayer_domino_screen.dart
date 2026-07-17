@@ -10,6 +10,8 @@ import '../../../core/models/domino_game_match.dart';
 import '../../../core/service/bot_name_service.dart';
 import '../../../core/service/domino_game_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/widgets/domino_board_widgets.dart';
+import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
 
 enum _FriendDominoState { setup, waitingRoom, gameActive }
@@ -78,16 +80,15 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   static const Color _tableColor   = Color(0xFF2A4A30);
   static const Color _panelColor   = Color(0xEE0D2010);
 
-  static const Color _tileColor    = Color(0xFFFFF8E1);
-  static const Color _tileBorder   = Color(0xFF4A3728);
   static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
   void initState() {
     super.initState();
+    DominoSpriteSheet.preload().then((_) { if (mounted) setState(() {}); });
     SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
     ]);
     WidgetsBinding.instance.addObserver(this);
     _currencyType = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
@@ -755,7 +756,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         if (!didPop && inGame && !_gameEnded) _abandonGame();
       },
       child: Scaffold(
-        backgroundColor: _tableColor,
+        backgroundColor: const Color(0xFF347A2A),
         appBar: AppBar(
           backgroundColor: _accentOrange,
           elevation: 0,
@@ -827,7 +828,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             ),
           ),
           const SizedBox(height: 20),
-          // Player count selection
           const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
@@ -973,86 +973,98 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
 
   Widget _buildWaitingRoom() {
     final gameId = _activeGameId ?? '';
+    final joined = _currentGame?.currentPlayerCount ?? 1;
+    final remaining = _selectedPlayerCount - joined;
+    final countdown = (120 - _waitingSeconds).clamp(0, 120);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: _panelColor,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white12),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10)],
               ),
               child: Column(
                 children: [
-                  const Icon(Icons.hourglass_top, color: Colors.white54, size: 48),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Sala creada',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  const Text('🁣', style: TextStyle(fontSize: 48)),
+                  const SizedBox(height: 12),
+                  const Text('Sala de espera',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('$joined / $_selectedPlayerCount jugadores',
+                      style: const TextStyle(fontSize: 16, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: joined / _selectedPlayerCount,
+                      backgroundColor: Colors.grey.shade200,
+                      color: const Color(0xFFEC7A34),
+                      minHeight: 10,
+                    ),
                   ),
+                  const SizedBox(height: 16),
+                  // Room code
+                  const Text('Comparte el código con tu amigo:',
+                      style: TextStyle(color: Colors.black54, fontSize: 13),
+                      textAlign: TextAlign.center),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Comparte este código con tu amigo:',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
                   GestureDetector(
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: gameId));
                       _showSnack('Código copiado');
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.white12,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _accentOrange, width: 1.5),
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFEC7A34), width: 1.5),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             gameId.length > 16 ? '${gameId.substring(0, 16)}...' : gameId,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1),
                           ),
-                          const SizedBox(width: 10),
-                          const Icon(Icons.copy, color: Colors.white54, size: 18),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.copy, color: Color(0xFFEC7A34), size: 18),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Player count progress
-                  Builder(builder: (context) {
-                    final joined = _currentGame?.currentPlayerCount ?? 1;
-                    return Column(children: [
-                      Text('$joined / $_selectedPlayerCount jugadores', style: TextStyle(color: _accentOrange, fontSize: 15, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: joined / _selectedPlayerCount,
-                          backgroundColor: Colors.white12,
-                          color: _accentOrange,
-                          minHeight: 8,
-                        ),
+                  if (remaining > 0) ...[
+                    const SizedBox(width: 24, height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFEC7A34))),
+                    const SizedBox(height: 6),
+                    Text('Esperando $remaining ${remaining == 1 ? 'jugador más' : 'jugadores más'}...',
+                        style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Expira en $countdown"',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: _waitingSeconds >= 100 ? FontWeight.bold : FontWeight.normal,
+                        color: _waitingSeconds >= 100 ? Colors.orange.shade700 : Colors.black45,
                       ),
-                      const SizedBox(height: 12),
-                      const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white38, strokeWidth: 2)),
-                      const SizedBox(height: 6),
-                      const Text('Esperando jugadores...', style: TextStyle(color: Colors.white38, fontSize: 13)),
-                    ]);
-                  }),
+                    ),
+                  ] else ...[
+                    const Icon(Icons.check_circle, color: Colors.green, size: 28),
+                    const Text('¡Todos listos! Iniciando...',
+                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-            TextButton(
+            const SizedBox(height: 32),
+            OutlinedButton.icon(
               onPressed: () async {
                 _waitingTimer?.cancel();
                 _waitingSubscription?.cancel();
@@ -1061,7 +1073,14 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                 }
                 if (mounted) Navigator.pop(context);
               },
-              child: Text('Cancelar', style: TextStyle(color: Colors.red[300])),
+              icon: const Icon(Icons.close),
+              label: const Text('Cancelar'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ],
         ),
@@ -1207,7 +1226,15 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   }) {
     return Container(
       height: 92,
-      color: _panelColor,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFB8844A), Color(0xFF8B5C28), Color(0xFF6E4318)],
+          stops: [0.0, 0.5, 1.0],
+        ),
+        boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 8, offset: Offset(0, -3))],
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Row(
         children: [
@@ -1281,89 +1308,15 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   Widget _buildChainArea(DominoGameState state) {
     return Expanded(
       child: Container(
-        color: const Color(0xFF2D7A3A),
-        child: state.chain.isEmpty
-            ? const Center(
-                child: Text('La cadena aparecerá aquí',
-                    style: TextStyle(color: Colors.white54, fontSize: 13)),
-              )
-            : Builder(builder: (ctx) {
-                final screenW = MediaQuery.of(ctx).size.width;
-                return Center(child: _buildSnakeChain(state.chain, screenW));
-              }),
+        color: const Color(0xFF429936),
+        child: DominoBoardWebView(
+          tiles: state.chain
+              .map<DominoChainEntry>((t) => DominoChainEntry(left: t.displayLeft, right: t.displayRight))
+              .toList(),
+        ),
       ),
     );
   }
-
-  Widget _buildSnakeChain(List<dynamic> chain, double availWidth) {
-    const double tW = 52.0, tH = 26.0, dW = 26.0, dH = 52.0;
-    const double gap = 2.0, rowGap = 2.0, hPad = 16.0;
-    final double rowW = availWidth - hPad * 2;
-
-    final rows = <List<dynamic>>[];
-    var current = <dynamic>[];
-    var curW = 0.0;
-    for (final tile in chain) {
-      final bool isDouble = tile.displayLeft == tile.displayRight;
-      final w = isDouble ? dW : tW;
-      if (current.isNotEmpty && curW + gap + w > rowW) {
-        rows.add(current);
-        current = [tile];
-        curW = w;
-      } else {
-        if (current.isNotEmpty) curW += gap;
-        curW += w;
-        current.add(tile);
-      }
-    }
-    if (current.isNotEmpty) rows.add(current);
-
-    final bool singleRow = rows.length == 1;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (int idx = 0; idx < rows.length; idx++) ...[
-            if (idx > 0) const SizedBox(height: rowGap),
-            _buildMpSnakeRow(rows[idx], idx, rowW, singleRow, tW, tH, dW, dH, gap),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMpSnakeRow(List<dynamic> rowTiles, int idx, double rowW,
-      bool singleRow, double tW, double tH, double dW, double dH, double gap) {
-    final leftToRight = idx.isEven;
-    final tiles = leftToRight ? rowTiles : rowTiles.reversed.toList();
-    final row = Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        for (int i = 0; i < tiles.length; i++) ...[
-          if (i > 0) SizedBox(width: gap),
-          _buildTileWidget(
-            tiles[i].displayLeft,
-            tiles[i].displayRight,
-            tiles[i].isDouble,
-            tiles[i].isDouble ? dW : tW,
-            tiles[i].isDouble ? dH : tH,
-          ),
-        ],
-      ],
-    );
-    if (singleRow) return row;
-    return SizedBox(
-      width: rowW,
-      child: Align(
-        alignment: leftToRight ? Alignment.centerLeft : Alignment.centerRight,
-        child: row,
-      ),
-    );
-  }
-
 
   Widget _buildPlayerArea(List<String> hand, DominoGameState state, bool isMyTurn) {
     return Container(
@@ -1387,7 +1340,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
               duration: const Duration(milliseconds: 150),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: _buildTileWidget(td['left']!, td['right']!, true, 34, 64, isPlayable: isPlayable, isSelected: isSelected),
+                child: DominoTileWidget(left: td['left']!, right: td['right']!, width: 34, height: 64, isPlayable: isPlayable, isSelected: isSelected),
               ),
             ),
           );
@@ -1397,69 +1350,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   }
 
   Widget _buildFaceDown({required double width, required double height}) {
-    return Container(
-      width: width, height: height,
-      decoration: BoxDecoration(
-        color: const Color(0xFF4A3728), borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.white24), boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 2, offset: Offset(1, 1))],
-      ),
-    );
-  }
-
-  Widget _buildTileWidget(int left, int right, bool isPortrait, double width, double height, {bool isPlayable = false, bool isSelected = false}) {
-    final borderColor = isSelected ? _accentOrange : isPlayable ? Colors.green[400]! : _tileBorder;
-    final borderWidth = (isSelected || isPlayable) ? 2.0 : 1.0;
-
-    return Container(
-      width: width, height: height,
-      decoration: BoxDecoration(
-        color: _tileColor, borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: borderColor, width: borderWidth),
-        boxShadow: [BoxShadow(color: isPlayable ? Colors.green.withValues(alpha: 0.4) : Colors.black38, blurRadius: isPlayable ? 5 : 2, offset: const Offset(1, 1))],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: isPortrait
-            ? Column(children: [
-                Expanded(child: _pips(left)),
-                Container(height: 1, color: _tileBorder.withValues(alpha: 0.4)),
-                Expanded(child: _pips(right)),
-              ])
-            : Row(children: [
-                Expanded(child: _pips(left)),
-                Container(width: 1, color: _tileBorder.withValues(alpha: 0.4)),
-                Expanded(child: _pips(right)),
-              ]),
-      ),
-    );
-  }
-
-  Widget _pips(int count) {
-    if (count == 0) return const SizedBox.expand();
-    return LayoutBuilder(builder: (context, constraints) {
-      final side = constraints.maxWidth < constraints.maxHeight
-          ? constraints.maxWidth
-          : constraints.maxHeight;
-      final dot = (side * 0.22).clamp(3.0, 7.0);
-      final pad = dot * 0.55;
-      return Stack(
-        children: _pipPos(count).map((a) => Align(
-          alignment: a,
-          child: Padding(padding: EdgeInsets.all(pad), child: Container(width: dot, height: dot, decoration: const BoxDecoration(color: Color(0xFF1A1A1A), shape: BoxShape.circle))),
-        )).toList(),
-      );
-    });
-  }
-
-  List<Alignment> _pipPos(int count) {
-    switch (count) {
-      case 1: return [Alignment.center];
-      case 2: return [Alignment.topRight, Alignment.bottomLeft];
-      case 3: return [Alignment.topRight, Alignment.center, Alignment.bottomLeft];
-      case 4: return [Alignment.topLeft, Alignment.topRight, Alignment.bottomLeft, Alignment.bottomRight];
-      case 5: return [Alignment.topLeft, Alignment.topRight, Alignment.center, Alignment.bottomLeft, Alignment.bottomRight];
-      case 6: return [const Alignment(-1,-1), const Alignment(1,-1), const Alignment(-1,0), const Alignment(1,0), const Alignment(-1,1), const Alignment(1,1)];
-      default: return [];
-    }
+    return DominoTileWidget(left: 0, right: 0, width: width, height: height, faceDown: true);
   }
 }

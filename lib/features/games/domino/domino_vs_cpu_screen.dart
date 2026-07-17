@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/domino_tile.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/widgets/domino_board_widgets.dart';
+import '../../../core/widgets/domino_webview_board.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/Interstitial_ad_helper.dart';
@@ -184,7 +186,7 @@ class _DominoController {
     }
     if (cpuHand.isEmpty) {
       final pip = playerHand.fold(0, (s, t) => s + t.total);
-      cpuScore += pip;
+      cpuScore += pip; 3;
       return _RoundResult.cpuWon;
     }
     if (consecutivePasses >= 2) {
@@ -297,8 +299,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   static const Color _tableColor   = Color(0xFF2A4A30);
   static const Color _panelColor   = Color(0xEE0D2010);
   static const Color _feltColor    = Color(0xFF2D7A3A);
-  static const Color _tileColor    = Color(0xFFFFF8E1);
-  static const Color _tileBorder   = Color(0xFF4A3728);
+
   static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
@@ -323,9 +324,11 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     _ctrl.onTimeOut = _handleTimeOut;
 
     SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
     ]);
+
+    DominoSpriteSheet.preload().then((_) { if (mounted) setState(() {}); });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadAndDeductGameCost();
@@ -463,6 +466,12 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     }
 
     final canRight = tile.canConnectTo(_ctrl.rightOpen!);
+    final canLeft = tile.canConnectTo(_ctrl.leftOpen!);
+
+    if (canLeft && canRight) {
+      setState(() => _needsSideChoice = true);
+      return;
+    }
 
     _placeSelectedTile(canRight ? 'right' : 'left');
   }
@@ -861,7 +870,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         }
       },
       child: Scaffold(
-        backgroundColor: _tableColor,
+        backgroundColor: const Color(0xFF347A2A),
         appBar: AppBar(
           backgroundColor: _accentOrange,
           toolbarHeight: 44,
@@ -917,8 +926,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     );
   }
 
-  /// Compact top strip: round/score info on the left, CPU face-down tiles in
-  /// the center, player score + avatar on the right.
   Widget _buildLandscapeHeader() {
     final bool isPlayerTurn = _ctrl.phase == _GamePhase.playerTurn;
     final bool cpuHasOpening = _ctrl.chain.isEmpty &&
@@ -1023,8 +1030,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     );
   }
 
-  /// Compact bottom strip: boneyard info on the left, player hand in the
-  /// center, action buttons on the right.
   Widget _buildLandscapeFooter() {
     final bool isPlayerTurn = _ctrl.phase == _GamePhase.playerTurn;
     final bool canDraw = isPlayerTurn && _ctrl.boneyard.isNotEmpty && !_ctrl.canPlayerPlayAny();
@@ -1032,11 +1037,18 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
     return Container(
       height: 60,
-      color: _panelColor,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFB8844A), Color(0xFF8B5C28), Color(0xFF6E4318)],
+          stops: [0.0, 0.5, 1.0],
+        ),
+        boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 8, offset: Offset(0, -3))],
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       child: Row(
         children: [
-          // LEFT: boneyard + open ends
           SizedBox(
             width: 72,
             child: Column(
@@ -1051,9 +1063,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
             ),
           ),
           const SizedBox(width: 4),
-          // CENTER: player hand
           Expanded(child: _buildPlayerArea()),
-          // RIGHT: action buttons / side choice
           if (canDraw || canPass || _needsSideChoice) ...[
             const SizedBox(width: 4),
             SizedBox(
@@ -1066,12 +1076,12 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                   if (canPass)
                     _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
                   if (_needsSideChoice) ...[
-                    _actionBtn('← (${_ctrl.leftOpen})', Icons.arrow_back, Colors.teal[700]!, () {
+                    _actionBtn('← ${_ctrl.leftOpen}', Icons.arrow_back, Colors.teal[700]!, () {
                       setState(() => _needsSideChoice = false);
                       _placeSelectedTile('left');
                     }),
-                    const SizedBox(height: 2),
-                    _actionBtn('(${_ctrl.rightOpen}) →', Icons.arrow_forward, Colors.deepPurple[700]!, () {
+                    const SizedBox(height: 4),
+                    _actionBtn('${_ctrl.rightOpen} →', Icons.arrow_forward, Colors.deepPurple[700]!, () {
                       setState(() => _needsSideChoice = false);
                       _placeSelectedTile('right');
                     }),
@@ -1101,7 +1111,9 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
@@ -1132,7 +1144,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   Widget _buildChainArea() {
     return Expanded(
       child: Container(
-        color: _feltColor,
+        color: const Color(0xFF429936),
         child: _ctrl.chain.isEmpty
             ? Center(
                 child: Column(
@@ -1149,79 +1161,11 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                   ],
                 ),
               )
-            : Builder(builder: (ctx) {
-                final screenW = MediaQuery.of(ctx).size.width;
-                return Center(child: _buildSnakeChain(_ctrl.chain, screenW));
-              }),
-      ),
-    );
-  }
-
-  Widget _buildSnakeChain(List<_PlayedTile> chain, double availWidth) {
-    const double tW = 52.0, tH = 26.0, dW = 26.0, dH = 52.0;
-    const double gap = 2.0, rowGap = 2.0, hPad = 16.0;
-    final double rowW = availWidth - hPad * 2;
-
-    // Split chain into rows that fit within rowW
-    final rows = <List<_PlayedTile>>[];
-    var current = <_PlayedTile>[];
-    var curW = 0.0;
-    for (final tile in chain) {
-      final w = tile.isDouble ? dW : tW;
-      if (current.isNotEmpty && curW + gap + w > rowW) {
-        rows.add(current);
-        current = [tile];
-        curW = w;
-      } else {
-        if (current.isNotEmpty) curW += gap;
-        curW += w;
-        current.add(tile);
-      }
-    }
-    if (current.isNotEmpty) rows.add(current);
-
-    final bool singleRow = rows.length == 1;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (int idx = 0; idx < rows.length; idx++) ...[
-            if (idx > 0) const SizedBox(height: rowGap),
-            _buildSnakeRow(rows[idx], idx, rowW, singleRow, tW, tH, dW, dH, gap),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSnakeRow(List<_PlayedTile> rowTiles, int idx, double rowW,
-      bool singleRow, double tW, double tH, double dW, double dH, double gap) {
-    final leftToRight = idx.isEven;
-    final tiles = leftToRight ? rowTiles : rowTiles.reversed.toList();
-    final row = Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        for (int i = 0; i < tiles.length; i++) ...[
-          if (i > 0) SizedBox(width: gap),
-          _buildDominoTileWidget(
-            left: tiles[i].displayLeft,
-            right: tiles[i].displayRight,
-            isPortrait: tiles[i].isDouble,
-            width: tiles[i].isDouble ? dW : tW,
-            height: tiles[i].isDouble ? dH : tH,
-          ),
-        ],
-      ],
-    );
-    if (singleRow) return row;
-    return SizedBox(
-      width: rowW,
-      child: Align(
-        alignment: leftToRight ? Alignment.centerLeft : Alignment.centerRight,
-        child: row,
+            : DominoBoardWebView(
+                tiles: _ctrl.chain
+                    .map((t) => DominoChainEntry(left: t.displayLeft, right: t.displayRight))
+                    .toList(),
+              ),
       ),
     );
   }
@@ -1253,15 +1197,14 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
               duration: const Duration(milliseconds: 150),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: _buildDominoTileWidget(
+                child: DominoTileWidget(
                   left: tile.left,
                   right: tile.right,
-                  isPortrait: true,
                   width: 24,
                   height: 44,
                   isPlayable: isPlayable,
                   isSelected: isSelected,
-                  isMandatoryFirst: isMandatory,
+                  isMandatory: isMandatory,
                 ),
               ),
             ),
@@ -1292,139 +1235,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   }
 
   Widget _buildFaceDownTile({required double width, required double height}) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: const Color(0xFF4A3728),
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: Colors.white24, width: 1),
-        boxShadow: const [
-          BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(1, 1)),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: List.generate(
-          3,
-          (_) => Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: List.generate(
-              2,
-              (_) => Container(
-                width: 3,
-                height: 3,
-                decoration: const BoxDecoration(
-                  color: Colors.white24,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    return DominoTileWidget(left: 0, right: 0, width: width, height: height, faceDown: true);
   }
 
-  Widget _buildDominoTileWidget({
-    required int left,
-    required int right,
-    required bool isPortrait,
-    required double width,
-    required double height,
-    bool isPlayable = false,
-    bool isSelected = false,
-    bool isMandatoryFirst = false,
-  }) {
-    final borderColor = isSelected
-        ? _accentOrange
-        : isMandatoryFirst
-            ? Colors.amber[400]!
-            : isPlayable
-                ? Colors.green[400]!
-                : _tileBorder;
-    final borderWidth = (isSelected || isPlayable || isMandatoryFirst) ? 2.0 : 1.0;
-
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: _tileColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: borderColor, width: borderWidth),
-        boxShadow: [
-          BoxShadow(
-            color: isPlayable ? Colors.green.withValues(alpha: 0.4) : Colors.black38,
-            blurRadius: isPlayable ? 6 : 3,
-            offset: const Offset(1, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(5),
-        child: isPortrait
-            ? Column(children: [
-                Expanded(child: _buildPips(left)),
-                Container(height: 1.5, color: _tileBorder.withValues(alpha: 0.5)),
-                Expanded(child: _buildPips(right)),
-              ])
-            : Row(children: [
-                Expanded(child: _buildPips(left)),
-                Container(width: 1.5, color: _tileBorder.withValues(alpha: 0.5)),
-                Expanded(child: _buildPips(right)),
-              ]),
-      ),
-    );
-  }
-
-  Widget _buildPips(int count) {
-    if (count == 0) return const SizedBox.expand();
-    return LayoutBuilder(builder: (context, constraints) {
-      final side = constraints.maxWidth < constraints.maxHeight
-          ? constraints.maxWidth
-          : constraints.maxHeight;
-      final dotSize = (side * 0.22).clamp(3.0, 7.0);
-      final pad = dotSize * 0.55;
-      return Stack(
-        children: _pipPositions(count).map((align) => Align(
-          alignment: align,
-          child: Padding(
-            padding: EdgeInsets.all(pad),
-            child: Container(
-              width: dotSize,
-              height: dotSize,
-              decoration: const BoxDecoration(color: Color(0xFF1A1A1A), shape: BoxShape.circle),
-            ),
-          ),
-        )).toList(),
-      );
-    });
-  }
-
-  List<Alignment> _pipPositions(int count) {
-    switch (count) {
-      case 1:
-        return [Alignment.center];
-      case 2:
-        return [Alignment.topRight, Alignment.bottomLeft];
-      case 3:
-        return [Alignment.topRight, Alignment.center, Alignment.bottomLeft];
-      case 4:
-        return [Alignment.topLeft, Alignment.topRight, Alignment.bottomLeft, Alignment.bottomRight];
-      case 5:
-        return [Alignment.topLeft, Alignment.topRight, Alignment.center, Alignment.bottomLeft, Alignment.bottomRight];
-      case 6:
-        return [
-          const Alignment(-1, -1),
-          const Alignment(1, -1),
-          const Alignment(-1, 0),
-          const Alignment(1, 0),
-          const Alignment(-1, 1),
-          const Alignment(1, 1),
-        ];
-      default:
-        return [];
-    }
-  }
 }
 
