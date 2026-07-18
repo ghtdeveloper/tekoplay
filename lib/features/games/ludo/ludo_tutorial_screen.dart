@@ -409,9 +409,6 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
   void _handleBoardTap(Offset localPosition) {
     if (!_waitingForAction || _selectedLesson == null || _boardSize == 0) return;
 
-    final steps = _lessons[_selectedLesson]!['steps'] as List;
-    final step = steps[_currentStep] as Map<String, dynamic>;
-
     final squareSize = _boardSize / 15;
 
     String? tappedColor;

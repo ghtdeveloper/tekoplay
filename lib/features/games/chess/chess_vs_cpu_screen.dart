@@ -13,7 +13,7 @@ import '../../../generated/l10n.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/utils/game_result.dart';
 import '../../adds/banner_ad_widget.dart';
-import '../../adds/Interstitial_ad_helper.dart';
+import '../../adds/interstitial_ad_helper.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {

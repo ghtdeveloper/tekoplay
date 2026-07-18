@@ -96,8 +96,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   bool _gameEnded = false;
   double _boardSize = 0;
   DateTime? _gameStartTime;
-  bool _isScreenKeepOnActive = false;
-  bool _isBotThinking = false;
   bool _botExecuting = false;
   Timer? _botSafetyTimer;
   final Map<String, int> _botMissedFive = {};
@@ -237,7 +235,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   Future<void> _enableWakeLock() async {
     try {
       await WakelockPlus.enable();
-      if (mounted) setState(() => _isScreenKeepOnActive = true);
     } catch (_) {}
   }
 
@@ -245,7 +242,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     try {
       if (await WakelockPlus.enabled) {
         await WakelockPlus.disable();
-        if (mounted) setState(() => _isScreenKeepOnActive = false);
       }
     } catch (_) {}
   }
@@ -1142,7 +1138,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (_gameEnded || !_isBotTurn) return;
     if (_botExecuting) return;
     _botExecuting = true;
-    setState(() => _isBotThinking = true);
     _botSafetyTimer?.cancel();
     _botSafetyTimer = Timer(const Duration(seconds: 25), () {
       if (!mounted || _gameEnded) return;
@@ -1152,12 +1147,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _hasUsedDice1 = false;
       _hasUsedDice2 = false;
       _movablePieces.clear();
-      setState(() => _isBotThinking = false);
       if (_isBotTurn) _nextTurn();
     });
     final thinkTime = 2600 + _random.nextInt(800);
     Future.delayed(Duration(milliseconds: thinkTime), () {
-      if (mounted) setState(() => _isBotThinking = false);
       _executeBotTurn();
     });
   }

@@ -70,8 +70,8 @@ class LudoBoardPainter extends CustomPainter {
       Offset(centerX + offset, centerY + offset),
     ];
 
-    final circlePaint = Paint()..color = color.withOpacity(0.85)..style = PaintingStyle.fill;
-    final circleBorderPaint = Paint()..color = color.withOpacity(0.5)..style = PaintingStyle.stroke..strokeWidth = 2.0;
+    final circlePaint = Paint()..color = color.withValues(alpha: 0.85)..style = PaintingStyle.fill;
+    final circleBorderPaint = Paint()..color = color.withValues(alpha: 0.5)..style = PaintingStyle.stroke..strokeWidth = 2.0;
 
     for (final pos in circlePositions) {
       canvas.drawCircle(pos, squareSize * 0.3, circlePaint);
@@ -346,10 +346,10 @@ class LudoBoardPainter extends CustomPainter {
       piecesAtPosition[piece.position]!.add({'piece': piece, 'color': color, 'colorName': colorName});
     }
 
-    for (final piece in gameState.yellowPieces) addPieceToPosition(piece, const Color(0xFFFFD700), 'yellow');
-    for (final piece in gameState.greenPieces) addPieceToPosition(piece, const Color(0xFF00C853), 'green');
-    for (final piece in gameState.redPieces) addPieceToPosition(piece, const Color(0xFFFF5252), 'red');
-    for (final piece in gameState.bluePieces) addPieceToPosition(piece, const Color(0xFF2979FF), 'blue');
+    for (final piece in gameState.yellowPieces) { addPieceToPosition(piece, const Color(0xFFFFD700), 'yellow'); }
+    for (final piece in gameState.greenPieces) { addPieceToPosition(piece, const Color(0xFF00C853), 'green'); }
+    for (final piece in gameState.redPieces) { addPieceToPosition(piece, const Color(0xFFFF5252), 'red'); }
+    for (final piece in gameState.bluePieces) { addPieceToPosition(piece, const Color(0xFF2979FF), 'blue'); }
 
     for (final entry in piecesAtPosition.entries) {
       final position = entry.key;
@@ -419,9 +419,9 @@ class LudoBoardPainter extends CustomPainter {
 
   void _drawBarrierIndicator(Canvas canvas, Offset center, double squareSize, Color color) {
     final outerRadius = squareSize * 0.52;
-    canvas.drawCircle(center, outerRadius, Paint()..color = color.withOpacity(0.35)..style = PaintingStyle.fill);
+    canvas.drawCircle(center, outerRadius, Paint()..color = color.withValues(alpha: 0.35)..style = PaintingStyle.fill);
     canvas.drawCircle(center, outerRadius, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 3.5);
-    canvas.drawCircle(center, outerRadius + 2, Paint()..color = Colors.black.withOpacity(0.6)..style = PaintingStyle.stroke..strokeWidth = 1.5);
+    canvas.drawCircle(center, outerRadius + 2, Paint()..color = Colors.black.withValues(alpha: 0.6)..style = PaintingStyle.stroke..strokeWidth = 1.5);
 
     final textPainter = TextPainter(
       text: const TextSpan(text: '🛡', style: TextStyle(fontSize: 14)),
@@ -459,10 +459,10 @@ class LudoBoardPainter extends CustomPainter {
     final isHighlighted = highlightedPieceColor == colorName && highlightedPieceId == piece.id;
 
     canvas.drawCircle(position + const Offset(3, 3), pieceRadius,
-        Paint()..color = Colors.black.withOpacity(0.5)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+        Paint()..color = Colors.black.withValues(alpha: 0.5)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
 
     final gradient = RadialGradient(
-      colors: [color.withOpacity(0.9), color, color.withOpacity(0.7)],
+      colors: [color.withValues(alpha: 0.9), color, color.withValues(alpha: 0.7)],
       stops: const [0.0, 0.6, 1.0],
     );
     canvas.drawCircle(position, pieceRadius,
@@ -470,20 +470,20 @@ class LudoBoardPainter extends CustomPainter {
     canvas.drawCircle(position, pieceRadius, Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 3.0);
     canvas.drawCircle(position, pieceRadius * 0.65, Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2.0);
     canvas.drawCircle(position - Offset(pieceRadius * 0.25, pieceRadius * 0.3), pieceRadius * 0.25,
-        Paint()..color = Colors.white.withOpacity(0.7)..style = PaintingStyle.fill);
+        Paint()..color = Colors.white.withValues(alpha: 0.7)..style = PaintingStyle.fill);
 
     if (isHighlighted) {
       canvas.drawCircle(position, pieceRadius * 1.4,
-          Paint()..color = Colors.white.withOpacity(0.7)..style = PaintingStyle.stroke..strokeWidth = 5.0);
+          Paint()..color = Colors.white.withValues(alpha: 0.7)..style = PaintingStyle.stroke..strokeWidth = 5.0);
     }
 
     if (movableKeys.contains('$colorName-${piece.id}')) {
       final ringRadius = pieceRadius * (1.3 + pulseValue * 0.55);
       final ringOpacity = (0.9 - pulseValue * 0.9).clamp(0.0, 1.0);
       canvas.drawCircle(position, ringRadius,
-          Paint()..color = Colors.white.withOpacity(ringOpacity)..style = PaintingStyle.stroke..strokeWidth = 3.5);
+          Paint()..color = Colors.white.withValues(alpha: ringOpacity)..style = PaintingStyle.stroke..strokeWidth = 3.5);
       canvas.drawCircle(position, ringRadius * 1.25,
-          Paint()..color = color.withOpacity(ringOpacity * 0.7)..style = PaintingStyle.stroke..strokeWidth = 2.0);
+          Paint()..color = color.withValues(alpha: ringOpacity * 0.7)..style = PaintingStyle.stroke..strokeWidth = 2.0);
     }
   }
 

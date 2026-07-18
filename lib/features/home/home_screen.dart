@@ -7,7 +7,7 @@ import 'dart:async';
 
 import '../../generated/l10n.dart';
 import '../adds/banner_ad_widget.dart';
-import '../adds/Interstitial_ad_helper.dart';
+import '../adds/interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
@@ -246,6 +246,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                         Navigator.of(context).pop();
                         _isPausedForNavigation = true;
                         await _audioPlayer.pause();
+                        if (!context.mounted) return;
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -283,6 +284,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                         Navigator.of(context).pop();
                         _isPausedForNavigation = true;
                         await _audioPlayer.pause();
+                        if (!context.mounted) return;
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1127,6 +1129,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             onPressed: () async {
               _isPausedForNavigation = true;
               await _audioPlayer.pause();
+              if (!context.mounted) return;
               final _ = await Navigator.push(
                 context,
                 MaterialPageRoute(

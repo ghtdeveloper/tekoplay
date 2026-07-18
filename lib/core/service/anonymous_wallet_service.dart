@@ -168,7 +168,7 @@ class AnonymousWalletService {
           .get();
 
       if (!userDoc.exists) {
-        print('Usuario no encontrado en Firestore');
+        if (kDebugMode) print('Usuario no encontrado en Firestore');
         return false;
       }
 

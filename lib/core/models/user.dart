@@ -109,7 +109,7 @@ class UserModel {
   }
 
   int get totalPoints {
-    return gameStats.values.fold(0, (sum, stats) => sum + stats.points);
+    return gameStats.values.fold(0, (acc, stats) => acc + stats.points);
   }
 
   GameStats getGameStats(GameTypeModel gameType) {

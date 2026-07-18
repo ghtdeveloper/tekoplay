@@ -119,8 +119,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
   final FirestoreService _firestoreService = FirestoreService();
   User? get _currentUser => FirebaseAuth.instance.currentUser;
-  int? _userDiamonds;
-  int? _userCoins;
 
 
   static const List<_Coord> _boardPath = [
@@ -245,16 +243,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     }
   }
 
-
-  void _handleBetModeBackground() {
-    if (_currentPlayer != 'yellow') return;
-    if (_dice1Value == 0 && _dice2Value == 0) {
-      _autoRollAndMove();
-    } else if (_movablePieces.isNotEmpty) {
-      _cancelMoveTimer();
-      _autoMove();
-    }
-  }
 
   Future<void> _autoRollAndMove() async {
     if (_gameEnded || _currentPlayer != 'yellow') return;
@@ -1610,7 +1598,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         }
         final newDiamonds = userData.diamonds - cost;
         await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
-        if (mounted) setState(() => _userDiamonds = newDiamonds);
       } else {
         if (userData.coins < cost) {
           if (mounted) {
@@ -1623,7 +1610,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         }
         final newCoins = userData.coins - cost;
         await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
-        if (mounted) setState(() => _userCoins = newCoins);
       }
     } catch (e) {
       if (kDebugMode) print('Error deduciendo costo Ludo vs CPU: $e');
@@ -1663,11 +1649,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
           if (isBet) {
             final newDiamonds = userData.diamonds + currencyChange;
             await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
-            if (mounted) setState(() => _userDiamonds = newDiamonds);
           } else {
             final newCoins = userData.coins + currencyChange;
             await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
-            if (mounted) setState(() => _userCoins = newCoins);
           }
         }
       }

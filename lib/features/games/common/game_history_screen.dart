@@ -14,7 +14,7 @@ class GameHistoryScreen extends StatefulWidget {
   const GameHistoryScreen({super.key});
 
   @override
-   _GameHistoryScreenState createState() => _GameHistoryScreenState();
+  State<GameHistoryScreen> createState() => _GameHistoryScreenState();
 }
 
 class _GameHistoryScreenState extends State<GameHistoryScreen>

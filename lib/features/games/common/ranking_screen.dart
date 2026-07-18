@@ -11,7 +11,7 @@ class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
 
   @override
-  _RankingScreenState createState() => _RankingScreenState();
+  State<RankingScreen> createState() => _RankingScreenState();
 }
 
 class _RankingScreenState extends State<RankingScreen>

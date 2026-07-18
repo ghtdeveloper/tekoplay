@@ -94,7 +94,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   bool _gameEnded = false;
   bool _hasUserExited = false;
   DateTime? _gameStartTime;
-  bool _isScreenKeepOnActive = false;
 
   _FriendLudoState _screenState = _FriendLudoState.setup;
   int _myPlayerNumber = 1;
@@ -125,7 +124,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   Timer? _waitRoomTimer;
   int _waitRoomCountdown = 60;
-  DateTime? _waitRoomStartTime;
   DateTime? _waitRoomPausedAt;
   final Set<String> _botColors = {};
   bool _botTurnScheduled = false;
@@ -239,7 +237,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   Future<void> _enableWakeLock() async {
     try {
       await WakelockPlus.enable();
-      if (mounted) setState(() => _isScreenKeepOnActive = true);
     } catch (_) {}
   }
 
@@ -247,7 +244,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     try {
       if (await WakelockPlus.enabled) {
         await WakelockPlus.disable();
-        if (mounted) setState(() => _isScreenKeepOnActive = false);
       }
     } catch (_) {}
   }
@@ -269,7 +265,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _waitRoomCountdown = 60;
     });
 
-    _waitRoomStartTime = DateTime.now();
     _waitRoomPausedAt = null;
     _startWaitRoomTimer(_waitRoomCountdown);
 
@@ -2655,74 +2650,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         lbl('red',    bottom: pad, left: pad),
         lbl('blue',   bottom: pad, right: pad),
       ]),
-    );
-  }
-
-  Widget _buildPlayersInfo() {
-    if (_currentGame == null) {
-      return const SizedBox(height: 50,
-        child: Center(child: CircularProgressIndicator(color: Color(0xFFEC7A34))));
-    }
-    final players = <Map<String, dynamic>>[];
-    void add(int n, String? id, String? name, String? photo, String color) {
-      if (id == null) return;
-      players.add({'n': n, 'id': id, 'name': name ?? 'Jugador', 'photo': photo, 'color': color});
-    }
-    add(1, _currentGame!.hostId, _currentGame!.hostName, _currentGame!.hostPhotoUrl, _currentGame!.player1Color);
-    if (_currentGame!.guest2Id != null) {
-      add(2, _currentGame!.guest2Id, _currentGame!.guest2Name, _currentGame!.guest2PhotoUrl, _currentGame!.player2Color ?? 'red');
-    }
-    if (_currentGame!.guest3Id != null) {
-      add(3, _currentGame!.guest3Id, _currentGame!.guest3Name, _currentGame!.guest3PhotoUrl, _currentGame!.player3Color ?? 'blue');
-    }
-    if (_currentGame!.guest4Id != null) {
-      add(4, _currentGame!.guest4Id, _currentGame!.guest4Name, _currentGame!.guest4PhotoUrl, _currentGame!.player4Color ?? 'green');
-    }
-
-    return Container(
-      height: 56,
-      color: Colors.white,
-      child: Row(
-        children: players.map((p) {
-          final isActive = _currentTurn == 'player${p['n']}';
-          final isMe = p['n'] == _myPlayerNumber;
-          final col = _getPlayerColor(p['color'] as String);
-          return Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              decoration: BoxDecoration(
-                border: isActive
-                    ? Border(bottom: BorderSide(color: col, width: 3))
-                    : null,
-                color: isActive ? col.withValues(alpha: 0.08) : Colors.transparent,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Row(
-                children: [
-                  Container(
-                    width: 18, height: 18,
-                    decoration: BoxDecoration(color: col, shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: [BoxShadow(color: col.withValues(alpha: 0.4), blurRadius: 4)]),
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      isMe ? 'Yo' : (p['name'] as String).split(' ').first,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                        color: isActive ? col : Colors.grey.shade700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
     );
   }
 

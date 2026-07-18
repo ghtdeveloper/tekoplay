@@ -14,7 +14,7 @@ import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../../core/utils/game_result.dart';
 import '../../adds/banner_ad_widget.dart';
-import '../../adds/Interstitial_ad_helper.dart';
+import '../../adds/interstitial_ad_helper.dart';
 
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
@@ -1467,6 +1467,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         if (kDebugMode) {
           print('Error en abandono desde dispose: $e');
         }
+        return false;
       });
     }
     WidgetsBinding.instance.removeObserver(this);

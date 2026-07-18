@@ -1,12 +1,4 @@
 // lib/core/widgets/domino_webview_board.dart
-//
-// WebView-based domino chain board.
-//
-// Flow:
-//   1. loadFlutterAsset loads the small HTML (no image embedded).
-//   2. JS calls FlutterChannel.postMessage('ready') after 50 ms.
-//   3. Flutter sends tile JSON → tiles appear immediately with pip fallback.
-//   4. Flutter streams bg1.png as 64 KB base64 chunks → sprites upgrade.
 
 import 'dart:convert';
 import 'dart:math';
@@ -17,13 +9,35 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import 'domino_board_widgets.dart';
 
-// Offload base64 encoding to a background isolate (avoids UI jank).
 String _encodeBase64(Uint8List bytes) => base64Encode(bytes);
 
 class DominoBoardWebView extends StatefulWidget {
   final List<DominoChainEntry> tiles;
 
-  const DominoBoardWebView({super.key, required this.tiles});
+  /// When true, amber hint circles appear on the chain endpoints in the board.
+  final bool showEndpointHints;
+
+  /// Pip value shown on the left endpoint hint.
+  final int leftOpen;
+
+  /// Pip value shown on the right endpoint hint.
+  final int rightOpen;
+
+  /// Called when the player taps the left endpoint hint.
+  final VoidCallback? onLeftTapped;
+
+  /// Called when the player taps the right endpoint hint.
+  final VoidCallback? onRightTapped;
+
+  const DominoBoardWebView({
+    super.key,
+    required this.tiles,
+    this.showEndpointHints = false,
+    this.leftOpen = 0,
+    this.rightOpen = 0,
+    this.onLeftTapped,
+    this.onRightTapped,
+  });
 
   @override
   State<DominoBoardWebView> createState() => _DominoBoardWebViewState();
@@ -34,6 +48,7 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
 
   bool _ready = false;
   List<DominoChainEntry>? _pendingTiles;
+  bool _pendingHints = false;
 
   @override
   void initState() {
@@ -52,24 +67,31 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
             _onReady();
           } else if (msg.message == 'imgError') {
             _streamSpriteSheet();
+          } else if (msg.message == 'tapLeft') {
+            widget.onLeftTapped?.call();
+          } else if (msg.message == 'tapRight') {
+            widget.onRightTapped?.call();
           }
         },
-      )
-      ..loadFlutterAsset('assets/domino_board/board.html');
+      );
+
+    // Load HTML as a string to bypass WebView asset caching
+    rootBundle.loadString('assets/domino_board/board.html').then((html) {
+      _ctrl.loadHtmlString(html);
+    });
   }
 
-  // ── Ready handler (fires from onPageFinished OR JS 'ready' — whichever first)
-
   void _onReady() {
-    if (_ready) return; // guard: only run once
+    if (_ready) return;
     _ready = true;
     _send(_pendingTiles ?? widget.tiles);
     _pendingTiles = null;
-    // Always stream the sprite sheet — Android WebView file:// access is unreliable.
+    if (_pendingHints || widget.showEndpointHints) {
+      _updateHints();
+      _pendingHints = false;
+    }
     _streamSpriteSheet();
   }
-
-  // ── Tile sending ──────────────────────────────────────────────────────────
 
   void _send(List<DominoChainEntry> tiles) {
     if (!_ready) {
@@ -82,12 +104,22 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
     _ctrl.runJavaScript('window.updateBoard($json)');
   }
 
-  // ── Sprite sheet streaming ────────────────────────────────────────────────
+  void _updateHints() {
+    if (!_ready) {
+      _pendingHints = widget.showEndpointHints;
+      return;
+    }
+    if (widget.showEndpointHints) {
+      _ctrl.runJavaScript(
+          'window.showEndpointHints(${widget.leftOpen},${widget.rightOpen})');
+    } else {
+      _ctrl.runJavaScript('window.hideEndpointHints()');
+    }
+  }
 
   Future<void> _streamSpriteSheet() async {
     try {
       final imgData = await rootBundle.load('assets/domino_board/bg1.png');
-      // Use offsetInBytes+lengthInBytes to avoid extra buffer padding.
       final b64 = await compute(
         _encodeBase64,
         imgData.buffer.asUint8List(imgData.offsetInBytes, imgData.lengthInBytes),
@@ -95,7 +127,6 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
 
       if (!mounted) return;
 
-      // Stream in 64 KB chunks to stay within runJavaScript limits.
       const chunkSize = 65536;
       await _ctrl.runJavaScript('window._imgStart()');
       for (int i = 0; i < b64.length; i += chunkSize) {
@@ -109,12 +140,17 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
     }
   }
 
-  // ── Widget lifecycle ──────────────────────────────────────────────────────
-
   @override
   void didUpdateWidget(DominoBoardWebView old) {
     super.didUpdateWidget(old);
-    _send(widget.tiles);
+    if (old.tiles != widget.tiles) {
+      _send(widget.tiles);
+    }
+    if (old.showEndpointHints != widget.showEndpointHints ||
+        old.leftOpen != widget.leftOpen ||
+        old.rightOpen != widget.rightOpen) {
+      _updateHints();
+    }
   }
 
   @override

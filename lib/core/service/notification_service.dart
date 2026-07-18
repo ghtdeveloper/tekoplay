@@ -1,6 +1,4 @@
 
-import 'dart:ffi';
-
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -31,7 +29,7 @@ class NotificationService {
   }
 
   Future<void> _requestPermissions() async {
-    final settings = await _firebaseMessaging.requestPermission(
+    await _firebaseMessaging.requestPermission(
       alert: true,
       announcement: false,
       badge: true,
@@ -160,7 +158,7 @@ class NotificationService {
   }
 
   void _handleGameInvitationTap(Map<String, dynamic> data) {
-    final invitationId = data['invitationId'];
+    // invitationId = data['invitationId']; // reserved for future use
   }
 
   Future<void> sendNotificationToUser({
@@ -281,6 +279,7 @@ class NotificationService {
         return;
       }
       final hasEnoughFunds = await _validateUserFundsForInvitation(context, currentUser.uid);
+      if (!context.mounted) return;
       if (!hasEnoughFunds) {
         Navigator.of(context).pop();
         return;
@@ -332,6 +331,7 @@ class NotificationService {
       final FirestoreService firestoreService = FirestoreService();
       final userDoc = await firestoreService.getUser(userId);
 
+      if (!context.mounted) return false;
       if (userDoc == null) {
         _showInsufficientFundsDialog(context, "Error al cargar datos del usuario", "", 0, 0, Icons.error);
         return false;
@@ -675,6 +675,7 @@ class NotificationsWidget extends StatelessWidget {
                         if (!isRead) {
                           await NotificationService().markAsRead(notification['id']);
                         }
+                        if (!context.mounted) return;
                         Navigator.of(context).pop();
                       },
                       child: Container(

@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,7 +11,8 @@ import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
-import '../../adds/Interstitial_ad_helper.dart';
+import '../../adds/interstitial_ad_helper.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 enum _GamePhase { playerTurn, cpuTurn }
 enum _RoundResult { playerWon, cpuWon, blocked }
@@ -279,7 +281,7 @@ class DominoVsComputerScreen extends StatefulWidget {
 }
 
 class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final _DominoController _ctrl = _DominoController();
   final ScrollController _chainScrollCtrl = ScrollController();
   bool _gameStarted = false;
@@ -295,16 +297,17 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   bool _needsSideChoice = false;
   bool _isCpuThinking = false;
   bool _gameEnded = false;
+  bool _isScreenKeepOnActive = false;
 
-  static const Color _tableColor   = Color(0xFF2A4A30);
   static const Color _panelColor   = Color(0xEE0D2010);
-  static const Color _feltColor    = Color(0xFF2D7A3A);
 
   static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _enableWakeLock();
 
     _cpuTileAnimCtrl = AnimationController(
       vsync: this,
@@ -337,7 +340,29 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   }
 
   @override
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _isScreenKeepOnActive) {
+      WakelockPlus.enable();
+    } else if (state == AppLifecycleState.paused) {
+      WakelockPlus.disable();
+    }
+  }
+
+  Future<void> _enableWakeLock() async {
+    await WakelockPlus.enable();
+    if (mounted) setState(() => _isScreenKeepOnActive = true);
+  }
+
+  Future<void> _disableWakeLock() async {
+    await WakelockPlus.disable();
+    if (mounted) setState(() => _isScreenKeepOnActive = false);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _disableWakeLock();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -441,8 +466,25 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   void _handleTimeOut() {
     if (!mounted) return;
     if (_ctrl.phase == _GamePhase.playerTurn) {
-      _passPlayerTurn();
+      if (_ctrl.canPlayerPlayAny()) {
+        _autoPlayForPlayer();
+      } else if (_ctrl.boneyard.isNotEmpty) {
+        _drawFromBoneyard();
+        _ctrl.startTimer();
+      } else {
+        _passPlayerTurn();
+      }
     }
+  }
+
+  void _autoPlayForPlayer() {
+    final playable = _ctrl.playerHand.where(_ctrl.canPlay).toList();
+    if (playable.isEmpty) { _passPlayerTurn(); return; }
+    playable.sort((a, b) => b.total.compareTo(a.total));
+    final tile = playable.first;
+    setState(() => _selectedTile = tile);
+    final side = _ctrl.getCpuPlaySide(tile);
+    _placeSelectedTile(side);
   }
 
   void _onTileTap(DominoTile tile) {
@@ -1064,7 +1106,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           ),
           const SizedBox(width: 4),
           Expanded(child: _buildPlayerArea()),
-          if (canDraw || canPass || _needsSideChoice) ...[
+          if (canDraw || canPass) ...[
             const SizedBox(width: 4),
             SizedBox(
               width: 90,
@@ -1075,17 +1117,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                     _actionBtn('Tomar', Icons.add_box, Colors.blue[700]!, _drawFromBoneyard),
                   if (canPass)
                     _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
-                  if (_needsSideChoice) ...[
-                    _actionBtn('← ${_ctrl.leftOpen}', Icons.arrow_back, Colors.teal[700]!, () {
-                      setState(() => _needsSideChoice = false);
-                      _placeSelectedTile('left');
-                    }),
-                    const SizedBox(height: 4),
-                    _actionBtn('${_ctrl.rightOpen} →', Icons.arrow_forward, Colors.deepPurple[700]!, () {
-                      setState(() => _needsSideChoice = false);
-                      _placeSelectedTile('right');
-                    }),
-                  ],
                 ],
               ),
             ),
@@ -1165,6 +1196,17 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                 tiles: _ctrl.chain
                     .map((t) => DominoChainEntry(left: t.displayLeft, right: t.displayRight))
                     .toList(),
+                showEndpointHints: _needsSideChoice,
+                leftOpen: _ctrl.leftOpen ?? 0,
+                rightOpen: _ctrl.rightOpen ?? 0,
+                onLeftTapped: _needsSideChoice ? () {
+                  setState(() => _needsSideChoice = false);
+                  _placeSelectedTile('left');
+                } : null,
+                onRightTapped: _needsSideChoice ? () {
+                  setState(() => _needsSideChoice = false);
+                  _placeSelectedTile('right');
+                } : null,
               ),
       ),
     );
@@ -1183,6 +1225,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       ),
       child: ListView(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        dragStartBehavior: DragStartBehavior.down,
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         children: _ctrl.playerHand.map((tile) {
           final isPlayable = _ctrl.phase == _GamePhase.playerTurn && _ctrl.canPlay(tile);

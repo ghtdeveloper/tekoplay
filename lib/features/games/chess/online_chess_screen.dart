@@ -20,7 +20,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
-import '../../adds/Interstitial_ad_helper.dart';
+import '../../adds/interstitial_ad_helper.dart';
 
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;
@@ -859,8 +859,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       print('🤖 Iniciando juego contra BOT');
     }
 
+    if (!context.mounted) return;
+    final betMatchType = S.of(context).bet;
     final botProfile = await BotNameService.pickUnseenProfile(_random);
-    _botIsWeak = widget.matchType == S.of(context).bet &&
+    _botIsWeak = widget.matchType == betMatchType &&
         await BotNameService.shouldBotPlayWeak();
 
     _setupStockfishSettings();
@@ -876,7 +878,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       controller.resetBoard();
       _gameStartTime = DateTime.now();
 
-      if (widget.matchType == S.of(context).bet && _selectedBetAmount != null) {
+      if (widget.matchType == betMatchType && _selectedBetAmount != null) {
         _opponentBetAmount = _selectedBetAmount;
       }
 
@@ -894,7 +896,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       }
     });
 
-    if (widget.matchType == S.of(context).bet && _selectedBetAmount != null) {
+    if (widget.matchType == betMatchType && _selectedBetAmount != null) {
       _showRivalFoundDialog();
     }
   }

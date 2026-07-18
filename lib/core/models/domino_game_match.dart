@@ -106,7 +106,7 @@ class DominoGameState {
       firstTurn ??= 'player1';
     }
 
-    return {'tiles': allTiles, ...hands, 'boneyard': boneyard, 'firstTurn': firstTurn!};
+    return {'tiles': allTiles, ...hands, 'boneyard': boneyard, 'firstTurn': firstTurn};
   }
 
   static Map<String, dynamic> initialDeal(Random rng, {int numberOfPlayers = 2}) =>
@@ -162,10 +162,10 @@ class DominoGameState {
   }
 
   int handPipCount(List<String> hand) {
-    return hand.fold(0, (sum, id) {
+    return hand.fold(0, (acc, id) {
       final t = tiles[id];
-      if (t == null) return sum;
-      return sum + t['left']! + t['right']!;
+      if (t == null) return acc;
+      return acc + t['left']! + t['right']!;
     });
   }
 

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -68,9 +69,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   final ScrollController _chainScrollCtrl = ScrollController();
   bool _isScreenKeepOnActive = false;
 
-  static const Color _tableColor   = Color(0xFF2A4A30);
   static const Color _panelColor   = Color(0xEE0D2010);
-  static const Color _woodBorder   = Color(0xFF8B5E3C);
   static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
@@ -330,13 +329,13 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
   void _startTurnTimer() {
     _turnTimer?.cancel();
-    _turnSecondsLeft = 60;
+    _turnSecondsLeft = 30;
     _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       setState(() => _turnSecondsLeft--);
       if (_turnSecondsLeft <= 0) {
         t.cancel();
-        _autoPassTurn();
+        _autoPlayOrPass();
       }
     });
   }
@@ -346,14 +345,42 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     _turnTimer = null;
   }
 
-  Future<void> _autoPassTurn() async {
+  Future<void> _autoPlayOrPass() async {
     if (_activeGameId == null || _gameEnded) return;
-    final newDeal = DominoGameState.initialDeal(_random);
-    await _gameService.passTurn(
-      gameId: _activeGameId!,
-      playerId: _currentUser!.uid,
-      newRoundDeal: newDeal,
-    );
+    final game = _currentGame;
+    if (game == null) return;
+    final myHand = game.getHand(_myPlayerNumber);
+    final state = game.gameState;
+    final playable = myHand.where((id) => state.canPlay(id)).toList();
+    if (playable.isNotEmpty) {
+      playable.shuffle(_random);
+      final tileId = playable.first;
+      final tileData = state.tiles[tileId]!;
+      String side;
+      if (state.chain.isEmpty) {
+        side = 'right';
+      } else {
+        final canLeft = tileData['left'] == state.leftOpen || tileData['right'] == state.leftOpen;
+        side = canLeft ? 'left' : 'right';
+      }
+      final newDeal = DominoGameState.initialDeal(_random);
+      await _gameService.playTile(
+        gameId: _activeGameId!,
+        playerId: _currentUser!.uid,
+        tileId: tileId,
+        side: side,
+        newRoundDeal: newDeal,
+      );
+    } else if (state.boneyard.isNotEmpty) {
+      await _gameService.drawFromBoneyard(gameId: _activeGameId!, playerId: _currentUser!.uid);
+    } else {
+      final newDeal = DominoGameState.initialDeal(_random);
+      await _gameService.passTurn(
+        gameId: _activeGameId!,
+        playerId: _currentUser!.uid,
+        newRoundDeal: newDeal,
+      );
+    }
   }
 
   bool _isOpponent(DominoGameMatch game) {
@@ -1239,7 +1266,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           ),
           const SizedBox(width: 4),
           Expanded(child: _buildOnlinePlayerArea(hand, state, isMyTurn)),
-          if (isMyTurn && (canDraw || canPass || _needsSideChoice)) ...[
+          if (isMyTurn && (canDraw || canPass)) ...[
             const SizedBox(width: 4),
             SizedBox(
               width: 90,
@@ -1250,19 +1277,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                     _onlineActionBtn('Tomar', Icons.add_box, Colors.blue[700]!, _drawFromBoneyard),
                   if (canPass)
                     _onlineActionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passTurn),
-                  if (_needsSideChoice && _selectedTileId != null) ...[
-                    _onlineActionBtn('← (${state.leftOpen})', Icons.arrow_back, Colors.teal[700]!, () {
-                      final id = _selectedTileId!;
-                      setState(() { _needsSideChoice = false; _selectedTileId = null; });
-                      _placeSelectedTile(id, 'left');
-                    }),
-                    const SizedBox(height: 2),
-                    _onlineActionBtn('(${state.rightOpen}) →', Icons.arrow_forward, Colors.deepPurple[700]!, () {
-                      final id = _selectedTileId!;
-                      setState(() { _needsSideChoice = false; _selectedTileId = null; });
-                      _placeSelectedTile(id, 'right');
-                    }),
-                  ],
                 ],
               ),
             ),
@@ -1295,6 +1309,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       );
 
   Widget _buildOnlineChainArea(DominoGameState state) {
+    final showHints = _needsSideChoice && _selectedTileId != null;
     return Expanded(
       child: Container(
         color: const Color(0xFF429936),
@@ -1302,6 +1317,19 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           tiles: state.chain
               .map<DominoChainEntry>((t) => DominoChainEntry(left: t.displayLeft, right: t.displayRight))
               .toList(),
+          showEndpointHints: showHints,
+          leftOpen: state.leftOpen ?? 0,
+          rightOpen: state.rightOpen ?? 0,
+          onLeftTapped: showHints ? () {
+            final id = _selectedTileId!;
+            setState(() { _needsSideChoice = false; _selectedTileId = null; });
+            _placeSelectedTile(id, 'left');
+          } : null,
+          onRightTapped: showHints ? () {
+            final id = _selectedTileId!;
+            setState(() { _needsSideChoice = false; _selectedTileId = null; });
+            _placeSelectedTile(id, 'right');
+          } : null,
         ),
       ),
     );
@@ -1316,6 +1344,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       ),
       child: ListView(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        dragStartBehavior: DragStartBehavior.down,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         children: hand.map((tileId) {
           final td = state.tiles[tileId];
