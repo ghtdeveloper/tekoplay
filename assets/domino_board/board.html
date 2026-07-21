@@ -62,45 +62,49 @@ window._imgEnd=function(){
   }
 };
 
-// ── Layout: simple sequential snake ──────────────────────────────────────
-// Visual width of a tile along the chain direction:
-// doubles are drawn perpendicular (rotated 90°), so they occupy TW not TH
-function tileW(t){return t.l===t.r?TW:TH;}
-// Height of a tile perpendicular to the chain direction
-function tileH(t){return t.l===t.r?TH:TW;}
+// ── Layout: 2-D snake (RIGHT→UP→LEFT→DOWN→…) ────────────────────────────
+// All tiles landscape: TH=188 along chain direction, TW=99 perpendicular.
+// 4 tiles per horizontal segment, 3 per vertical segment.
+function tileW(t){return TH;}  // chain-axis extent (landscape long side)
+function tileH(t){return TW;}  // perp-axis extent  (landscape short side)
 
 function layout(tiles){
   if(!tiles.length)return[];
   const GAP=4;
-  const COLS=7;
+  const HCOLS=4; // tiles per horizontal segment
+  const VCOLS=3; // tiles per vertical segment
+  // Angles: RIGHT=-PI/2, UP=PI, LEFT=PI/2, DOWN=0
+  // These match the hint formula: sin(a)/cos(a) → hint appears at correct side
+  const DIRS=['right','up','left','down'];
+  const DA={right:-Math.PI/2, up:Math.PI, left:Math.PI/2, down:0};
+  const DX={right:1, up:0, left:-1, down:0};
+  const DY={right:0, up:-1, left:0, down:1};
+  const LIMS={right:HCOLS, up:VCOLS, left:HCOLS, down:VCOLS};
+
   const pos=[];
-
-  // Pre-compute max perpendicular height per row so gaps are tight but never overlap
-  const rowMaxHs=[];
-  for(let r=0;r*COLS<tiles.length;r++){
-    let mh=0;
-    for(let j=r*COLS;j<Math.min((r+1)*COLS,tiles.length);j++)
-      mh=Math.max(mh,tileH(tiles[j]));
-    rowMaxHs.push(mh);
-  }
-
-  let x=0,y=0,dir=1,colInRow=0,rowIdx=0;
+  let x=0,y=0,dirIdx=0,segCount=0;
 
   for(let i=0;i<tiles.length;i++){
     const t=tiles[i];
-    const myW=tileW(t);
-    pos.push({cx:x,cy:y,a:dir>0?-Math.PI/2:Math.PI/2,l:t.l,r:t.r});
-    colInRow++;
+    const dir=DIRS[dirIdx];
+    pos.push({cx:x,cy:y,a:DA[dir],l:t.l,r:t.r});
+    segCount++;
     if(i===tiles.length-1)break;
-    const nextW=tileW(tiles[i+1]);
-    if(colInRow>=COLS){
-      // Gap = half max height of current row + GAP + half max height of next row
-      y+=rowMaxHs[rowIdx]/2+GAP+rowMaxHs[rowIdx+1]/2;
-      dir=-dir;
-      colInRow=0;
-      rowIdx++;
-    } else {
-      x+=dir*(myW/2+GAP+nextW/2);
+    if(segCount>=LIMS[dir]){
+      // Turn: advance in the NEW direction by (TW/2 + GAP + TH/2)
+      // Plus a corner alignment offset so the outer edges of the two segments flush up.
+      // Horizontal tiles are TH=188 wide, vertical tiles TW=99 wide → delta=(TH-TW)/2=44.5
+      dirIdx=(dirIdx+1)%4;
+      const nd=DIRS[dirIdx];
+      const adj=(TH-TW)/2;
+      const CA={up:{x:+adj,y:0},left:{x:0,y:-adj},down:{x:-adj,y:0},right:{x:0,y:+adj}};
+      x+=DX[nd]*(TW/2+GAP+TH/2)+CA[nd].x;
+      y+=DY[nd]*(TW/2+GAP+TH/2)+CA[nd].y;
+      segCount=0;
+    }else{
+      // Same direction: advance by TH + GAP
+      x+=DX[dir]*(TH+GAP);
+      y+=DY[dir]*(TH+GAP);
     }
   }
   return pos;
@@ -176,23 +180,28 @@ function render(){
 
   let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
   for(const p of pos){
-    const drawA=(p.l===p.r)?p.a+Math.PI/2:p.a;
+    // drawA for bounding box: sprite frame is portrait (fw=TW=99, fh=TH=188),
+    // rendered with ang=p.a. The rotated extents are computed via standard formula.
+    const drawA=p.a;
     const cosA=Math.abs(Math.cos(drawA)),sinA=Math.abs(Math.sin(drawA));
+    // hw = half-width in world X; hh = half-height in world Y
+    // sprite local: fw=TW along screen-X before rotation, fh=TH along screen-Y
     const hw=(TW/2)*cosA+(TH/2)*sinA;
     const hh=(TW/2)*sinA+(TH/2)*cosA;
     mnX=Math.min(mnX,p.cx-hw); mxX=Math.max(mxX,p.cx+hw);
     mnY=Math.min(mnY,p.cy-hh); mxY=Math.max(mxY,p.cy+hh);
   }
 
-  const PAD=8;
-  const s=Math.min((W-2*PAD)/(mxX-mnX),(H-2*PAD)/(mxY-mnY),0.55);
+  // PAD large enough to fit hint circles on all sides
+  const PADX=HR+16,PADY=HR+16;
+  const s=Math.min((W-2*PADX)/(mxX-mnX),(H-2*PADY)/(mxY-mnY),0.55);
   const ox=W/2-(mxX+mnX)/2*s;
   const oy=H/2-(mxY+mnY)/2*s;
 
   for(const p of pos){
     const dx=p.cx*s+ox,dy=p.cy*s+oy;
-    const isDouble=(p.l===p.r);
-    const ang=isDouble?p.a+Math.PI/2:p.a;
+    // All tiles landscape: use p.a directly
+    const ang=p.a;
     if(imgOk) drawS(fr(p.l,p.r),dx,dy,ang,s,p.l>p.r);
     else       drawP(p.l,p.r,dx,dy,ang,s);
   }

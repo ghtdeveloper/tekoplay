@@ -298,6 +298,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   bool _isCpuThinking = false;
   bool _gameEnded = false;
   bool _isScreenKeepOnActive = false;
+  bool _showRoundEndBanner = false;
+  bool _showGameOverBanner = false;
+  _RoundResult? _roundEndResultType;
+  List<DominoTile> _revealedCpuHand = [];
 
   static const Color _panelColor   = Color(0xEE0D2010);
 
@@ -660,138 +664,17 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       _handleGameOver();
       return;
     }
-
-    String msg;
-    switch (result) {
-      case _RoundResult.playerWon:
-        msg = '¡Ganaste la ronda!\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}';
-        break;
-      case _RoundResult.cpuWon:
-        msg = 'CPU ganó la ronda\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}';
-        break;
-      case _RoundResult.blocked:
-        msg = 'Ronda bloqueada\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}';
-        break;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          result == _RoundResult.playerWon ? '🏆 Ronda ganada' : result == _RoundResult.cpuWon ? '😞 Ronda perdida' : '🤝 Bloqueado',
-          textAlign: TextAlign.center,
-        ),
-        content: Text(msg, textAlign: TextAlign.center),
-        actions: [
-          Center(
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                setState(() {
-                  _ctrl.startNextRound();
-                  _selectedTile = null;
-                  _needsSideChoice = false;
-                });
-                if (_ctrl.phase == _GamePhase.cpuTurn) {
-                  _scheduleCpuTurn();
-                } else {
-                  _ctrl.startTimer();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accentOrange,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Siguiente ronda'),
-            ),
-          ),
-        ],
-      ),
-    );
+    setState(() {
+      _showRoundEndBanner = true;
+      _roundEndResultType = result;
+      _revealedCpuHand = List.from(_ctrl.cpuHand);
+    });
   }
 
   void _handleGameOver() {
     final playerWon = _ctrl.playerScore > _ctrl.cpuScore;
     _recordResult(playerWon);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Colors.white,
-        title: Text(
-          playerWon ? '🏆 ¡Ganaste!' : '😞 Juego terminado',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: playerWon ? _accentOrange : Colors.red[700],
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Puntuación final\nTú: ${_ctrl.playerScore} | CPU: ${_ctrl.cpuScore}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Meta: ${_ctrl.targetScore} puntos',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
-            ),
-            if (widget.matchType == 'Apuesta' && playerWon) ...[
-              const SizedBox(height: 12),
-              Text(
-                '+${(_getGameCost() * 2 * 0.9).floor()} 💎',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _accentOrange),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Salir'),
-                ),
-              ),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    setState(() => _gameEnded = false);
-                    if (widget.matchType == 'Apuesta') {
-                      await _loadAndDeductGameCost();
-                      if (mounted) _showStartDialog();
-                    } else {
-                      _showStartDialog();
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accentOrange,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Nueva partida'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+    setState(() => _showGameOverBanner = true);
   }
 
   int _getGameCost() => widget.matchType == 'Apuesta' ? 25 : 100;
@@ -958,12 +841,192 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   Widget _buildGame() {
     return SafeArea(
-      child: Column(
+      child: Stack(
         children: [
-          _buildLandscapeHeader(),
-          _buildChainArea(),
-          _buildLandscapeFooter(),
+          Column(
+            children: [
+              _buildLandscapeHeader(),
+              _buildChainArea(),
+              _buildLandscapeFooter(),
+            ],
+          ),
+          if (_showRoundEndBanner) _buildRoundEndOverlay(),
+          if (_showGameOverBanner) _buildGameOverOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRoundEndOverlay() {
+    final result = _roundEndResultType!;
+    final bool playerWon = result == _RoundResult.playerWon;
+    final bool blocked = result == _RoundResult.blocked;
+    final Color titleColor = playerWon ? _accentOrange : blocked ? Colors.amber[600]! : Colors.red[400]!;
+    final String title = playerWon ? 'Ronda ganada' : blocked ? 'Bloqueado' : 'Ronda perdida';
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xF20D2010),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 16, offset: Offset(0, -4))],
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 10),
+            Text(title, style: TextStyle(color: titleColor, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(
+              'Tú: ${_ctrl.playerScore}  |  CPU: ${_ctrl.cpuScore}',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            if (_revealedCpuHand.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(children: [
+                const Icon(Icons.smart_toy, color: Colors.white54, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  'Fichas del CPU (${_revealedCpuHand.length} — ${_revealedCpuHand.fold(0, (s, t) => s + t.total)} puntos)',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 54,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: _revealedCpuHand.map((t) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: DominoTileWidget(left: t.left, right: t.right, width: 28, height: 52),
+                  )).toList(),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _showRoundEndBanner = false;
+                    _roundEndResultType = null;
+                    _revealedCpuHand = [];
+                    _ctrl.startNextRound();
+                    _selectedTile = null;
+                    _needsSideChoice = false;
+                  });
+                  if (_ctrl.phase == _GamePhase.cpuTurn) {
+                    _scheduleCpuTurn();
+                  } else {
+                    _ctrl.startTimer();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentOrange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('Siguiente ronda', style: TextStyle(fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameOverOverlay() {
+    final bool playerWon = _ctrl.playerScore > _ctrl.cpuScore;
+    final Color titleColor = playerWon ? _accentOrange : Colors.red[400]!;
+    final String title = playerWon ? '🏆 ¡Ganaste!' : '😞 Juego terminado';
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xF20D2010),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 16, offset: Offset(0, -4))],
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 10),
+            Text(title, style: TextStyle(color: titleColor, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(
+              'Tú: ${_ctrl.playerScore}  |  CPU: ${_ctrl.cpuScore}',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            Text(
+              'Meta: ${_ctrl.targetScore} puntos',
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+            if (widget.matchType == 'Apuesta' && playerWon) ...[
+              const SizedBox(height: 8),
+              Text(
+                '+${(_getGameCost() * 2 * 0.9).floor()} 💎',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _accentOrange),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() => _showGameOverBanner = false);
+                      Navigator.pop(context);
+                    },
+                    style: TextButton.styleFrom(foregroundColor: Colors.white54),
+                    child: const Text('Salir'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      setState(() {
+                        _showGameOverBanner = false;
+                        _gameEnded = false;
+                      });
+                      if (widget.matchType == 'Apuesta') {
+                        await _loadAndDeductGameCost();
+                        if (mounted) _showStartDialog();
+                      } else {
+                        _showStartDialog();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _accentOrange,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Nueva partida', style: TextStyle(fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1003,10 +1066,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
               ),
             ),
             const SizedBox(width: 4),
-            // CPU score chip
             _buildCompactScore('CPU', _ctrl.cpuScore, !isPlayerTurn, _buildCpuAvatar()),
             const SizedBox(width: 4),
-            // CPU tiles area (center, expanded)
             Expanded(
               child: _isCpuThinking
                   ? const Center(
@@ -1034,7 +1095,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                         ),
             ),
             const SizedBox(width: 4),
-            // Player score chip
             _buildCompactScore('Tú', _ctrl.playerScore, isPlayerTurn, _buildUserAvatar()),
           ],
         ),

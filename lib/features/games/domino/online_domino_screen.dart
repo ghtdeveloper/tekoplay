@@ -63,6 +63,11 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   bool _needsSideChoice = false;
   bool _isOpponentThinking = false;
   bool _gameEnded = false;
+  bool _showRoundEndBanner = false;
+  bool _showGameOverBanner = false;
+  DominoGameMatch? _gameOverGame;
+  DominoGameMatch? _pendingNewGame;
+  DominoGameMatch? _roundEndPrevGame;
   Timer? _botMoveTimer;
   Timer? _turnTimer;
   int _turnSecondsLeft = 60;
@@ -303,17 +308,37 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     _gameSubscription?.cancel();
     _gameSubscription = _gameService.getGameStream(gameId).listen((game) {
       if (!mounted) return;
-      setState(() => _currentGame = game);
 
-      if (game == null || _gameEnded) return;
+      if (game == null || _gameEnded) {
+        setState(() => _currentGame = game);
+        return;
+      }
 
       if (game.isFinished || game.isAbandoned) {
         _stopTurnTimer();
-        setState(() => _gameEnded = true);
+        setState(() { _currentGame = game; _gameEnded = true; });
         _disableWakeLock();
         _showGameOverDialog(game);
         return;
       }
+
+      if (_showRoundEndBanner) {
+        setState(() => _pendingNewGame = game);
+        return;
+      }
+
+      final prevRound = _currentGame?.gameState.roundNumber;
+      if (prevRound != null && game.gameState.roundNumber > prevRound) {
+        setState(() {
+          _roundEndPrevGame = _currentGame;
+          _pendingNewGame = game;
+          _showRoundEndBanner = true;
+        });
+        _stopTurnTimer();
+        return;
+      }
+
+      setState(() => _currentGame = game);
 
       final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
       if (isMyTurn) {
@@ -655,80 +680,10 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
   void _showGameOverDialog(DominoGameMatch game) {
     if (!mounted) return;
-    final iWon = game.winnerId == _currentUser!.uid;
-    final scores = game.getPlayerScores();
-    final scoreLines = StringBuffer();
-    for (int p = 1; p <= game.numberOfPlayers; p++) {
-      final name = p == _myPlayerNumber ? 'Tú' : game.playerNameOf(p);
-      scoreLines.write('$name: ${scores['player$p'] ?? 0}');
-      if (p < game.numberOfPlayers) scoreLines.write(' | ');
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Colors.white,
-        title: Text(
-          iWon ? '🏆 ¡Ganaste!' : '😞 Perdiste',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: iWon ? _accentOrange : Colors.red[700],
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              scoreLines.toString(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14),
-            ),
-            if ((game.betAmount ?? 0) > 0) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: iWon ? Colors.green[50] : Colors.red[50],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  iWon
-                      ? '+${game.betAmount! + (game.betAmount! * 0.7).ceil()} ${game.currencyType}'
-                      : '-${game.betAmount} ${game.currencyType}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: iWon ? Colors.green[700] : Colors.red[700],
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          Center(
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accentOrange,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              ),
-              child: const Text('Salir', style: TextStyle(fontSize: 16)),
-            ),
-          ),
-        ],
-      ),
-    );
+    setState(() {
+      _gameOverGame = game;
+      _showGameOverBanner = true;
+    });
   }
 
   void _scrollChainToEnd() {
@@ -1114,24 +1069,217 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     final myScore = scores['player$_myPlayerNumber'] ?? 0;
 
     return SafeArea(
-      child: Column(
+      child: Stack(
         children: [
-          _buildOnlineLandscapeHeader(
-            opponents: opponents,
-            myScore: myScore,
-            isMyTurn: isMyTurn,
-            targetScore: game.targetScore,
-            roundNumber: state.roundNumber,
+          Column(
+            children: [
+              _buildOnlineLandscapeHeader(
+                opponents: opponents,
+                myScore: myScore,
+                isMyTurn: isMyTurn,
+                targetScore: game.targetScore,
+                roundNumber: state.roundNumber,
+              ),
+              _buildOnlineChainArea(state),
+              _buildOnlineLandscapeFooter(
+                hand: myHand,
+                state: state,
+                isMyTurn: isMyTurn,
+                canDraw: canDraw,
+                canPass: canPass,
+              ),
+            ],
           ),
-          _buildOnlineChainArea(state),
-          _buildOnlineLandscapeFooter(
-            hand: myHand,
-            state: state,
-            isMyTurn: isMyTurn,
-            canDraw: canDraw,
-            canPass: canPass,
-          ),
+          if (_showRoundEndBanner) _buildRoundEndOverlay(),
+          if (_showGameOverBanner && _gameOverGame != null) _buildGameOverOverlay(_gameOverGame!),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRoundEndOverlay() {
+    final prevGame = _roundEndPrevGame;
+    final newGame = _pendingNewGame;
+    if (prevGame == null || newGame == null) return const SizedBox.shrink();
+
+    final prevScores = prevGame.getPlayerScores();
+    final newScores = newGame.getPlayerScores();
+    final myPrevScore = prevScores['player$_myPlayerNumber'] ?? 0;
+    final myNewScore = newScores['player$_myPlayerNumber'] ?? 0;
+    final iWon = myNewScore > myPrevScore;
+
+    final wasBlocked = prevGame.gameState.consecutivePasses >= prevGame.numberOfPlayers;
+    final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
+    final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
+
+    // Fichas de los oponentes al final de la ronda anterior
+    final opponentTiles = <({String name, List<({int left, int right})> tiles, int pips})>[];
+    for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
+      if (p == _myPlayerNumber) continue;
+      final hand = prevGame.gameState.handOf(p);
+      final tileWidgets = hand.map((id) {
+        final data = prevGame.gameState.tiles[id];
+        return (left: data?['left'] ?? 0, right: data?['right'] ?? 0);
+      }).toList();
+      final pips = tileWidgets.fold(0, (s, t) => s + t.left + t.right);
+      final name = _isPlayingVsBot ? _botName : prevGame.playerNameOf(p);
+      opponentTiles.add((name: name, tiles: tileWidgets, pips: pips));
+    }
+
+    final scoreLines = StringBuffer();
+    for (int p = 1; p <= newGame.numberOfPlayers; p++) {
+      final name = p == _myPlayerNumber ? 'Tú'
+          : (_isPlayingVsBot ? _botName : prevGame.playerNameOf(p));
+      if (p > 1) scoreLines.write('  |  ');
+      scoreLines.write('$name: ${newScores['player$p'] ?? 0}');
+    }
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xF20D2010),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 16, offset: Offset(0, -4))],
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 10),
+            Text(title, style: TextStyle(color: titleColor, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(scoreLines.toString(), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            for (final opp in opponentTiles)
+              if (opp.tiles.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Row(children: [
+                  const Icon(Icons.person, color: Colors.white54, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${opp.name} (${opp.tiles.length} fichas — ${opp.pips} puntos)',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ]),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 54,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: opp.tiles.map((t) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: DominoTileWidget(left: t.left, right: t.right, width: 28, height: 52),
+                    )).toList(),
+                  ),
+                ),
+              ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  final nextGame = _pendingNewGame;
+                  setState(() {
+                    _showRoundEndBanner = false;
+                    _roundEndPrevGame = null;
+                    _pendingNewGame = null;
+                    if (nextGame != null) _currentGame = nextGame;
+                  });
+                  if (_currentGame != null) {
+                    final isMyTurn = _currentGame!.isPlayerTurn(_currentUser!.uid);
+                    if (isMyTurn) {
+                      _startTurnTimer();
+                    } else {
+                      _stopTurnTimer();
+                      if (_isOpponent(_currentGame!)) _scheduleOpponentTurn(_currentGame!);
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentOrange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('Siguiente ronda', style: TextStyle(fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameOverOverlay(DominoGameMatch game) {
+    final bool iWon = game.winnerId == _currentUser!.uid;
+    final Color titleColor = iWon ? _accentOrange : Colors.red[400]!;
+    final String title = iWon ? '🏆 ¡Ganaste!' : '😞 Perdiste';
+    final scores = game.getPlayerScores();
+    final scoreLines = StringBuffer();
+    for (int p = 1; p <= game.numberOfPlayers; p++) {
+      final name = p == _myPlayerNumber ? 'Tú' : (_isPlayingVsBot ? _botName : game.playerNameOf(p));
+      scoreLines.write('$name: ${scores['player$p'] ?? 0}');
+      if (p < game.numberOfPlayers) scoreLines.write(' | ');
+    }
+
+    return Positioned(
+      left: 0, right: 0, bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xF20D2010),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 16, offset: Offset(0, -4))],
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 10),
+            Text(title, style: TextStyle(color: titleColor, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(scoreLines.toString(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            if ((game.betAmount ?? 0) > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                iWon
+                    ? '+${game.betAmount! + (game.betAmount! * 0.7).ceil()} ${game.currencyType}'
+                    : '-${game.betAmount} ${game.currencyType}',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: iWon ? _accentOrange : Colors.red[300],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() => _showGameOverBanner = false);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentOrange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('Salir', style: TextStyle(fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
