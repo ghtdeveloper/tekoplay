@@ -874,44 +874,44 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 16, offset: Offset(0, -4))],
         ),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 36, height: 4,
+              width: 32, height: 3,
               decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
             ),
-            const SizedBox(height: 10),
-            Text(title, style: TextStyle(color: titleColor, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
+            Text(title, style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 3),
             Text(
               'Tú: ${_ctrl.playerScore}  |  CPU: ${_ctrl.cpuScore}',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
             if (_revealedCpuHand.isNotEmpty) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
               Row(children: [
-                const Icon(Icons.smart_toy, color: Colors.white54, size: 14),
-                const SizedBox(width: 6),
+                const Icon(Icons.smart_toy, color: Colors.white54, size: 13),
+                const SizedBox(width: 5),
                 Text(
                   'Fichas del CPU (${_revealedCpuHand.length} — ${_revealedCpuHand.fold(0, (s, t) => s + t.total)} puntos)',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ]),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               SizedBox(
-                height: 54,
+                height: 42,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: _revealedCpuHand.map((t) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: DominoTileWidget(left: t.left, right: t.right, width: 28, height: 52),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: DominoTileWidget(left: t.left, right: t.right, width: 22, height: 40),
                   )).toList(),
                 ),
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -933,10 +933,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accentOrange,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
                 ),
-                child: const Text('Siguiente ronda', style: TextStyle(fontSize: 15)),
+                child: const Text('Siguiente ronda', style: TextStyle(fontSize: 13)),
               ),
             ),
           ],

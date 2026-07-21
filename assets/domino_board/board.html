@@ -62,24 +62,30 @@ window._imgEnd=function(){
   }
 };
 
-// ── Layout: 2-D snake (RIGHT→UP→LEFT→DOWN→…) ────────────────────────────
-// All tiles landscape: TH=188 along chain direction, TW=99 perpendicular.
-// 4 tiles per horizontal segment, 3 per vertical segment.
-function tileW(t){return TH;}  // chain-axis extent (landscape long side)
-function tileH(t){return TW;}  // perp-axis extent  (landscape short side)
+// ── Tile helpers ──────────────────────────────────────────────────────────
+// Doubles in HORIZONTAL segments (right/left) go perpendicular (portrait tile = vertical).
+// Doubles in VERTICAL segments (down/up) stay along the chain, same as regular tiles.
+function isDouble(t){return t.l===t.r;}
+function isHoriz(dir){return dir==='right'||dir==='left';}
+function cExt(t,dir){return(isDouble(t)&&isHoriz(dir))?TW:TH;}
+function pExt(t,dir){return(isDouble(t)&&isHoriz(dir))?TH:TW;}
 
+const _RA={right:-Math.PI/2, up:Math.PI, left:Math.PI/2, down:0};
+const _DA={right:0,           up:Math.PI, left:Math.PI,   down:0}; // vertical: same as _RA
+function tileAngle(t,dir){return(isDouble(t)&&isHoriz(dir))?_DA[dir]:_RA[dir];}
+
+// ── Layout: boustrophedon (RIGHT→DOWN→LEFT→DOWN→RIGHT→…) ─────────────────
+// Rows fill horizontally then wrap downward, like Image #2 reference.
+// OVLP: small overlap between same-direction tiles to eliminate visual seams.
+const OVLP=5;
 function layout(tiles){
   if(!tiles.length)return[];
-  const GAP=4;
-  const HCOLS=4; // tiles per horizontal segment
-  const VCOLS=3; // tiles per vertical segment
-  // Angles: RIGHT=-PI/2, UP=PI, LEFT=PI/2, DOWN=0
-  // These match the hint formula: sin(a)/cos(a) → hint appears at correct side
-  const DIRS=['right','up','left','down'];
-  const DA={right:-Math.PI/2, up:Math.PI, left:Math.PI/2, down:0};
+  const HCOLS=4, VCOLS=1;
+  // Boustrophedon: right, then down connector, then left, then down connector…
+  const DIRS=['right','down','left','down'];
   const DX={right:1, up:0, left:-1, down:0};
   const DY={right:0, up:-1, left:0, down:1};
-  const LIMS={right:HCOLS, up:VCOLS, left:HCOLS, down:VCOLS};
+  const LIMS={right:HCOLS, left:HCOLS, up:VCOLS, down:VCOLS};
 
   const pos=[];
   let x=0,y=0,dirIdx=0,segCount=0;
@@ -87,24 +93,27 @@ function layout(tiles){
   for(let i=0;i<tiles.length;i++){
     const t=tiles[i];
     const dir=DIRS[dirIdx];
-    pos.push({cx:x,cy:y,a:DA[dir],l:t.l,r:t.r});
+    pos.push({cx:x,cy:y,a:tileAngle(t,dir),l:t.l,r:t.r,ce:cExt(t,dir),dir:dir});
     segCount++;
     if(i===tiles.length-1)break;
+    const nt=tiles[i+1];
     if(segCount>=LIMS[dir]){
-      // Turn: advance in the NEW direction by (TW/2 + GAP + TH/2)
-      // Plus a corner alignment offset so the outer edges of the two segments flush up.
-      // Horizontal tiles are TH=188 wide, vertical tiles TW=99 wide → delta=(TH-TW)/2=44.5
       dirIdx=(dirIdx+1)%4;
       const nd=DIRS[dirIdx];
-      const adj=(TH-TW)/2;
-      const CA={up:{x:+adj,y:0},left:{x:0,y:-adj},down:{x:-adj,y:0},right:{x:0,y:+adj}};
-      x+=DX[nd]*(TW/2+GAP+TH/2)+CA[nd].x;
-      y+=DY[nd]*(TW/2+GAP+TH/2)+CA[nd].y;
+      const isOldVert=!isHoriz(dir);
+      // diff = TH/2 - TW/2 = 44.5 for regular tiles.
+      // H→V: connector outer edge aligns with row outer edge (aln=diff, not 0).
+      // V→H: new row corner-connects to connector edge (fwd=diff, not pExt/2+cExt/2).
+      const diff=cExt(nt,nd)/2-pExt(t,dir)/2;
+      const fwd=isOldVert ? diff : pExt(t,dir)/2+cExt(nt,nd)/2;
+      const aln=isOldVert ? cExt(t,dir)/2+pExt(nt,nd)/2 : diff;
+      x+=DX[nd]*fwd+DX[dir]*aln;
+      y+=DY[nd]*fwd+DY[dir]*aln;
       segCount=0;
     }else{
-      // Same direction: advance by TH + GAP
-      x+=DX[dir]*(TH+GAP);
-      y+=DY[dir]*(TH+GAP);
+      // Same direction: slight overlap to eliminate visual seams.
+      x+=DX[dir]*(cExt(t,dir)/2+cExt(nt,dir)/2-OVLP);
+      y+=DY[dir]*(cExt(t,dir)/2+cExt(nt,dir)/2-OVLP);
     }
   }
   return pos;
@@ -139,7 +148,7 @@ function drawP(l,r,cx,cy,ang,s){
   const w=TW*s,h=TH*s,pr=Math.max(2,TW*s*.07);
   ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);
   ctx.fillStyle='#F5F5DC';ctx.strokeStyle='#444';ctx.lineWidth=Math.max(1,s*1.5);
-  ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,4*s);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,2*s);ctx.fill();ctx.stroke();
   ctx.beginPath();ctx.moveTo(-w/2+4,0);ctx.lineTo(w/2-4,0);
   ctx.strokeStyle='#888';ctx.lineWidth=Math.max(.5,s*.8);ctx.stroke();
   ctx.fillStyle='#111';const cell=w*.28;
@@ -196,11 +205,14 @@ function render(){
   const PADX=HR+16,PADY=HR+16;
   const s=Math.min((W-2*PADX)/(mxX-mnX),(H-2*PADY)/(mxY-mnY),0.55);
   const ox=W/2-(mxX+mnX)/2*s;
-  const oy=H/2-(mxY+mnY)/2*s;
+  // Align top of chain near top of canvas (with padding) so tiles fill downward.
+  const oy=PADY-mnY*s;
 
-  for(const p of pos){
+  // Draw vertical connector tiles first, then horizontal row tiles on top,
+  // so row tiles cleanly cover the connector edges at corner junctions.
+  const isVert=p=>(p.dir==='up'||p.dir==='down');
+  for(const p of [...pos.filter(isVert),...pos.filter(p=>!isVert(p))]){
     const dx=p.cx*s+ox,dy=p.cy*s+oy;
-    // All tiles landscape: use p.a directly
     const ang=p.a;
     if(imgOk) drawS(fr(p.l,p.r),dx,dy,ang,s,p.l>p.r);
     else       drawP(p.l,p.r,dx,dy,ang,s);
@@ -208,18 +220,16 @@ function render(){
 
   // ── Draw endpoint hints ───────────────────────────────────────────────
   if(_hints && pos.length>0){
-    // Left open end: first tile; right open end: last tile
-    const li=0;
-    const ri=pos.length-1;
-    const lp=pos[li], rp=pos[ri];
-
-    // Outward direction uses tile angle: left = along tile's "head" axis, right = "tail"
-    const ld=tileW(lp)/2*s+HR+8;
-    const lx=lp.cx*s+ox + Math.sin(lp.a)*ld;
-    const ly=lp.cy*s+oy - Math.cos(lp.a)*ld;
-    const rd=tileW(rp)/2*s+HR+8;
-    const rx=rp.cx*s+ox - Math.sin(rp.a)*rd;
-    const ry=rp.cy*s+oy + Math.cos(rp.a)*rd;
+    const lp=pos[0], rp=pos[pos.length-1];
+    // Use chain direction vectors (not tile angle) so doubles get correct hint placement
+    const DVX={right:1, up:0, left:-1, down:0};
+    const DVY={right:0, up:-1, left:0, down:1};
+    const ld=lp.ce/2*s+HR+8;
+    const lx=lp.cx*s+ox - DVX[lp.dir]*ld;
+    const ly=lp.cy*s+oy - DVY[lp.dir]*ld;
+    const rd=rp.ce/2*s+HR+8;
+    const rx=rp.cx*s+ox + DVX[rp.dir]*rd;
+    const ry=rp.cy*s+oy + DVY[rp.dir]*rd;
 
     _hPos={lx,ly,rx,ry};
     drawHint(lx,ly,_hintL,true);
