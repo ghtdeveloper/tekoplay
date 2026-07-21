@@ -626,29 +626,24 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       }
       _scrollChainToEnd();
     } else {
-      if (_ctrl.boneyard.isNotEmpty && !_ctrl.canCpuPlayAny()) {
+      // Keep drawing until the CPU finds a playable tile or the boneyard runs out.
+      while (_ctrl.boneyard.isNotEmpty && !_ctrl.canCpuPlayAny()) {
         _ctrl.drawFromBoneyard(false);
-        setState(() {});
-        if (!_ctrl.canCpuPlayAny()) {
-          _ctrl.consecutivePasses++;
-          final roundResult = _ctrl.checkRoundEnd();
-          setState(() => _isCpuThinking = false);
-          if (roundResult != null) {
-            _handleRoundEnd(roundResult);
-            return;
-          }
-        } else {
-          _makeCpuMove();
-          return;
-        }
-      } else {
-        _ctrl.consecutivePasses++;
-        final roundResult = _ctrl.checkRoundEnd();
-        setState(() => _isCpuThinking = false);
-        if (roundResult != null) {
-          _handleRoundEnd(roundResult);
-          return;
-        }
+      }
+      setState(() {});
+
+      if (_ctrl.canCpuPlayAny()) {
+        _makeCpuMove();
+        return;
+      }
+
+      // Boneyard exhausted and still can't play → pass.
+      _ctrl.consecutivePasses++;
+      final roundResult = _ctrl.checkRoundEnd();
+      setState(() => _isCpuThinking = false);
+      if (roundResult != null) {
+        _handleRoundEnd(roundResult);
+        return;
       }
       setState(() {
         _isCpuThinking = false;
