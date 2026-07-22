@@ -205,8 +205,7 @@ function render(){
   const PADX=HR+16,PADY=HR+16;
   const s=Math.min((W-2*PADX)/(mxX-mnX),(H-2*PADY)/(mxY-mnY),0.55);
   const ox=W/2-(mxX+mnX)/2*s;
-  // Align top of chain near top of canvas (with padding) so tiles fill downward.
-  const oy=PADY-mnY*s;
+  const oy=H/2-(mxY+mnY)/2*s;
 
   // Draw vertical connector tiles first, then horizontal row tiles on top,
   // so row tiles cleanly cover the connector edges at corner junctions.
