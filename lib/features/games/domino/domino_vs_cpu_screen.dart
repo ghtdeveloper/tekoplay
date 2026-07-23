@@ -302,6 +302,15 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   bool _showGameOverBanner = false;
   _RoundResult? _roundEndResultType;
   List<DominoTile> _revealedCpuHand = [];
+  bool _showBoneyardPicker = false;
+  DominoTile? _cpuPlayingTile;
+  String _cpuPlayingSide = 'right';
+  DominoTile? _boneyardFlyingTile;
+  String _boneyardFlyingSide = 'right';
+  late AnimationController _cpuDragAnimCtrl;
+  late Animation<Offset> _cpuSlideAnim;
+  late AnimationController _boneyardFlyAnimCtrl;
+  late Animation<Offset> _boneyardFlyAnim;
 
   static const Color _panelColor   = Color(0xEE0D2010);
 
@@ -322,6 +331,24 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..repeat(reverse: true);
+
+    _cpuDragAnimCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _cpuSlideAnim = Tween<Offset>(
+      begin: const Offset(0, -2.5),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _cpuDragAnimCtrl, curve: Curves.easeOut));
+
+    _boneyardFlyAnimCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _boneyardFlyAnim = Tween<Offset>(
+      begin: const Offset(0, 2),
+      end: const Offset(0, -6),
+    ).animate(CurvedAnimation(parent: _boneyardFlyAnimCtrl, curve: Curves.easeInOut));
 
     _adHelper = InterstitialAdHelper(showFrequency: 3);
 
@@ -375,6 +402,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     _chainScrollCtrl.dispose();
     _cpuTileAnimCtrl.dispose();
     _playerTileAnimCtrl.dispose();
+    _cpuDragAnimCtrl.dispose();
+    _boneyardFlyAnimCtrl.dispose();
     _adHelper.dispose();
     super.dispose();
   }
@@ -474,7 +503,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         _autoPlayForPlayer();
       } else if (_ctrl.boneyard.isNotEmpty) {
         _drawFromBoneyard();
-        _ctrl.startTimer();
       } else {
         _passPlayerTurn();
       }
@@ -551,8 +579,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       setState(() => _ctrl.phase = _GamePhase.cpuTurn);
       _scheduleCpuTurn();
     }
-
-    _scrollChainToEnd();
   }
 
   void _drawFromBoneyard() {
@@ -565,13 +591,49 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       _showSnack('Tienes fichas que puedes jugar');
       return;
     }
-    setState(() {
-      _ctrl.drawFromBoneyard(true);
-    });
-    if (_ctrl.canPlayerPlayAny()) {
-      _showSnack('¡Ficha tomada! Ahora puedes jugar', success: true);
+    _ctrl._stopTimer();
+    setState(() => _showBoneyardPicker = true);
+  }
+
+  Future<void> _onBoneyardTilePicked(DominoTile tile) async {
+    setState(() => _showBoneyardPicker = false);
+
+    if (_ctrl.canPlay(tile)) {
+      final canLeft = _ctrl.chain.isNotEmpty && tile.canConnectTo(_ctrl.leftOpen!);
+      final canRight = _ctrl.chain.isEmpty || tile.canConnectTo(_ctrl.rightOpen!);
+      final side = (!canLeft && canRight) ? 'right' : (!canRight && canLeft) ? 'left' : null;
+
+      if (side != null) {
+        setState(() {
+          _boneyardFlyingTile = tile;
+          _boneyardFlyingSide = side;
+        });
+        _boneyardFlyAnimCtrl.forward(from: 0);
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+        _ctrl.boneyard.remove(tile);
+        _ctrl.playerHand.add(tile);
+        setState(() {
+          _boneyardFlyingTile = null;
+          _selectedTile = tile;
+        });
+        _placeSelectedTile(side);
+      } else {
+        _ctrl.boneyard.remove(tile);
+        _ctrl.playerHand.add(tile);
+        setState(() {
+          _selectedTile = tile;
+          _needsSideChoice = true;
+        });
+      }
     } else {
+      _ctrl.boneyard.remove(tile);
+      _ctrl.playerHand.add(tile);
+      setState(() {});
       _showSnack('Sin opciones, pasa tu turno');
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) _passPlayerTurn();
+      });
     }
   }
 
@@ -593,10 +655,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     setState(() => _isCpuThinking = true);
 
     final delay = widget.selectedDifficulty == 'muy fácil'
-        ? 1200
+        ? 800
         : widget.selectedDifficulty == 'difícil'
-            ? 600
-            : 900;
+            ? 400
+            : 600;
 
     Future.delayed(Duration(milliseconds: delay), () {
       if (!mounted) return;
@@ -604,19 +666,27 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     });
   }
 
-  void _makeCpuMove() {
+  Future<void> _makeCpuMove() async {
     if (!mounted) return;
 
     final bestTile = _ctrl.getBestCpuMove();
 
     if (bestTile != null) {
       final side = _ctrl.getCpuPlaySide(bestTile);
+      setState(() {
+        _cpuPlayingTile = bestTile;
+        _cpuPlayingSide = side;
+        _isCpuThinking = false;
+      });
+      _cpuDragAnimCtrl.forward(from: 0);
+      await Future.delayed(const Duration(milliseconds: 1100));
+      if (!mounted) return;
+
       _ctrl.playTile(bestTile, side);
       _ctrl.cpuHand.remove(bestTile);
-
       final roundResult = _ctrl.checkRoundEnd();
 
-      setState(() => _isCpuThinking = false);
+      setState(() => _cpuPlayingTile = null);
 
       if (roundResult != null) {
         _handleRoundEnd(roundResult);
@@ -624,20 +694,16 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         setState(() => _ctrl.phase = _GamePhase.playerTurn);
         _ctrl.startTimer();
       }
-      _scrollChainToEnd();
     } else {
-      // Keep drawing until the CPU finds a playable tile or the boneyard runs out.
       while (_ctrl.boneyard.isNotEmpty && !_ctrl.canCpuPlayAny()) {
         _ctrl.drawFromBoneyard(false);
       }
       setState(() {});
 
       if (_ctrl.canCpuPlayAny()) {
-        _makeCpuMove();
+        await _makeCpuMove();
         return;
       }
-
-      // Boneyard exhausted and still can't play → pass.
       _ctrl.consecutivePasses++;
       final roundResult = _ctrl.checkRoundEnd();
       setState(() => _isCpuThinking = false);
@@ -754,17 +820,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     }
   }
 
-  void _scrollChainToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_chainScrollCtrl.hasClients) {
-        _chainScrollCtrl.animateTo(
-          _chainScrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
 
   void _showSnack(String msg, {bool success = false}) {
     if (!mounted) return;
@@ -847,6 +902,9 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           ),
           if (_showRoundEndBanner) _buildRoundEndOverlay(),
           if (_showGameOverBanner) _buildGameOverOverlay(),
+          if (_showBoneyardPicker) _buildBoneyardPicker(),
+          if (_boneyardFlyingTile != null) _buildBoneyardFlyOverlay(),
+          if (_cpuPlayingTile != null) _buildCpuDragOverlay(),
         ],
       ),
     );
@@ -1027,70 +1085,68 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   }
 
   Widget _buildLandscapeHeader() {
-    final bool isPlayerTurn = _ctrl.phase == _GamePhase.playerTurn;
+    final bool isCpuTurn = _ctrl.phase == _GamePhase.cpuTurn;
     final bool cpuHasOpening = _ctrl.chain.isEmpty &&
         _ctrl.openingDoubleValue != -1 &&
-        _ctrl.phase == _GamePhase.cpuTurn;
+        isCpuTurn;
 
     return AnimatedBuilder(
       animation: _cpuTileAnimCtrl,
       builder: (context, _) => Container(
         height: 52,
         color: _panelColor,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         child: Row(
           children: [
-            // Round + timer info
-            SizedBox(
-              width: 64,
+            _buildCompactScore('CPU', _ctrl.cpuScore, isCpuTurn, _buildCpuAvatar()),
+            const SizedBox(width: 8),
+            Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('Ronda ${_ctrl.roundNumber}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
-                  Text('Meta: ${_ctrl.targetScore}',
-                      style: const TextStyle(color: Colors.white54, fontSize: 9)),
-                  if (_ctrl.timerActive && isPlayerTurn)
-                    Text('⏱ ${_ctrl.timeLeft}s',
-                        style: TextStyle(
-                          color: _ctrl.timeLeft <= 10 ? Colors.red[300] : Colors.green[300],
-                          fontSize: 10, fontWeight: FontWeight.bold,
-                        )),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text('Ronda ${_ctrl.roundNumber}',
+                          style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 6),
+                      Text('Meta: ${_ctrl.targetScore}',
+                          style: const TextStyle(color: Colors.white54, fontSize: 9)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Expanded(
+                    child: _isCpuThinking
+                        ? const Align(
+                            alignment: Alignment.centerRight,
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              SizedBox(width: 10, height: 10, child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
+                              SizedBox(width: 4),
+                              Text('pensando...', style: TextStyle(color: Colors.white54, fontSize: 9)),
+                            ]))
+                        : cpuHasOpening
+                            ? Align(
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  'Sale con ${_ctrl.openingDoubleValue}-${_ctrl.openingDoubleValue}',
+                                  style: TextStyle(color: Colors.amber[300], fontSize: 9, fontWeight: FontWeight.bold),
+                                ))
+                            : ListView(
+                                scrollDirection: Axis.horizontal,
+                                reverse: true,
+                                children: List.generate(
+                                  _ctrl.cpuHand.length,
+                                  (_) => Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                                    child: _buildFaceDownTile(width: 14, height: 16),
+                                  ),
+                                ),
+                              ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            _buildCompactScore('CPU', _ctrl.cpuScore, !isPlayerTurn, _buildCpuAvatar()),
-            const SizedBox(width: 4),
-            Expanded(
-              child: _isCpuThinking
-                  ? const Center(
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
-                        SizedBox(width: 4),
-                        Text('CPU pensando...', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                      ]))
-                  : cpuHasOpening
-                      ? Center(
-                          child: Text(
-                            'CPU sale con ${_ctrl.openingDoubleValue}-${_ctrl.openingDoubleValue}',
-                            style: TextStyle(color: Colors.amber[300], fontSize: 10, fontWeight: FontWeight.bold),
-                          ))
-                      : ListView(
-                          scrollDirection: Axis.horizontal,
-                          reverse: true,
-                          children: List.generate(
-                            _ctrl.cpuHand.length,
-                            (_) => Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                              child: _buildFaceDownTile(width: 16, height: 30),
-                            ),
-                          ),
-                        ),
-            ),
-            const SizedBox(width: 4),
-            _buildCompactScore('Tú', _ctrl.playerScore, isPlayerTurn, _buildUserAvatar()),
           ],
         ),
       ),
@@ -1133,7 +1189,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     final bool canPass = isPlayerTurn && !_ctrl.canPlayerPlayAny() && _ctrl.boneyard.isEmpty;
 
     return Container(
-      height: 60,
+      height: 72,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -1143,39 +1199,77 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         ),
         boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 8, offset: Offset(0, -3))],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       child: Row(
         children: [
+          _buildPlayerPanel(isPlayerTurn),
+          const SizedBox(width: 6),
+          Expanded(child: _buildPlayerArea()),
+          const SizedBox(width: 4),
           SizedBox(
-            width: 72,
+            width: 80,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _infoChip('Pozo: ${_ctrl.boneyard.length}'),
-                const SizedBox(height: 3),
-                if (_ctrl.chain.isNotEmpty)
+                if (_ctrl.chain.isNotEmpty && !canDraw && !canPass) ...[
+                  const SizedBox(height: 2),
                   _infoChip('${_ctrl.leftOpen ?? '-'} ↔ ${_ctrl.rightOpen ?? '-'}'),
+                ],
+                if (canDraw) ...[
+                  const SizedBox(height: 4),
+                  _actionBtn('Tomar', Icons.add_box, Colors.blue[700]!, _drawFromBoneyard),
+                ],
+                if (canPass) ...[
+                  const SizedBox(height: 4),
+                  _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
+                ],
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerPanel(bool isActive) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.white12 : Colors.black26,
+        borderRadius: BorderRadius.circular(8),
+        border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildUserAvatar(),
           const SizedBox(width: 4),
-          Expanded(child: _buildPlayerArea()),
-          if (canDraw || canPass) ...[
-            const SizedBox(width: 4),
-            SizedBox(
-              width: 90,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (canDraw)
-                    _actionBtn('Tomar', Icons.add_box, Colors.blue[700]!, _drawFromBoneyard),
-                  if (canPass)
-                    _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
-                ],
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Yo', style: TextStyle(color: Colors.white70, fontSize: 9)),
+              Text(
+                '${_ctrl.playerScore}',
+                style: TextStyle(
+                  color: isActive ? _accentOrange : Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
+              if (_ctrl.timerActive && isActive)
+                Text(
+                  '⏱ ${_ctrl.timeLeft}s',
+                  style: TextStyle(
+                    color: _ctrl.timeLeft <= 10 ? Colors.red[300] : Colors.green[300],
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -1299,8 +1393,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                 child: DominoTileWidget(
                   left: tile.left,
                   right: tile.right,
-                  width: 24,
-                  height: 44,
+                  width: 26,
+                  height: 30,
                   isPlayable: isPlayable,
                   isSelected: isSelected,
                   isMandatory: isMandatory,
@@ -1335,6 +1429,173 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   Widget _buildFaceDownTile({required double width, required double height}) {
     return DominoTileWidget(left: 0, right: 0, width: width, height: height, faceDown: true);
+  }
+
+  Widget _buildBoneyardPicker() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xF20D2010),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(color: Color(0x88000000), blurRadius: 16, offset: Offset(0, -4))],
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 32, height: 3,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.casino, color: Colors.white70, size: 15),
+                const SizedBox(width: 6),
+                Text(
+                  'Pozo — elige una ficha (${_ctrl.boneyard.length})',
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _showBoneyardPicker = false);
+                    _ctrl.startTimer();
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white38,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Cancelar', style: TextStyle(fontSize: 11)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 52,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                children: _ctrl.boneyard.map((tile) {
+                  return GestureDetector(
+                    onTap: () => _onBoneyardTilePicked(tile),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: DominoTileWidget(
+                        left: tile.left,
+                        right: tile.right,
+                        width: 26,
+                        height: 30,
+                        isPlayable: true,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoneyardFlyOverlay() {
+    final tile = _boneyardFlyingTile!;
+    final sideLabel = _boneyardFlyingSide == 'left' ? 'izquierda' : 'derecha';
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Align(
+          alignment: const Alignment(0, 0.8),
+          child: SlideTransition(
+            position: _boneyardFlyAnim,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xEE0D2010),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.blue, width: 2),
+                boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 16, offset: Offset(0, 4))],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.casino, color: Colors.white70, size: 13),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Robas al $sideLabel',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  DominoTileWidget(
+                    left: tile.left,
+                    right: tile.right,
+                    width: 32,
+                    height: 58,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCpuDragOverlay() {
+    final tile = _cpuPlayingTile!;
+    final sideLabel = _cpuPlayingSide == 'left' ? 'izquierda' : 'derecha';
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Align(
+          alignment: const Alignment(0, -0.15),
+          child: SlideTransition(
+            position: _cpuSlideAnim,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xEE0D2010),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _accentOrange, width: 2),
+                boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 20, offset: Offset(0, 6))],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.smart_toy, color: Colors.white70, size: 15),
+                      const SizedBox(width: 6),
+                      Text(
+                        'CPU juega al $sideLabel',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  DominoTileWidget(
+                    left: tile.left,
+                    right: tile.right,
+                    width: 46,
+                    height: 84,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
 }
