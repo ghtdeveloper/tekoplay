@@ -1,4 +1,3 @@
-// lib/core/widgets/domino_webview_board.dart
 
 import 'dart:convert';
 import 'dart:math';
@@ -14,20 +13,19 @@ String _encodeBase64(Uint8List bytes) => base64Encode(bytes);
 class DominoBoardWebView extends StatefulWidget {
   final List<DominoChainEntry> tiles;
 
-  /// When true, amber hint circles appear on the chain endpoints in the board.
   final bool showEndpointHints;
 
-  /// Pip value shown on the left endpoint hint.
   final int leftOpen;
 
-  /// Pip value shown on the right endpoint hint.
   final int rightOpen;
 
-  /// Called when the player taps the left endpoint hint.
   final VoidCallback? onLeftTapped;
 
-  /// Called when the player taps the right endpoint hint.
   final VoidCallback? onRightTapped;
+
+  final int openingIndex;
+
+  final void Function(Offset left, Offset right)? onEndpointsUpdated;
 
   const DominoBoardWebView({
     super.key,
@@ -35,8 +33,10 @@ class DominoBoardWebView extends StatefulWidget {
     this.showEndpointHints = false,
     this.leftOpen = 0,
     this.rightOpen = 0,
+    this.openingIndex = -1,
     this.onLeftTapped,
     this.onRightTapped,
+    this.onEndpointsUpdated,
   });
 
   @override
@@ -71,11 +71,22 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
             widget.onLeftTapped?.call();
           } else if (msg.message == 'tapRight') {
             widget.onRightTapped?.call();
+          } else if (msg.message.startsWith('ep:')) {
+            if (widget.onEndpointsUpdated != null) {
+              try {
+                final d = jsonDecode(msg.message.substring(3)) as Map;
+                final W = (d['W'] as num).toDouble();
+                final H = (d['H'] as num).toDouble();
+                if (W > 0 && H > 0) {
+                  final l = Offset((d['lx'] as num) / W, (d['ly'] as num) / H);
+                  final r = Offset((d['rx'] as num) / W, (d['ry'] as num) / H);
+                  widget.onEndpointsUpdated!(l, r);
+                }
+              } catch (_) {}
+            }
           }
         },
       );
-
-    // Load HTML as a string to bypass WebView asset caching
     rootBundle.loadString('assets/domino_board/board.html').then((html) {
       _ctrl.loadHtmlString(html);
     });
@@ -99,7 +110,11 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
       return;
     }
     final json = jsonEncode(
-      tiles.map((t) => {'l': t.left, 'r': t.right}).toList(),
+      tiles.asMap().entries.map((e) {
+        final m = <String, dynamic>{'l': e.value.left, 'r': e.value.right};
+        if (e.key == widget.openingIndex) m['opening'] = true;
+        return m;
+      }).toList(),
     );
     _ctrl.runJavaScript('window.updateBoard($json)');
   }
@@ -136,7 +151,6 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
       }
       await _ctrl.runJavaScript('window._imgEnd()');
     } catch (_) {
-      // Sprite sheet unavailable — pip fallback stays active.
     }
   }
 

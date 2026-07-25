@@ -63,16 +63,13 @@ window._imgEnd=function(){
 };
 
 // ── Tile helpers ──────────────────────────────────────────────────────────
-// Doubles in HORIZONTAL segments (right/left) go perpendicular (portrait tile = vertical).
-// Doubles in VERTICAL segments (down/up) stay along the chain, same as regular tiles.
 function isDouble(t){return t.l===t.r;}
 function isHoriz(dir){return dir==='right'||dir==='left';}
-function cExt(t,dir){return(isDouble(t)&&isHoriz(dir))?TW:TH;}
-function pExt(t,dir){return(isDouble(t)&&isHoriz(dir))?TH:TW;}
+function cExt(t,dir){return TH;}  // all tiles: long side along chain
+function pExt(t,dir){return TW;}  // all tiles: short side perpendicular
 
 const _RA={right:-Math.PI/2, up:Math.PI, left:Math.PI/2, down:0};
-const _DA={right:0,           up:Math.PI, left:Math.PI,   down:0}; // vertical: same as _RA
-function tileAngle(t,dir){return(isDouble(t)&&isHoriz(dir))?_DA[dir]:_RA[dir];}
+function tileAngle(t,dir){return _RA[dir];}
 
 // ── Layout: boustrophedon (RIGHT→DOWN→LEFT→DOWN→RIGHT→…) ─────────────────
 // Rows fill horizontally then wrap downward, like Image #2 reference.
@@ -147,9 +144,12 @@ const PIP={0:[],1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],
   4:[[-1,-1],[1,-1],[-1,1],[1,1]],5:[[-1,-1],[1,-1],[0,0],[-1,1],[1,1]],
   6:[[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]};
 function drawP(l,r,cx,cy,ang,s){
+  const dbl=l===r;
   const w=TW*s,h=TH*s,pr=Math.max(2,TW*s*.07);
   ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);
-  ctx.fillStyle='#F5F5DC';ctx.strokeStyle='#444';ctx.lineWidth=Math.max(1,s*1.5);
+  ctx.fillStyle=dbl?'#FFFBEE':'#F5F5DC';
+  ctx.strokeStyle=dbl?'#2255AA':'#444';
+  ctx.lineWidth=Math.max(1,s*(dbl?2.5:1.5));
   ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,2*s);ctx.fill();ctx.stroke();
   ctx.beginPath();ctx.moveTo(-w/2+4,0);ctx.lineTo(w/2-4,0);
   ctx.strokeStyle='#888';ctx.lineWidth=Math.max(.5,s*.8);ctx.stroke();
@@ -219,22 +219,52 @@ function render(){
     else       drawP(p.l,p.r,dx,dy,ang,s);
   }
 
-  // ── Draw endpoint hints ───────────────────────────────────────────────
-  if(_hints && pos.length>0){
+  // ── Draw opening tile badge ──────────────────────────────────────────
+  const oi=chain.findIndex(t=>t.opening===true);
+  if(oi>=0 && oi<pos.length){
+    const op=pos[oi];
+    const sx=op.cx*s+ox, sy=op.cy*s+oy;
+    // Y offset: half-height of the rotated tile
+    const cosA=Math.abs(Math.cos(op.a)), sinA=Math.abs(Math.sin(op.a));
+    const halfH=(TW/2*sinA+TH/2*cosA)*s;
+    const br=Math.max(7,10*s); // badge radius
+    const bx=sx, by=sy-halfH-br-2;
+    ctx.save();
+    // glow
+    ctx.shadowColor='rgba(255,200,0,0.8)';
+    ctx.shadowBlur=10;
+    // badge circle
+    ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);
+    ctx.fillStyle='#FFD700';ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle='rgba(180,110,0,0.9)';ctx.lineWidth=1.5;ctx.stroke();
+    // star text
+    ctx.fillStyle='#7A4500';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font=`bold ${Math.max(9,12*s)}px sans-serif`;
+    ctx.fillText('★',bx,by+0.5);
+    ctx.restore();
+  }
+
+  // ── Compute & report endpoints ────────────────────────────────────────
+  const DVX={right:1, up:0, left:-1, down:0};
+  const DVY={right:0, up:-1, left:0, down:1};
+  if(pos.length>0){
     const lp=pos[0], rp=pos[pos.length-1];
-    // Use chain direction vectors (not tile angle) so doubles get correct hint placement
-    const DVX={right:1, up:0, left:-1, down:0};
-    const DVY={right:0, up:-1, left:0, down:1};
     const ld=lp.ce/2*s+HR+8;
     const lx=lp.cx*s+ox - DVX[lp.dir]*ld;
     const ly=lp.cy*s+oy - DVY[lp.dir]*ld;
     const rd=rp.ce/2*s+HR+8;
     const rx=rp.cx*s+ox + DVX[rp.dir]*rd;
     const ry=rp.cy*s+oy + DVY[rp.dir]*rd;
-
     _hPos={lx,ly,rx,ry};
-    drawHint(lx,ly,_hintL,true);
-    drawHint(rx,ry,_hintR,false);
+    // Always report endpoints so Flutter can aim tile animations
+    try{FlutterChannel.postMessage('ep:'+JSON.stringify({lx,ly,rx,ry,W,H}));}catch(e){}
+
+    if(_hints){
+      drawHint(lx,ly,_hintL,true);
+      drawHint(rx,ry,_hintR,false);
+    }
   } else {
     _hPos=null;
   }
