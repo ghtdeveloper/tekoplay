@@ -65,55 +65,69 @@ window._imgEnd=function(){
 // ── Tile helpers ──────────────────────────────────────────────────────────
 function isDouble(t){return t.l===t.r;}
 function isHoriz(dir){return dir==='right'||dir==='left';}
-function cExt(t,dir){return TH;}  // all tiles: long side along chain
-function pExt(t,dir){return TW;}  // all tiles: short side perpendicular
-
+function cExt(t,dir){return TH;}
+function pExt(t,dir){return TW;}
 const _RA={right:-Math.PI/2, up:Math.PI, left:Math.PI/2, down:0};
 function tileAngle(t,dir){return _RA[dir];}
 
-// ── Layout: boustrophedon (RIGHT→DOWN→LEFT→DOWN→RIGHT→…) ─────────────────
-// Rows fill horizontally then wrap downward, like Image #2 reference.
-// OVLP: small overlap between same-direction tiles to eliminate visual seams.
-// CORNER_OVLP: overlap at direction changes (H→V and V→H corners).
+// ── Layout: bidirectional snake, opening double = center anchor ───────────
+// Left chain: grows LEFT→UP→RIGHT→UP from left end of opening double.
+// Right chain: grows RIGHT→DOWN→LEFT→DOWN from right end of opening double.
+// No opening double: simple RIGHT→DOWN→LEFT→DOWN boustrophedon.
 const OVLP=5;
 const CORNER_OVLP=6;
-function layout(tiles){
-  if(!tiles.length)return[];
-  const HCOLS=4, VCOLS=1;
-  // Boustrophedon: right, then down connector, then left, then down connector…
-  const DIRS=['right','down','left','down'];
-  const DX={right:1, up:0, left:-1, down:0};
-  const DY={right:0, up:-1, left:0, down:1};
-  const LIMS={right:HCOLS, left:HCOLS, up:VCOLS, down:VCOLS};
+const DX={right:1,up:0,left:-1,down:0};
+const DY={right:0,up:-1,left:0,down:1};
 
-  const pos=[];
-  let x=0,y=0,dirIdx=0,segCount=0;
-
+function layoutLinear(tiles,x0,y0,dirs,hcols){
+  const LIMS={};
+  for(const d of dirs) LIMS[d]=isHoriz(d)?hcols:1;
+  const pos=[],diff=TH/2-TW/2;
+  let x=x0,y=y0,di=0,sc=0;
   for(let i=0;i<tiles.length;i++){
     const t=tiles[i];
-    const dir=DIRS[dirIdx];
-    pos.push({cx:x,cy:y,a:tileAngle(t,dir),l:t.l,r:t.r,ce:cExt(t,dir),dir:dir});
-    segCount++;
+    const dir=dirs[di%4];
+    pos.push({cx:x,cy:y,a:_RA[dir],l:t.l,r:t.r,ce:TH,dir:dir});
+    sc++;
     if(i===tiles.length-1)break;
-    const nt=tiles[i+1];
-    if(segCount>=LIMS[dir]){
-      dirIdx=(dirIdx+1)%4;
-      const nd=DIRS[dirIdx];
-      const isOldVert=!isHoriz(dir);
-      // diff = TH/2 - TW/2 = 44.5 for regular tiles.
-      // H→V: connector outer edge aligns with row outer edge (aln=diff, not 0).
-      // V→H: new row corner-connects to connector edge (fwd=diff, not pExt/2+cExt/2).
-      const diff=cExt(nt,nd)/2-pExt(t,dir)/2;
-      const fwd=isOldVert ? diff : pExt(t,dir)/2+cExt(nt,nd)/2-CORNER_OVLP;
-      const aln=isOldVert ? cExt(t,dir)/2+pExt(nt,nd)/2-CORNER_OVLP : diff;
+    if(sc>=LIMS[dir]){
+      di=(di+1)%4;
+      const nd=dirs[di%4];
+      const ov=!isHoriz(dir);
+      const fwd=ov?diff:TW/2+TH/2-CORNER_OVLP;
+      const aln=ov?TH/2+TW/2-CORNER_OVLP:diff;
       x+=DX[nd]*fwd+DX[dir]*aln;
       y+=DY[nd]*fwd+DY[dir]*aln;
-      segCount=0;
+      sc=0;
     }else{
-      // Same direction: slight overlap to eliminate visual seams.
-      x+=DX[dir]*(cExt(t,dir)/2+cExt(nt,dir)/2-OVLP);
-      y+=DY[dir]*(cExt(t,dir)/2+cExt(nt,dir)/2-OVLP);
+      x+=DX[dir]*(TH-OVLP);
+      y+=DY[dir]*(TH-OVLP);
     }
+  }
+  return pos;
+}
+
+function layout(tiles){
+  if(!tiles.length)return[];
+  const oi=tiles.findIndex(t=>t.opening);
+  if(oi<0) return layoutLinear(tiles,0,0,['right','down','left','down'],4);
+
+  const pos=new Array(tiles.length).fill(null);
+  // Opening double sits at center, portrait (vertical)
+  pos[oi]={cx:0,cy:0,a:0,l:tiles[oi].l,r:tiles[oi].r,ce:TW,dir:'down'};
+  // Offset from center to first chain tile: half of opening width + half of chain tile height - overlap
+  const chainOff=Math.round(TW/2+TH/2-CORNER_OVLP);
+
+  // Right chain: RIGHT→DOWN→LEFT→DOWN, 2 tiles per horizontal row
+  if(oi<tiles.length-1){
+    const rp=layoutLinear(tiles.slice(oi+1),chainOff,0,['right','down','left','down'],2);
+    for(let i=0;i<rp.length;i++) pos[oi+1+i]=rp[i];
+  }
+  // Left chain: reversed, LEFT→UP→RIGHT→UP, 2 tiles per horizontal row
+  if(oi>0){
+    const lt=tiles.slice(0,oi).reverse();
+    const lp=layoutLinear(lt,-chainOff,0,['left','up','right','up'],2);
+    for(let i=0;i<lp.length;i++){const p=lp[i];pos[oi-1-i]={...p,l:p.r,r:p.l};}
   }
   return pos;
 }
@@ -251,9 +265,11 @@ function render(){
   const DVY={right:0, up:-1, left:0, down:1};
   if(pos.length>0){
     const lp=pos[0], rp=pos[pos.length-1];
+    const bidir=chain.some(t=>t.opening);
+    const lm=bidir?1:-1;
     const ld=lp.ce/2*s+HR+8;
-    const lx=lp.cx*s+ox - DVX[lp.dir]*ld;
-    const ly=lp.cy*s+oy - DVY[lp.dir]*ld;
+    const lx=lp.cx*s+ox+lm*DVX[lp.dir]*ld;
+    const ly=lp.cy*s+oy+lm*DVY[lp.dir]*ld;
     const rd=rp.ce/2*s+HR+8;
     const rx=rp.cx*s+ox + DVX[rp.dir]*rd;
     const ry=rp.cy*s+oy + DVY[rp.dir]*rd;

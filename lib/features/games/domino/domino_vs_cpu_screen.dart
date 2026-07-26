@@ -607,6 +607,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   void _pickBoneyardTile() {
     if (_ctrl.boneyard.isEmpty) return;
+    _ctrl._stopTimer(); // pause timer while drawing
     final idx = Random().nextInt(_ctrl.boneyard.length);
     _onBoneyardTilePicked(_ctrl.boneyard[idx]);
   }
@@ -646,6 +647,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         });
       }
     } else {
+      // Tile not playable — add to hand, let player keep drawing
       setState(() => _boneyardFlyingTile = tile);
       _boneyardFlyAnimCtrl.forward(from: 0);
       await Future.delayed(const Duration(milliseconds: 500));
@@ -653,10 +655,19 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       _ctrl.boneyard.remove(tile);
       _ctrl.playerHand.add(tile);
       setState(() => _boneyardFlyingTile = null);
-      _showSnack('Sin opciones, pasa tu turno');
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) _passPlayerTurn();
-      });
+      // If drawing unlocked a playable tile, restart timer so player can play
+      if (_ctrl.canPlayerPlayAny()) {
+        _ctrl.startTimer();
+        return;
+      }
+      // Boneyard exhausted and still can't play → pass
+      if (_ctrl.boneyard.isEmpty) {
+        _showSnack('Sin opciones disponibles, pasas tu turno');
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted) _passPlayerTurn();
+        });
+      }
+      // Else: boneyard still has tiles, player can keep tapping to draw
     }
   }
 
@@ -859,6 +870,58 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   }
 
 
+  Future<bool> _showAbandonDialog() async {
+    final isBet = widget.matchType == 'Apuesta';
+    final gameCost = _getGameCost();
+    final currencyLabel = isBet ? 'diamantes 💎' : 'monedas 🪙';
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text(
+          '¿Abandonar partida?',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.warning, size: 48, color: Colors.orange),
+            const SizedBox(height: 16),
+            Text(
+              'Si abandonas la partida perderás $gameCost $currencyLabel.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '¿Estás seguro?',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Continuar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text('Abandonar'),
+            ),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   void _showSnack(String msg, {bool success = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -876,10 +939,18 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   Widget build(BuildContext context) {
     final isBetMode = widget.matchType == 'Apuesta';
     return PopScope(
-      canPop: !isBetMode || _gameEnded,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && isBetMode && !_gameEnded) {
-          _showSnack('No puedes salir en modo apuesta hasta terminar la partida');
+      canPop: _gameEnded,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldAbandon = await _showAbandonDialog();
+        if (!context.mounted) return;
+        if (shouldAbandon) {
+          _adHelper.forceShowAd(
+            onComplete: () async {
+              await _recordResult(false);
+            },
+          );
+          if (context.mounted) Navigator.of(context).pop();
         }
       },
       child: Scaffold(
