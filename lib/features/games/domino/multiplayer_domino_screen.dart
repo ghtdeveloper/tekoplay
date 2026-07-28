@@ -74,6 +74,8 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
 
   Timer? _turnTimer;
   int _turnSecondsLeft = 60;
+  Timer? _awayTimer;
+  int _awaySecondsLeft = 60;
   bool _isJoining = false;
   bool _isPlayingVsBot = false;
   bool _isOpponentThinking = false;
@@ -108,10 +110,25 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isScreenKeepOnActive) {
-      WakelockPlus.enable();
+    if (state == AppLifecycleState.resumed) {
+      if (_isScreenKeepOnActive) WakelockPlus.enable();
+      _awayTimer?.cancel();
+      _awayTimer = null;
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
+      if (!_gameEnded && _activeGameId != null) {
+        _stopTurnTimer();
+        _awaySecondsLeft = 60;
+        _awayTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          _awaySecondsLeft--;
+          if (_awaySecondsLeft <= 0) {
+            t.cancel();
+            if (_activeGameId != null && _currentUser != null) {
+              _gameService.abandonGame(gameId: _activeGameId!, playerId: _currentUser!.uid);
+            }
+          }
+        });
+      }
     }
   }
 
@@ -175,6 +192,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     _botMoveTimer?.cancel();
     _waitingTimer?.cancel();
     _turnTimer?.cancel();
+    _awayTimer?.cancel();
     _chainScrollCtrl.dispose();
     _roomCodeCtrl.dispose();
     _disableWakeLock();

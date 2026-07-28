@@ -71,6 +71,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   Timer? _botMoveTimer;
   Timer? _turnTimer;
   int _turnSecondsLeft = 60;
+  Timer? _awayTimer;
+  int _awaySecondsLeft = 60;
   final ScrollController _chainScrollCtrl = ScrollController();
   bool _isScreenKeepOnActive = false;
 
@@ -97,10 +99,25 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isScreenKeepOnActive) {
-      WakelockPlus.enable();
+    if (state == AppLifecycleState.resumed) {
+      if (_isScreenKeepOnActive) WakelockPlus.enable();
+      _awayTimer?.cancel();
+      _awayTimer = null;
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
+      if (!_gameEnded && _activeGameId != null) {
+        _stopTurnTimer();
+        _awaySecondsLeft = 60;
+        _awayTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          _awaySecondsLeft--;
+          if (_awaySecondsLeft <= 0) {
+            t.cancel();
+            if (_activeGameId != null && _currentUser != null) {
+              _gameService.abandonGame(gameId: _activeGameId!, playerId: _currentUser!.uid);
+            }
+          }
+        });
+      }
     }
   }
 
@@ -163,6 +180,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     _matchmakingTimer?.cancel();
     _botMoveTimer?.cancel();
     _turnTimer?.cancel();
+    _awayTimer?.cancel();
     _chainScrollCtrl.dispose();
     _disableWakeLock();
     super.dispose();

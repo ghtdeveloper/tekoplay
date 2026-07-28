@@ -298,7 +298,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   bool _isCpuThinking = false;
   bool _gameEnded = false;
   bool _isScreenKeepOnActive = false;
-  Timer? _awayTimer;
+  bool _gamePaused = false;
   bool _showRoundEndBanner = false;
   bool _showGameOverBanner = false;
   _RoundResult? _roundEndResultType;
@@ -386,22 +386,23 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       if (_isScreenKeepOnActive) WakelockPlus.enable();
-      _awayTimer?.cancel();
-      _awayTimer = null;
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
-      if (_gameStarted && !_gameEnded) {
-        _awayTimer = Timer(const Duration(minutes: 2), () {
-          if (mounted && !_gameEnded) _handleAwayLoss();
-        });
+      if (_gameStarted && !_gameEnded && !_gamePaused) {
+        _ctrl._stopTimer();
+        if (mounted) setState(() => _gamePaused = true);
       }
     }
   }
 
-  void _handleAwayLoss() {
-    _ctrl._stopTimer();
-    _recordResult(false);
-    setState(() => _showGameOverBanner = true);
+  void _resumeGame() {
+    if (!mounted) return;
+    setState(() => _gamePaused = false);
+    if (_ctrl.phase == _GamePhase.cpuTurn) {
+      _scheduleCpuTurn();
+    } else if (_ctrl.phase == _GamePhase.playerTurn) {
+      _ctrl.startTimer();
+    }
   }
 
   Future<void> _enableWakeLock() async {
@@ -417,7 +418,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _awayTimer?.cancel();
     _disableWakeLock();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -707,13 +707,13 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
             : 600;
 
     Future.delayed(Duration(milliseconds: delay), () {
-      if (!mounted) return;
+      if (!mounted || _gamePaused) return;
       _makeCpuMove();
     });
   }
 
   Future<void> _makeCpuMove() async {
-    if (!mounted) return;
+    if (!mounted || _gamePaused) return;
 
     final bestTile = _ctrl.getBestCpuMove();
 
@@ -751,7 +751,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         drawn++;
         setState(() {});
         await Future.delayed(const Duration(milliseconds: 400));
-        if (!mounted) return;
+        if (!mounted || _gamePaused) return;
       }
       if (drawn > 0) {
         _showSnack('CPU robó $drawn ficha${drawn > 1 ? 's' : ''} del pozo');
@@ -1026,10 +1026,42 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           ),
           if (_showRoundEndBanner) _buildRoundEndOverlay(),
           if (_showGameOverBanner) _buildGameOverOverlay(),
+          if (_gamePaused) _buildPauseOverlay(),
           if (_boneyardFlyingTile != null) _buildBoneyardFlyOverlay(),
           if (_playerFlyingTile != null) _buildPlayerFlyOverlay(),
           if (_cpuPlayingTile != null) _buildCpuDragOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPauseOverlay() {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.7),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.pause_circle_outline, color: Colors.white, size: 64),
+              const SizedBox(height: 16),
+              const Text('Juego en pausa', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _resumeGame,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Reanudar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEC7A34),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

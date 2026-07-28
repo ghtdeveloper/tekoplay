@@ -88,18 +88,19 @@ function layoutLinear(tiles,x0,y0,dirs,hcols){
     const t=tiles[i];
     const dir=dirs[di%4];
     const dbl=isDouble(t);
-    // Doubles: perpendicular to chain direction (standard domino rule)
-    const tileA=dbl?(isHoriz(dir)?0:-Math.PI/2):_RA[dir];
-    // Visual extent along chain: double perpendicular = TW, normal = TH
-    const vExt=dbl?TW:TH;
+    // Doubles: always portrait (vertical)
+    const tileA=dbl?0:_RA[dir];
+    // Visual extent along chain: double portrait in horiz=TW, in vert=TH (same as normal)
+    const vExt=dbl?(isHoriz(dir)?TW:TH):TH;
     pos.push({cx:x,cy:y,a:tileA,l:t.l,r:t.r,ce:vExt,dir:dir});
     sc++;
     if(i===tiles.length-1)break;
     const nextDbl=isDouble(tiles[i+1]);
-    const nExt=nextDbl?TW:TH;
     if(sc>=LIMS[dir]){
       di=(di+1)%4;
       const nd=dirs[di%4];
+      // Next tile goes in direction nd — compute its extent in that direction
+      const nExt=nextDbl?(isHoriz(nd)?TW:TH):TH;
       // Half-extents: along chain (HA) and perpendicular (HP)
       const cHA=vExt/2, cHP=(TW+TH-vExt)/2;
       const nHA=nExt/2, nHP=(TW+TH-nExt)/2;
@@ -118,7 +119,8 @@ function layoutLinear(tiles,x0,y0,dirs,hcols){
       y+=DY[nd]*fwd+DY[dir]*aln;
       sc=0;
     }else{
-      // Linear spacing based on visual extents
+      // Linear: next tile goes in same dir
+      const nExt=nextDbl?(isHoriz(dir)?TW:TH):TH;
       x+=DX[dir]*(vExt/2+nExt/2-OVLP);
       y+=DY[dir]*(vExt/2+nExt/2-OVLP);
     }
