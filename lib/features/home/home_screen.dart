@@ -11,7 +11,6 @@ import '../adds/interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
-import '../../core/service/app_update_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class MainScreen extends StatefulWidget {
@@ -41,11 +40,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _startEmailVerificationCheck();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
     _enableWakeLock();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) AppUpdateService.checkForUpdate(context);
-      });
-    });
   }
 
   @override

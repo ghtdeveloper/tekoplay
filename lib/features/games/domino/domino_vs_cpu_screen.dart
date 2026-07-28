@@ -298,6 +298,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   bool _isCpuThinking = false;
   bool _gameEnded = false;
   bool _isScreenKeepOnActive = false;
+  Timer? _awayTimer;
   bool _showRoundEndBanner = false;
   bool _showGameOverBanner = false;
   _RoundResult? _roundEndResultType;
@@ -383,11 +384,24 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   @override
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isScreenKeepOnActive) {
-      WakelockPlus.enable();
+    if (state == AppLifecycleState.resumed) {
+      if (_isScreenKeepOnActive) WakelockPlus.enable();
+      _awayTimer?.cancel();
+      _awayTimer = null;
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
+      if (_gameStarted && !_gameEnded) {
+        _awayTimer = Timer(const Duration(minutes: 2), () {
+          if (mounted && !_gameEnded) _handleAwayLoss();
+        });
+      }
     }
+  }
+
+  void _handleAwayLoss() {
+    _ctrl._stopTimer();
+    _recordResult(false);
+    setState(() => _showGameOverBanner = true);
   }
 
   Future<void> _enableWakeLock() async {
@@ -403,6 +417,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _awayTimer?.cancel();
     _disableWakeLock();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -560,7 +575,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
     _ctrl._stopTimer();
 
-    // Animate tile flying from hand toward the play side
     final double dx = side == 'left' ? -3.0 : 3.0;
     _playerFlyAnim = Tween<Offset>(
       begin: Offset(dx, 1.5),
@@ -607,7 +621,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   void _pickBoneyardTile() {
     if (_ctrl.boneyard.isEmpty) return;
-    _ctrl._stopTimer(); // pause timer while drawing
+    _ctrl._stopTimer();
     final idx = Random().nextInt(_ctrl.boneyard.length);
     _onBoneyardTilePicked(_ctrl.boneyard[idx]);
   }
@@ -647,7 +661,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         });
       }
     } else {
-      // Tile not playable — add to hand, let player keep drawing
       setState(() => _boneyardFlyingTile = tile);
       _boneyardFlyAnimCtrl.forward(from: 0);
       await Future.delayed(const Duration(milliseconds: 500));
@@ -655,19 +668,18 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       _ctrl.boneyard.remove(tile);
       _ctrl.playerHand.add(tile);
       setState(() => _boneyardFlyingTile = null);
-      // If drawing unlocked a playable tile, restart timer so player can play
       if (_ctrl.canPlayerPlayAny()) {
         _ctrl.startTimer();
         return;
       }
-      // Boneyard exhausted and still can't play → pass
       if (_ctrl.boneyard.isEmpty) {
         _showSnack('Sin opciones disponibles, pasas tu turno');
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) _passPlayerTurn();
         });
+      } else {
+        _ctrl.startTimer();
       }
-      // Else: boneyard still has tiles, player can keep tapping to draw
     }
   }
 
@@ -707,7 +719,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
     if (bestTile != null) {
       final side = _ctrl.getCpuPlaySide(bestTile);
-      // Animate CPU tile from top toward the play side
       final double dx = side == 'left' ? -3.0 : 3.0;
       _cpuSlideAnim = Tween<Offset>(
         begin: Offset(dx, -1.5),
@@ -734,7 +745,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         _ctrl.startTimer();
       }
     } else {
-      // CPU draws from boneyard one by one with visual feedback
       int drawn = 0;
       while (_ctrl.boneyard.isNotEmpty && !_ctrl.canCpuPlayAny()) {
         _ctrl.drawFromBoneyard(false);
@@ -1009,7 +1019,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
               _buildLandscapeFooter(),
             ],
           ),
-          // Floating player panel — above boneyard row and footer
           Positioned(
             left: 8,
             bottom: 72 + 54 + 12,
