@@ -580,6 +580,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       begin: Offset(dx, 1.5),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _playerFlyAnimCtrl, curve: Curves.easeOut));
+    _ctrl.playerHand.remove(tile);
     setState(() {
       _playerFlyingTile = tile;
       _selectedTile = null;
@@ -591,9 +592,10 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     setState(() => _playerFlyingTile = null);
 
     final played = _ctrl.playTile(tile, side);
-    if (!played) return;
-
-    _ctrl.playerHand.remove(tile);
+    if (!played) {
+      _ctrl.playerHand.add(tile);
+      return;
+    }
     final roundResult = _ctrl.checkRoundEnd();
     setState(() {});
 
