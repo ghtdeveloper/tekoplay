@@ -401,7 +401,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     if (_ctrl.phase == _GamePhase.cpuTurn) {
       _scheduleCpuTurn();
     } else if (_ctrl.phase == _GamePhase.playerTurn) {
-      _ctrl.startTimer();
+      _beginPlayerTurn();
     }
   }
 
@@ -511,7 +511,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     if (_ctrl.phase == _GamePhase.cpuTurn) {
       _scheduleCpuTurn();
     } else {
-      _ctrl.startTimer();
+      _beginPlayerTurn();
     }
   }
 
@@ -683,6 +683,21 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     }
   }
 
+  void _beginPlayerTurn() {
+    if (!mounted || _gamePaused) return;
+    // Auto-pass if player can't play and boneyard is empty
+    if (!_ctrl.canPlayerPlayAny() && _ctrl.boneyard.isEmpty) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_gamePaused) {
+          _showSnack('Sin opciones, pasas automáticamente');
+          _passPlayerTurn();
+        }
+      });
+      return;
+    }
+    _ctrl.startTimer();
+  }
+
   void _passPlayerTurn() {
     if (_ctrl.phase != _GamePhase.playerTurn) return;
     _ctrl._stopTimer();
@@ -742,7 +757,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         _handleRoundEnd(roundResult);
       } else {
         setState(() => _ctrl.phase = _GamePhase.playerTurn);
-        _ctrl.startTimer();
+        _beginPlayerTurn();
       }
     } else {
       int drawn = 0;
@@ -774,8 +789,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         _isCpuThinking = false;
         _ctrl.phase = _GamePhase.playerTurn;
       });
-      _ctrl.startTimer();
       _showSnack('CPU pasó. ¡Tu turno!', success: true);
+      _beginPlayerTurn();
     }
   }
 
@@ -1038,7 +1053,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   Widget _buildPauseOverlay() {
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1136,7 +1151,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                   if (_ctrl.phase == _GamePhase.cpuTurn) {
                     _scheduleCpuTurn();
                   } else {
-                    _ctrl.startTimer();
+                    _beginPlayerTurn();
                   }
                 },
                 style: ElevatedButton.styleFrom(
