@@ -14,6 +14,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
+import '../../../core/widgets/game_chat_widget.dart';
 import 'ludo_board_painter.dart';
 import 'multiplayer_ludo_screen.dart';
 
@@ -61,6 +62,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   bool _isPlayingAgainstBot = false;
   bool _botIsWeak = false;
+
+  final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
 
   String _opponentName   = '';
@@ -1823,6 +1826,12 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         title: const Text('Parchís Online', style: TextStyle(color: Colors.white)),
         elevation: 2,
         actions: [
+          if (_screenState == _LudoOnlineState.gameActive && !_gameEnded && !_isPlayingAgainstBot && _activeGameId != null)
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+              onPressed: () => _chatKey.currentState?.toggleChat(),
+              tooltip: 'Chat',
+            ),
           if (_screenState == _LudoOnlineState.gameActive && !_gameEnded)
             IconButton(
               icon: const Icon(Icons.flag, color: Colors.white),
@@ -1861,10 +1870,22 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(child: _buildBody()),
-          const BannerAdWidget(),
+          Column(
+            children: [
+              Expanded(child: _buildBody()),
+              const BannerAdWidget(),
+            ],
+          ),
+          if (_activeGameId != null && !_isPlayingAgainstBot)
+            GameChatWidget(
+              key: _chatKey,
+              gameId: _activeGameId!,
+              collectionName: 'ludo_games',
+              currentUserId: _currentUser?.uid ?? '',
+              currentUserName: _currentUser?.displayName ?? 'Jugador',
+            ),
         ],
       ),
     );

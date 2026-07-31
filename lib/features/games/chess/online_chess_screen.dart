@@ -21,6 +21,7 @@ import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/interstitial_ad_helper.dart';
+import '../../../core/widgets/game_chat_widget.dart';
 
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;
@@ -105,6 +106,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   String? _botAvatar;
   bool _botIsWeak = false;
   bool _botEmergencyMoveTriggered = false;
+
+  final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
   @override
   void initState() {
@@ -3060,10 +3063,20 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               Navigator.of(context).pop();
             },
           ),
+          actions: [
+            if (!_isPlayingAgainstBot)
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                onPressed: () => _chatKey.currentState?.toggleChat(),
+                tooltip: 'Chat',
+              ),
+          ],
         ),
-        body: Column(
+        body: Stack(
           children: [
-            _buildPlayerInfo(isMe: false),
+            Column(
+              children: [
+                _buildPlayerInfo(isMe: false),
 
             if (_selectedTimeMinutes != null)
               _buildTimer(_opponentTimeSeconds, isMyTimer: false),
@@ -3136,6 +3149,16 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               ),
             const BannerAdWidget(),
             SizedBox(height: 16),
+          ],
+        ),
+            if (_activeGameId != null && !_isPlayingAgainstBot)
+              GameChatWidget(
+                key: _chatKey,
+                gameId: _activeGameId!,
+                collectionName: 'multiplayer_games',
+                currentUserId: currentUser?.uid ?? '',
+                currentUserName: currentUser?.displayName ?? 'Jugador',
+              ),
           ],
         ),
       ),

@@ -13,6 +13,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'ludo_board_painter.dart';
+import '../../../core/widgets/game_chat_widget.dart';
 
 enum _FriendLudoState { setup, waitingRoom, gameActive }
 
@@ -98,6 +99,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   _FriendLudoState _screenState = _FriendLudoState.setup;
   int _myPlayerNumber = 1;
   String? _activeGameId;
+  final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
   int _selectedPlayerCount = 2;
   int? _selectedBetAmount;
   StreamSubscription<LudoGameMatch?>? _waitingSubscription;
@@ -2429,6 +2431,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           title: const Text('Parchís Online',
               style: TextStyle(color: Colors.white)),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+              onPressed: () => _chatKey.currentState?.toggleChat(),
+              tooltip: 'Chat',
+            ),
             if (!_gameEnded)
               IconButton(
                 icon: const Icon(Icons.flag, color: Colors.white),
@@ -2442,8 +2449,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         ),
         body: Stack(
           children: [
-            Column(
+            Stack(
               children: [
+                Column(
+                  children: [
                 LayoutBuilder(
                   builder: (ctx, constraints) {
                     final sz = constraints.maxWidth - 16;
@@ -2564,6 +2573,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                     ),
                   ),
                 ),
+              ),
+              ],
+            ),
+            if (_activeGameId != null)
+              GameChatWidget(
+                key: _chatKey,
+                gameId: _activeGameId!,
+                collectionName: 'ludo_games',
+                currentUserId: _currentUser?.uid ?? '',
+                currentUserName: _currentUser?.displayName ?? 'Jugador',
               ),
           ],
         ),

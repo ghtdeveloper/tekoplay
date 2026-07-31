@@ -15,6 +15,7 @@ import '../../../generated/l10n.dart';
 import '../../../core/utils/game_result.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/interstitial_ad_helper.dart';
+import '../../../core/widgets/game_chat_widget.dart';
 
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
@@ -75,6 +76,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   String? _opponentPhotoUrl;
 
   bool _localizationsReady = false;
+
+  final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
   @override
   void initState() {
@@ -1612,61 +1615,77 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           ),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+              onPressed: () => _chatKey.currentState?.toggleChat(),
+              tooltip: 'Chat',
+            ),
             Center(child: _buildCurrencyDisplay()),
             SizedBox(width: 16),
           ],
         ),
-        body: Column(
+        body: Stack(
           children: [
-            _buildConnectionStatus(),
+            Column(
+              children: [
+                _buildConnectionStatus(),
 
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: _buildPlayerInfo(false),
-            ),
-
-            _buildGameInfo(),
-
-            _buildTimer(),
-
-            if (_showGameEndOverlay) _buildGameEndOverlay(),
-
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ChessBoard(
-                  controller: controller,
-                  boardColor: BoardColor.brown,
-                  boardOrientation: _myColor ?? PlayerColor.white,
-                  enableUserMoves: _isMyTurn && !_gameEnded && _gameStarted,
-                  onMove: _playerMoved,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: _buildPlayerInfo(false),
                 ),
-              ),
-            ),
 
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: _buildPlayerInfo(true),
-            ),
+                _buildGameInfo(),
 
-            if (_showGameEndOverlay)
-              _buildGameEndButtons()
-            else if (!_gameEnded && _gameStarted)
-              Container(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  _isMyTurn
-                      ? S.of(context).yourTurn
-                      : S.of(context).opponentTurn,
-                  style: TextStyle(
-                    color: _isMyTurn ? Colors.green[300] : Colors.white70,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                _buildTimer(),
+
+                if (_showGameEndOverlay) _buildGameEndOverlay(),
+
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ChessBoard(
+                      controller: controller,
+                      boardColor: BoardColor.brown,
+                      boardOrientation: _myColor ?? PlayerColor.white,
+                      enableUserMoves: _isMyTurn && !_gameEnded && _gameStarted,
+                      onMove: _playerMoved,
+                    ),
                   ),
                 ),
-              ),
-            const BannerAdWidget(),
-            SizedBox(height: 16),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: _buildPlayerInfo(true),
+                ),
+
+                if (_showGameEndOverlay)
+                  _buildGameEndButtons()
+                else if (!_gameEnded && _gameStarted)
+                  Container(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      _isMyTurn
+                          ? S.of(context).yourTurn
+                          : S.of(context).opponentTurn,
+                      style: TextStyle(
+                        color: _isMyTurn ? Colors.green[300] : Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                const BannerAdWidget(),
+                SizedBox(height: 16),
+              ],
+            ),
+            GameChatWidget(
+              key: _chatKey,
+              gameId: widget.gameId,
+              collectionName: 'multiplayer_games',
+              currentUserId: currentUser?.uid ?? '',
+              currentUserName: currentUser?.displayName ?? 'Jugador',
+            ),
           ],
         ),
       ),

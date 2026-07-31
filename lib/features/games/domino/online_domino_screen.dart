@@ -14,6 +14,7 @@ import '../../../core/service/firestore_service.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
+import '../../../core/widgets/game_chat_widget.dart';
 
 enum _DominoOnlineState { playerCountSelection, matchmaking, waitingRoom, gameActive }
 
@@ -31,6 +32,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Random _random = Random();
+  final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
   User? get _currentUser => FirebaseAuth.instance.currentUser;
 
@@ -76,7 +78,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   final ScrollController _chainScrollCtrl = ScrollController();
   bool _isScreenKeepOnActive = false;
 
-  static const Color _panelColor   = Color(0xEE0D2010);
+  static const Color _panelColor   = Colors.white;
   static const Color _accentOrange = Color(0xFFEC7A34);
 
   @override
@@ -744,13 +746,19 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         if (!didPop && inGame && !_gameEnded) _abandonGame();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF347A2A),
+        backgroundColor: const Color(0xFFF5F5F5),
         appBar: AppBar(
           backgroundColor: _accentOrange,
           elevation: 2,
           title: const Text('Dominó Online', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            if (inGame && !_isPlayingVsBot)
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                onPressed: () => _chatKey.currentState?.toggleChat(),
+                tooltip: 'Chat',
+              ),
             if (inGame)
               TextButton(
                 onPressed: _abandonGame,
@@ -758,7 +766,19 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               ),
           ],
         ),
-        body: _buildBody(),
+        body: Stack(
+          children: [
+            _buildBody(),
+            if (_activeGameId != null && !_isPlayingVsBot)
+              GameChatWidget(
+                key: _chatKey,
+                gameId: _activeGameId!,
+                collectionName: 'domino_games',
+                currentUserId: _currentUser?.uid ?? '',
+                currentUserName: _currentUser?.displayName ?? 'Jugador',
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -824,9 +844,9 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             ),
           ),
           const SizedBox(height: 24),
-          const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          const Text('Elige el número de jugadores para la partida', style: TextStyle(color: Colors.white54, fontSize: 13), textAlign: TextAlign.center),
+          const Text('Elige el número de jugadores para la partida', style: TextStyle(color: Colors.grey, fontSize: 13), textAlign: TextAlign.center),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -842,7 +862,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                     decoration: BoxDecoration(
                       color: sel ? _accentOrange : _panelColor,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: sel ? _accentOrange : Colors.white24, width: sel ? 2 : 1),
+                      border: Border.all(color: sel ? _accentOrange : Colors.grey.shade300, width: sel ? 2 : 1),
                       boxShadow: sel ? [BoxShadow(color: _accentOrange.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4))] : [],
                     ),
                     child: Column(
@@ -850,7 +870,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                       children: [
                         Text(_playerCountIcon(n), style: const TextStyle(fontSize: 26)),
                         const SizedBox(height: 6),
-                        Text('$n jugadores', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: sel ? Colors.white : Colors.white70), textAlign: TextAlign.center),
+                        Text('$n jugadores', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: sel ? Colors.white : Colors.black87), textAlign: TextAlign.center),
                       ],
                     ),
                   ),
@@ -860,7 +880,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           ),
           const SizedBox(height: 24),
           if (isBet) ...[
-            const Text('Selecciona tu apuesta', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('Selecciona tu apuesta', style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10,
@@ -875,19 +895,19 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                     decoration: BoxDecoration(
-                      color: isSelected ? _accentOrange : canAfford ? _panelColor : Colors.grey[800],
+                      color: isSelected ? _accentOrange : canAfford ? _panelColor : Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isSelected ? _accentOrange : canAfford ? Colors.white24 : Colors.white12,
+                        color: isSelected ? _accentOrange : canAfford ? Colors.grey.shade300 : Colors.grey.shade200,
                         width: isSelected ? 2 : 1,
                       ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(currencyIcon, size: 14, color: canAfford ? currencyColor : Colors.white24),
+                        Icon(currencyIcon, size: 14, color: canAfford ? currencyColor : Colors.grey.shade400),
                         const SizedBox(width: 4),
-                        Text('$amount', style: TextStyle(color: canAfford ? Colors.white : Colors.white38, fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text('$amount', style: TextStyle(color: isSelected ? Colors.white : canAfford ? Colors.black87 : Colors.grey.shade400, fontWeight: FontWeight.bold, fontSize: 15)),
                       ],
                     ),
                   ),
@@ -905,7 +925,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentOrange,
                 foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.white24,
+                disabledBackgroundColor: Colors.grey.shade300,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
@@ -932,7 +952,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             ),
             const SizedBox(height: 32),
             const Text('Buscando partida...',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
             const SizedBox(height: 8),
             Text(
               '$remaining"',
@@ -944,7 +964,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             ),
             const SizedBox(height: 4),
             Text('$_selectedPlayerCount jugadores · buscando...',
-                style: const TextStyle(fontSize: 13, color: Colors.white54)),
+                style: const TextStyle(fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 12),
             Text(
               _matchmakingSeconds < 10
@@ -952,7 +972,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                   : _matchmakingSeconds < 50
                       ? '¡Ya casi! Ampliando búsqueda...'
                       : 'Completando con bots...',
-              style: const TextStyle(fontSize: 12, color: Colors.white54),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 40),
             OutlinedButton.icon(

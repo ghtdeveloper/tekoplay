@@ -14,6 +14,7 @@ import '../../../core/service/firestore_service.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
+import '../../../core/widgets/game_chat_widget.dart';
 
 enum _FriendDominoState { setup, waitingRoom, gameActive }
 
@@ -39,6 +40,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Random _random = Random();
+  final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
   User? get _currentUser => FirebaseAuth.instance.currentUser;
 
@@ -757,7 +759,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         if (!didPop && inGame && !_gameEnded) _abandonGame();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF347A2A),
+        backgroundColor: const Color(0xFFF5F5F5),
         appBar: AppBar(
           backgroundColor: _accentOrange,
           elevation: 0,
@@ -765,13 +767,31 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
             if (inGame)
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                onPressed: () => _chatKey.currentState?.toggleChat(),
+                tooltip: 'Chat',
+              ),
+            if (inGame)
               TextButton(
                 onPressed: _abandonGame,
                 child: Text('Salir', style: TextStyle(color: Colors.red[300])),
               ),
           ],
         ),
-        body: _buildBody(),
+        body: Stack(
+          children: [
+            _buildBody(),
+            if (_activeGameId != null)
+              GameChatWidget(
+                key: _chatKey,
+                gameId: _activeGameId!,
+                collectionName: 'domino_games',
+                currentUserId: _currentUser?.uid ?? '',
+                currentUserName: _currentUser?.displayName ?? 'Jugador',
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -802,19 +822,20 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: _panelColor,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white12),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
             ),
             child: Column(
               children: [
-                const Icon(Icons.people, color: Colors.white70, size: 40),
+                const Icon(Icons.people, color: Colors.black54, size: 40),
                 const SizedBox(height: 12),
-                const Text('Jugar con Amigos', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text('Jugar con Amigos', style: TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(
                   widget.matchType == 'Apuesta' ? 'Modo Apuesta' : 'Modo Diversión',
-                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -829,7 +850,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             ),
           ),
           const SizedBox(height: 20),
-          const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -843,17 +864,17 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                     duration: const Duration(milliseconds: 200),
                     width: 80, height: 90,
                     decoration: BoxDecoration(
-                      color: sel ? _accentOrange : _panelColor,
+                      color: sel ? _accentOrange : Colors.white,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: sel ? _accentOrange : Colors.white24, width: sel ? 2 : 1),
-                      boxShadow: sel ? [BoxShadow(color: _accentOrange.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))] : [],
+                      border: Border.all(color: sel ? _accentOrange : Colors.grey.shade300, width: sel ? 2 : 1),
+                      boxShadow: sel ? [BoxShadow(color: _accentOrange.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(_playerCountIcon(n), style: const TextStyle(fontSize: 24)),
                         const SizedBox(height: 6),
-                        Text('$n jugadores', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: sel ? Colors.white : Colors.white70), textAlign: TextAlign.center),
+                        Text('$n jugadores', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: sel ? Colors.white : Colors.black87), textAlign: TextAlign.center),
                       ],
                     ),
                   ),
@@ -863,7 +884,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
           ),
           const SizedBox(height: 20),
           if (isBet) ...[
-            const Text('Monto de apuesta', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            const Text('Monto de apuesta', style: TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -877,22 +898,22 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? _accentOrange : canAfford ? _panelColor : Colors.grey[800],
+                      color: isSelected ? _accentOrange : canAfford ? Colors.white : Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: isSelected ? _accentOrange : canAfford ? Colors.white24 : Colors.white12,
+                        color: isSelected ? _accentOrange : canAfford ? Colors.grey.shade300 : Colors.grey.shade200,
                         width: isSelected ? 2 : 1,
                       ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(currencyIcon, size: 13, color: canAfford ? currencyColor : Colors.white24),
+                        Icon(currencyIcon, size: 13, color: canAfford ? currencyColor : Colors.grey.shade400),
                         const SizedBox(width: 4),
                         Text(
                           '$amount',
                           style: TextStyle(
-                            color: canAfford ? Colors.white : Colors.white38,
+                            color: isSelected ? Colors.white : canAfford ? Colors.black87 : Colors.grey.shade400,
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
@@ -912,38 +933,38 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: _accentOrange,
               foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.white24,
+              disabledBackgroundColor: Colors.grey.shade300,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
           ),
           const SizedBox(height: 20),
-          const Row(
+          Row(
             children: [
-              Expanded(child: Divider(color: Colors.white24)),
-              Padding(
+              Expanded(child: Divider(color: Colors.grey.shade300)),
+              const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text('o únete con código', style: TextStyle(color: Colors.white38, fontSize: 13)),
+                child: Text('o únete con código', style: TextStyle(color: Colors.grey, fontSize: 13)),
               ),
-              Expanded(child: Divider(color: Colors.white24)),
+              Expanded(child: Divider(color: Colors.grey.shade300)),
             ],
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _roomCodeCtrl,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: Colors.black87),
             decoration: InputDecoration(
               hintText: 'Código de sala (ID)',
-              hintStyle: const TextStyle(color: Colors.white38),
+              hintStyle: const TextStyle(color: Colors.grey),
               filled: true,
-              fillColor: _panelColor,
+              fillColor: Colors.white,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.white24),
+                borderSide: BorderSide(color: Colors.grey.shade300),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.white24),
+                borderSide: BorderSide(color: Colors.grey.shade300),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
