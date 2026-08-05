@@ -72,14 +72,13 @@ class OnlineMatchmakingChessService {
     String? excludeHostId,
   }) async {
     try {
-      // Rangos progresivos basados en el tiempo de búsqueda
       int rankingRange;
       if (searchTimeSeconds < 15) {
-        rankingRange = 100; // Primeros 15 segundos: rango de ±100 puntos
+        rankingRange = 100;
       } else if (searchTimeSeconds < 30) {
-        rankingRange = 200; // 15-30 segundos: rango de ±200 puntos
+        rankingRange = 200;
       } else {
-        rankingRange = 300; // Después de 30 segundos: rango de ±300 puntos
+        rankingRange = 300;
       }
 
       const int maxInactivitySeconds = 30;
@@ -110,11 +109,9 @@ class OnlineMatchmakingChessService {
       final games = query.docs
           .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
           .where((game) {
-            // Exclude stale games (host went inactive or app crashed)
             final bool fresh = game.lastHostActivity != null
                 ? game.lastHostActivity!.isAfter(minActivityTime)
                 : game.createdAt.isAfter(minActivityTime);
-            // Exclude the current user's own games to prevent self-matching
             final bool notOwn =
                 excludeHostId == null || game.hostId != excludeHostId;
             return fresh && notOwn;

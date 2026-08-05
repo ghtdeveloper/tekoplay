@@ -14,14 +14,13 @@ class LudoGameService {
   final String _gamesCollection = 'ludo_games';
   final Random _random = Random();
 
-  /// Crea una nueva partida de Ludo
   Future<String?> createGame({
     required String hostId,
     required String hostName,
     String? hostPhotoUrl,
     required String currencyType,
     int? betAmount,
-    int numberOfPlayers = 4, // 2, 3 o 4 jugadores
+    int numberOfPlayers = 4,
     bool isOnlineMatchmaking = false,
   }) async {
     try {
@@ -34,7 +33,6 @@ class LudoGameService {
         quotaAmount = currencyType == 'diamonds' ? 25 : 100;
       }
 
-      // Asignar colores — para 2 jugadores sólo pares opuestos (red↔yellow, blue↔green)
       List<String> colors;
       if (numberOfPlayers == 2) {
         final oppositePairs = [['red', 'yellow'], ['blue', 'green']];
@@ -66,7 +64,7 @@ class LudoGameService {
         gameSettings: {
           'numberOfPlayers': numberOfPlayers,
           'isOnlineMatchmaking': isOnlineMatchmaking,
-          'hostRanking': 1000, // Se actualizará con el ranking real
+          'hostRanking': 1000,
         },
       );
 
@@ -88,7 +86,6 @@ class LudoGameService {
     }
   }
 
-  /// Unirse a una partida existente
   Future<bool> joinGame({
     required String gameId,
     required String playerId,
@@ -103,12 +100,10 @@ class LudoGameService {
 
       final game = LudoGameMatch.fromFirestore(gameDoc);
 
-      // Verificar si el juego aún está disponible
       if (game.status != 'waiting') return false;
       if (game.playerCount >= 4) return false;
       if (game.hostId == playerId) return false;
 
-      // Determinar qué slot de jugador usar
       Map<String, dynamic> updates = {
         'lastUpdated': FieldValue.serverTimestamp(),
       };
@@ -136,7 +131,6 @@ class LudoGameService {
 
       if (playerNumber == 0) return false;
 
-      // Verificar si se completa el número de jugadores esperado
       final expectedPlayers = game.gameSettings?['numberOfPlayers'] ?? 4;
       final newPlayerCount = game.playerCount + 1;
 
@@ -147,7 +141,6 @@ class LudoGameService {
 
       await gameRef.update(updates);
 
-      // Cobrar cuotas solo cuando el juego arranca (todos los jugadores unidos)
       final isBetGame = (game.betAmount ?? 0) > 0 && newPlayerCount >= expectedPlayers;
       if (isBetGame) {
         final quotaService = GameQuotaService();
@@ -161,7 +154,6 @@ class LudoGameService {
         );
 
         if (result['success'] != true) {
-          // Revertir el join si no se pudieron cobrar las cuotas
           await gameRef.update({
             'guest2Id': null,
             'guest2Name': null,
@@ -191,7 +183,6 @@ class LudoGameService {
     }
   }
 
-  /// Llena slots vacíos con bots e inicia la partida (llamado por el host tras timeout)
   Future<bool> fillBotsAndStart(String gameId) async {
     try {
       final gameRef = _firestore.collection(_gamesCollection).doc(gameId);
@@ -237,7 +228,7 @@ class LudoGameService {
     }
   }
 
-  /// Finalizar partida de Ludo (análogo a MultiplayerGameService.finishGame)
+
   Future<bool> finishGame({
     required String gameId,
     required String winnerId,
@@ -267,7 +258,6 @@ class LudoGameService {
     }
   }
 
-  /// Tirar el dado
   Future<int?> rollDice({
     required String gameId,
     required String playerId,
@@ -281,20 +271,16 @@ class LudoGameService {
 
         final game = LudoGameMatch.fromFirestore(gameDoc);
 
-        // Verificar que es el turno del jugador
         if (!game.isPlayerTurn(playerId)) {
           throw Exception('Not player turn');
         }
 
-        // Verificar que puede tirar el dado
         if (!game.gameState.canRollDice) {
           throw Exception('Cannot roll dice');
         }
 
-        // Tirar el dado
         final diceRoll = _random.nextInt(6) + 1;
 
-        // Actualizar contador de 6s consecutivos
         int newConsecutiveSixes = game.gameState.consecutiveSixes;
         if (diceRoll == 6) {
           newConsecutiveSixes++;
@@ -302,7 +288,6 @@ class LudoGameService {
           newConsecutiveSixes = 0;
         }
 
-        // Si son 3 seises consecutivos, pierde el turno
         bool skipTurn = newConsecutiveSixes >= 3;
 
         Map<String, dynamic> updates = {
@@ -312,7 +297,6 @@ class LudoGameService {
         };
 
         if (skipTurn) {
-          // Pasar al siguiente jugador
           updates['currentTurn'] = _getNextPlayer(game);
           updates['gameState.canRollDice'] = true;
         }
@@ -329,7 +313,6 @@ class LudoGameService {
     }
   }
 
-  /// Mover una ficha
   Future<bool> movePiece({
     required String gameId,
     required String playerId,
@@ -345,7 +328,6 @@ class LudoGameService {
 
         final game = LudoGameMatch.fromFirestore(gameDoc);
 
-        // Verificar turno
         if (!game.isPlayerTurn(playerId)) {
           throw Exception('Not player turn');
         }
@@ -358,11 +340,9 @@ class LudoGameService {
 
         if (diceRoll == 0) throw Exception('Must roll dice first');
 
-        // Calcular nueva posición
         int newPosition = piece.position;
 
         if (piece.isHome) {
-          // Sacar de casa solo con 6
           if (diceRoll == 6) {
             newPosition = _getStartPosition(playerColor);
           } else {
@@ -371,20 +351,16 @@ class LudoGameService {
         } else {
           newPosition = piece.position + diceRoll;
 
-          // Verificar si llega a la meta
           final homeStretchStart = _getHomeStretchStart(playerColor);
           if (piece.position >= homeStretchStart) {
-            // Ya está en la recta final
             if (newPosition > 57) {
               throw Exception('Exact roll needed to finish');
             }
           } else if (newPosition >= homeStretchStart) {
-            // Entra en la recta final
             newPosition = homeStretchStart + (newPosition - homeStretchStart);
           }
         }
 
-        // Verificar si captura una ficha
         bool captured = false;
         String? capturedColor;
 
@@ -403,20 +379,17 @@ class LudoGameService {
                 !otherPiece.isFinished) {
               captured = true;
               capturedColor = otherPiece.color;
-              // Enviar ficha capturada a casa
               otherPiece.position = -1;
               break;
             }
           }
         }
 
-        // Actualizar posición
         piece.position = newPosition;
         if (newPosition >= 57) {
           piece.isFinished = true;
         }
 
-        // Crear movimiento
         final move = LudoMove(
           diceRoll: diceRoll,
           playerColor: playerColor,
@@ -428,7 +401,6 @@ class LudoGameService {
           timestamp: DateTime.now(),
         );
 
-        // Actualizar estado del juego
         final newGameState = game.gameState;
         final moveHistory = [...game.moveHistory, move];
 
@@ -438,8 +410,6 @@ class LudoGameService {
           'gameState.lastDiceRoll': 0,
         };
 
-        // Determinar siguiente turno
-        // Si sacó 6 o capturó, tira de nuevo
         if (diceRoll == 6 || captured) {
           updates['gameState.canRollDice'] = true;
         } else {
@@ -448,18 +418,15 @@ class LudoGameService {
           updates['gameState.consecutiveSixes'] = 0;
         }
 
-        // Verificar si el jugador ganó
         final allFinished = pieces.every((p) => p.isFinished);
         if (allFinished) {
           final finishedPlayers = [...game.finishedPlayers, playerId];
           updates['finishedPlayers'] = finishedPlayers;
 
-          // Si es el primer jugador en terminar, es el ganador
           if (finishedPlayers.length == 1) {
             updates['winnerId'] = playerId;
           }
 
-          // Si todos menos uno terminaron, el juego termina
           if (finishedPlayers.length >= game.playerCount - 1) {
             updates['status'] = 'finished';
             updates['finishedAt'] = FieldValue.serverTimestamp();
@@ -478,7 +445,6 @@ class LudoGameService {
     }
   }
 
-  /// Obtener stream de una partida
   Stream<LudoGameMatch?> getGameStream(String gameId) {
     return _firestore
         .collection(_gamesCollection)
@@ -492,7 +458,6 @@ class LudoGameService {
     });
   }
 
-  /// Abandonar partida
   Future<bool> abandonGame({
     required String gameId,
     required String playerId,
@@ -507,8 +472,6 @@ class LudoGameService {
 
       if (game.status != 'active') return false;
 
-      // Determine the winner: in a 2-player game it is the other player;
-      // in 3-4 player games we don't auto-set a winner (game continues).
       String? winnerId;
       final activePlayers = [
         game.hostId,
@@ -547,13 +510,11 @@ class LudoGameService {
     }
   }
 
-  /// Helpers
 
   String _getNextPlayer(LudoGameMatch game) {
     final currentPlayerNum = int.parse(game.currentTurn.replaceAll('player', ''));
     int nextPlayerNum = currentPlayerNum + 1;
 
-    // Buscar el siguiente jugador activo
     while (nextPlayerNum <= 4) {
       if (game.getPlayerIdByNumber(nextPlayerNum) != null) {
         return 'player$nextPlayerNum';
@@ -561,7 +522,6 @@ class LudoGameService {
       nextPlayerNum++;
     }
 
-    // Volver al primer jugador
     return 'player1';
   }
 
@@ -596,12 +556,10 @@ class LudoGameService {
   }
 
   bool _isSafePosition(int position) {
-    // Posiciones seguras en el tablero de Ludo
     final safePositions = [0, 8, 13, 21, 26, 34, 39, 47];
     return safePositions.contains(position);
   }
 
-  /// Stream de partidas activas donde el usuario es host (para detectar cuando el invitado se unió)
   Stream<List<LudoGameMatch>> getActiveGames(String userId) {
     return _firestore
         .collection(_gamesCollection)
@@ -624,13 +582,11 @@ class LudoGameService {
         });
   }
 
-  /// Buscar partidas disponibles para matchmaking
   Future<List<LudoGameMatch>> findWaitingGames({
     required int numberOfPlayers,
     String? currencyType,
   }) async {
     try {
-      // Sin orderBy para evitar requerir índice compuesto en Firestore
       var query = _firestore
           .collection(_gamesCollection)
           .where('status', isEqualTo: 'waiting')
@@ -646,7 +602,6 @@ class LudoGameService {
           })
           .toList();
 
-      // Ordenar por creación (más antiguo primero) en el cliente
       results.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       return results.take(10).toList();
     } catch (e) {

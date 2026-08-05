@@ -198,17 +198,13 @@ class ProfileImageService {
       String userId,
       ImageSource source
       ) async {
-    // Verificar permisos con diálogo explicativo
     bool hasPermissions = await requestPermissionsWithDialog(context);
     if (!hasPermissions) {
       throw Exception('Permisos de cámara y galería requeridos');
     }
-
-    // Seleccionar imagen
     final XFile? imageFile = await _pickImage(source);
     if (imageFile == null) return null;
 
-    // Subir imagen
     return await uploadProfileImage(userId, imageFile);
   }
 }

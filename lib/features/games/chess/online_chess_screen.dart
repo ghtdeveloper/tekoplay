@@ -3064,12 +3064,11 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             },
           ),
           actions: [
-            if (!_isPlayingAgainstBot)
-              IconButton(
-                icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-                onPressed: () => _chatKey.currentState?.toggleChat(),
-                tooltip: 'Chat',
-              ),
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+              onPressed: () => _chatKey.currentState?.toggleChat(),
+              tooltip: 'Chat',
+            ),
           ],
         ),
         body: Stack(
@@ -3151,7 +3150,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             SizedBox(height: 16),
           ],
         ),
-            if (_activeGameId != null && !_isPlayingAgainstBot)
+            if (_activeGameId != null)
               GameChatWidget(
                 key: _chatKey,
                 gameId: _activeGameId!,

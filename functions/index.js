@@ -857,6 +857,11 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
       return null;
     }
 
+    if (afterData.quotasCollected !== true) {
+      console.log(`⚠️ [Domino ${gameId}] quotasCollected !== true — cuotas no cobradas (SALIENDO)\n`);
+      return null;
+    }
+
     console.log(`\n🚀 [Domino ${gameId}] ¡PROCEDIENDO A DISTRIBUIR!`);
 
     try {
@@ -871,7 +876,7 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
         }
 
         if (currentGameData?.quotasCollected !== true) {
-          console.log(`⚠️ [Domino ${gameId}] Cuotas no cobradas (SALIENDO)\n`);
+          console.log(`⚠️ [Domino ${gameId}] Cuotas no cobradas (transacción, SALIENDO)\n`);
           return;
         }
 

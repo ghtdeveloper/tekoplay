@@ -44,6 +44,7 @@ class DominoGameState {
   final int player4Score;
   final int roundNumber;
   final int consecutivePasses;
+  final String? openingTileId;
 
   DominoGameState({
     required this.chain,
@@ -61,6 +62,7 @@ class DominoGameState {
     this.player4Score = 0,
     this.roundNumber = 1,
     this.consecutivePasses = 0,
+    this.openingTileId,
   });
 
   static Map<String, dynamic> _buildInitialDeal(Random rng, {int numberOfPlayers = 2}) {
@@ -199,6 +201,7 @@ class DominoGameState {
       'player4Score': player4Score,
       'roundNumber': roundNumber,
       'consecutivePasses': consecutivePasses,
+      if (openingTileId != null) 'openingTileId': openingTileId,
     };
   }
 
@@ -227,6 +230,7 @@ class DominoGameState {
       player4Score: (map['player4Score'] as num?)?.toInt() ?? 0,
       roundNumber: (map['roundNumber'] as num?)?.toInt() ?? 1,
       consecutivePasses: (map['consecutivePasses'] as num?)?.toInt() ?? 0,
+      openingTileId: map['openingTileId'] as String?,
     );
   }
 }

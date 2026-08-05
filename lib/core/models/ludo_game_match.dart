@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Modelo de partida de Ludo multijugador
 class LudoGameMatch {
   final String id;
   final String gameType; // 'Ludo'
@@ -19,8 +18,8 @@ class LudoGameMatch {
   final String? guest3PhotoUrl;
   final String? guest4PhotoUrl;
 
-  final String status; // 'waiting', 'active', 'finished', 'abandoned', 'cancelled'
-  final String currentTurn; // 'player1', 'player2', 'player3', 'player4'
+  final String status;
+  final String currentTurn;
 
   final LudoGameState gameState;
   final List<LudoMove> moveHistory;
@@ -32,14 +31,13 @@ class LudoGameMatch {
   final String? winnerId;
   final String? abandonedBy;
   final DateTime? turnDeadline;
-  final List<String> finishedPlayers; // IDs de jugadores que terminaron (en orden)
-  final String? reason; // 'normal', 'timeout', 'abandoned'
+  final List<String> finishedPlayers;
+  final String? reason;
 
   final bool isRanked;
   final int? betAmount;
-  final String currencyType; // 'coins' o 'diamonds'
+  final String currencyType;
 
-  // Sistema de cuotas
   final int? player1Quota;
   final int? player2Quota;
   final int? player3Quota;
@@ -48,22 +46,18 @@ class LudoGameMatch {
   final bool quotasCollected;
   final bool rewardsDistributed;
 
-  // Configuración del juego
   final Map<String, dynamic>? gameSettings;
 
-  // Actividad de jugadores
   final DateTime? lastPlayer1Activity;
   final DateTime? lastPlayer2Activity;
   final DateTime? lastPlayer3Activity;
   final DateTime? lastPlayer4Activity;
 
-  // Colores asignados a cada jugador
-  final String player1Color; // 'red', 'blue', 'green', 'yellow'
+  final String player1Color;
   final String? player2Color;
   final String? player3Color;
   final String? player4Color;
 
-  // Dados activos (para sincronización multijugador)
   final int dice1;
   final int dice2;
   final bool hasUsedDice1;
@@ -299,7 +293,6 @@ class LudoGameMatch {
   }
 }
 
-/// Estado del juego de Ludo
 class LudoGameState {
   final int lastDiceRoll;
   final bool canRollDice;
@@ -307,7 +300,7 @@ class LudoGameState {
   final List<LudoPiece> bluePieces;
   final List<LudoPiece> greenPieces;
   final List<LudoPiece> yellowPieces;
-  final int consecutiveSixes; // Contador de 6s consecutivos
+  final int consecutiveSixes;
 
   LudoGameState({
     this.lastDiceRoll = 0,
@@ -380,11 +373,10 @@ class LudoGameState {
   }
 }
 
-/// Ficha de Ludo
 class LudoPiece {
-  final int id; // 0-3
+  final int id;
   final String color;
-  int position; // -1 = home, 0-56 = en tablero, 57+ = finished
+  int position;
   bool isFinished;
 
   LudoPiece({

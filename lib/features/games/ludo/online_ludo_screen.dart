@@ -1826,7 +1826,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         title: const Text('Parchís Online', style: TextStyle(color: Colors.white)),
         elevation: 2,
         actions: [
-          if (_screenState == _LudoOnlineState.gameActive && !_gameEnded && !_isPlayingAgainstBot && _activeGameId != null)
+          if (_screenState == _LudoOnlineState.gameActive && !_gameEnded && _activeGameId != null)
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
               onPressed: () => _chatKey.currentState?.toggleChat(),
@@ -1878,7 +1878,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               const BannerAdWidget(),
             ],
           ),
-          if (_activeGameId != null && !_isPlayingAgainstBot)
+          if (_activeGameId != null)
             GameChatWidget(
               key: _chatKey,
               gameId: _activeGameId!,

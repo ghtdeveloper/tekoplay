@@ -101,8 +101,9 @@ class DominoGameService {
 
       await gameRef.update(updates);
 
-      // Collect quotas only when the last player joins (game becomes active)
-      if (willBeActive && (game.betAmount ?? 0) > 0 && game.guestId != null) {
+      // game.guestId is null in the OLD snapshot when the first guest joins,
+      // so use updates.containsKey('guestId') to detect a 2-player game activation.
+      if (willBeActive && (game.betAmount ?? 0) > 0 && updates.containsKey('guestId')) {
         final quotaService = GameQuotaService();
         final result = await quotaService.collectQuotas(
           gameId: gameId,
@@ -192,8 +193,6 @@ class DominoGameService {
         int? newRightOpen = rightOpen;
 
         if (chain.isEmpty) {
-          // Primera ficha: debe ser el doble más alto en la mano del jugador actual.
-          // Si nadie tiene dobles, cualquier ficha es válida.
           final currentHand = game.getHand(playerNum);
           int maxDouble = -1;
           for (final id in currentHand) {
@@ -203,7 +202,7 @@ class DominoGameService {
             }
           }
           if (maxDouble != -1 && !(tl == tr && tl == maxDouble)) {
-            return false; // Debe jugar su doble más alto
+            return false;
           }
           displayLeft = tl;
           displayRight = tr;
@@ -257,7 +256,6 @@ class DominoGameService {
         final roundNum = game.gameState.roundNumber;
         final targetScore = game.targetScore;
 
-        // Build updated hands for all players
         final hands = <int, List<String>>{};
         for (int p = 1; p <= nPlayers; p++) {
           hands[p] = p == playerNum ? hand : List<String>.from(game.gameState.handOf(p));
@@ -266,8 +264,6 @@ class DominoGameService {
         final Map<String, dynamic> updates = {};
 
         if (hand.isEmpty) {
-          // This player emptied their hand — they win the round
-          // Collect pips from all OTHER players
           int totalOtherPips = 0;
           for (int p = 1; p <= nPlayers; p++) {
             if (p != playerNum) totalOtherPips += game.gameState.handPipCount(hands[p]!);
@@ -315,6 +311,9 @@ class DominoGameService {
             updates['gameState.player${p}Hand'] = hands[p];
           }
           updates['gameState.consecutivePasses'] = 0;
+          if (game.gameState.chain.isEmpty) {
+            updates['gameState.openingTileId'] = tileId;
+          }
         }
 
         transaction.update(gameRef, updates);
@@ -381,8 +380,6 @@ class DominoGameService {
         final Map<String, dynamic> updates = {};
 
         if (newPasses >= nPlayers) {
-          // All players have passed — blocked round
-          // Player with lowest pip count wins the round
           final pipCounts = <int, int>{};
           for (int p = 1; p <= nPlayers; p++) {
             pipCounts[p] = game.gameState.handPipCount(game.gameState.handOf(p));
@@ -390,7 +387,6 @@ class DominoGameService {
           final minPips = pipCounts.values.reduce((a, b) => a < b ? a : b);
           final roundWinnerNum = pipCounts.entries.firstWhere((e) => e.value == minPips).key;
 
-          // Winner gets sum of all other pips
           int totalOtherPips = 0;
           for (int p = 1; p <= nPlayers; p++) {
             if (p != roundWinnerNum) totalOtherPips += pipCounts[p]!;
@@ -515,6 +511,7 @@ class DominoGameService {
   Future<List<DominoGameMatch>> findWaitingGames({
     String? currencyType,
     int numberOfPlayers = 2,
+    bool? isOnlineMatchmaking,
   }) async {
     try {
       final snap = await _firestore
@@ -529,6 +526,10 @@ class DominoGameService {
           .where((g) {
         if (currencyType != null && g.currencyType != currencyType) return false;
         if (g.isFullyJoined) return false;
+        if (isOnlineMatchmaking != null) {
+          final gIsOnline = g.gameSettings?['isOnlineMatchmaking'] == true;
+          if (gIsOnline != isOnlineMatchmaking) return false;
+        }
         return true;
       }).toList();
 

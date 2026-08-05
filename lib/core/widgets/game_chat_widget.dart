@@ -10,6 +10,7 @@ class GameChatWidget extends StatefulWidget {
   final String collectionName;
   final String currentUserId;
   final String currentUserName;
+  final void Function(int count)? onUnreadCountChanged;
 
   const GameChatWidget({
     super.key,
@@ -17,6 +18,7 @@ class GameChatWidget extends StatefulWidget {
     required this.collectionName,
     required this.currentUserId,
     required this.currentUserName,
+    this.onUnreadCountChanged,
   });
 
   @override
@@ -60,6 +62,7 @@ class GameChatWidgetState extends State<GameChatWidget>
         _messages = messages;
         if (!_isOpen && messages.length > hadMessages) {
           unreadCount += messages.length - hadMessages;
+          widget.onUnreadCountChanged?.call(unreadCount);
         }
       });
       _scrollToBottom();
@@ -80,6 +83,7 @@ class GameChatWidgetState extends State<GameChatWidget>
       _isOpen = !_isOpen;
       if (_isOpen) {
         unreadCount = 0;
+        widget.onUnreadCountChanged?.call(0);
         _animController.forward();
         _scrollToBottom();
       } else {

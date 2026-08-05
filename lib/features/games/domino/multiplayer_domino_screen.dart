@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/domino_game_match.dart';
+import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/bot_name_service.dart';
 import '../../../core/service/domino_game_service.dart';
 import '../../../core/service/firestore_service.dart';
@@ -35,7 +36,7 @@ class MultiplayerDominoScreen extends StatefulWidget {
 }
 
 class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
-    with WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final DominoGameService _gameService = DominoGameService();
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -63,10 +64,22 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   int? _userCoins;
   int? _userDiamonds;
 
+  ({int left, int right})? _flyingTileData;
+  late AnimationController _playerFlyAnimCtrl;
+  late Animation<Offset> _playerFlyAnim;
+
+  bool _boneyardFlyActive = false;
+  bool _isDrawing = false;
+  bool _autoPassPending = false;
+  late AnimationController _boneyardFlyAnimCtrl;
+  late Animation<Offset> _boneyardFlyAnim;
+  late AnimationController _mandatoryTileAnimCtrl;
+
   String? _selectedTileId;
   bool _needsSideChoice = false;
   bool _gameEnded = false;
   bool _isScreenKeepOnActive = false;
+  int _unreadChatCount = 0;
   bool _showRoundEndBanner = false;
   bool _showGameOverBanner = false;
   DominoGameMatch? _gameOverGame;
@@ -78,14 +91,12 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   int _turnSecondsLeft = 60;
   Timer? _awayTimer;
   int _awaySecondsLeft = 60;
-  bool _isJoining = false;
   bool _isPlayingVsBot = false;
   bool _isOpponentThinking = false;
   String _botName = 'Bot';
   Timer? _botMoveTimer;
   Timer? _waitingTimer;
   int _waitingSeconds = 0;
-  final TextEditingController _roomCodeCtrl = TextEditingController();
 
   static const Color _panelColor   = Color(0xEE0D2010);
 
@@ -95,6 +106,24 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   void initState() {
     super.initState();
     DominoSpriteSheet.preload().then((_) { if (mounted) setState(() {}); });
+
+    _playerFlyAnimCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 500),
+    );
+    _playerFlyAnim = Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _playerFlyAnimCtrl, curve: Curves.easeOut));
+
+    _boneyardFlyAnimCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 550),
+    );
+    _boneyardFlyAnim = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0, 4.0),
+    ).animate(CurvedAnimation(parent: _boneyardFlyAnimCtrl, curve: Curves.easeIn));
+    _mandatoryTileAnimCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -196,64 +225,11 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     _turnTimer?.cancel();
     _awayTimer?.cancel();
     _chainScrollCtrl.dispose();
-    _roomCodeCtrl.dispose();
+    _playerFlyAnimCtrl.dispose();
+    _boneyardFlyAnimCtrl.dispose();
+    _mandatoryTileAnimCtrl.dispose();
     _disableWakeLock();
     super.dispose();
-  }
-
-  Future<void> _createGame() async {
-    if (_currentUser == null) return;
-    if (widget.matchType == 'Apuesta' && _selectedBetAmount == null) return;
-
-    final balance = _currencyType == 'diamonds' ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
-    final cost = _selectedBetAmount ?? 0;
-    if (cost > 0 && balance < cost) {
-      _showSnack('Fondos insuficientes');
-      return;
-    }
-
-    final result = await _gameService.createGame(
-      hostId: _currentUser!.uid,
-      hostName: _myName ?? 'Jugador',
-      hostPhotoUrl: _myPhotoUrl,
-      currencyType: _currencyType,
-      betAmount: _selectedBetAmount,
-      isOnlineMatchmaking: false,
-      numberOfPlayers: _selectedPlayerCount,
-    );
-
-    if (result == null || !mounted) return;
-
-    setState(() {
-      _activeGameId = result['gameId'];
-      _myPlayerNumber = 1;
-      _screenState = _FriendDominoState.waitingRoom;
-    });
-
-    await _enableWakeLock();
-
-    _waitingSeconds = 0;
-    _waitingTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
-      setState(() => _waitingSeconds++);
-      // Bot fallback only for 2-player games
-      if (_waitingSeconds >= 120 && _selectedPlayerCount == 2) {
-        t.cancel();
-        _startBotFallback(result['gameId']!);
-      }
-    });
-
-    _waitingSubscription?.cancel();
-    _waitingSubscription = _gameService.getGameStream(result['gameId']!).listen((game) {
-      if (!mounted) return;
-      if (game == null) return;
-      setState(() => _currentGame = game);
-      if (game.isActive) {
-        _waitingTimer?.cancel();
-        _waitingSubscription?.cancel();
-        _startGame(result['gameId']!, 1);
-      }
-    });
   }
 
   Future<void> _startBotFallback(String gameId) async {
@@ -267,58 +243,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       _botName = profile['name'] ?? 'Bot';
     });
     _startGame(gameId, 1);
-  }
-
-  Future<void> _joinByCode() async {
-    final code = _roomCodeCtrl.text.trim();
-    if (code.isEmpty) {
-      _showSnack('Ingresa el código de sala');
-      return;
-    }
-
-    setState(() => _isJoining = true);
-
-    try {
-      final doc = await _firestore.collection('domino_games').doc(code).get();
-      if (!doc.exists) {
-        _showSnack('Sala no encontrada');
-        setState(() => _isJoining = false);
-        return;
-      }
-
-      final game = DominoGameMatch.fromFirestore(doc);
-      if (game.status != 'waiting') {
-        _showSnack('La sala ya está en uso o cerrada');
-        setState(() => _isJoining = false);
-        return;
-      }
-
-      if (game.hostId == _currentUser!.uid) {
-        _showSnack('No puedes unirte a tu propia sala');
-        setState(() => _isJoining = false);
-        return;
-      }
-
-      final joined = await _gameService.joinGame(
-        gameId: code,
-        guestId: _currentUser!.uid,
-        guestName: _myName ?? 'Jugador',
-        guestPhotoUrl: _myPhotoUrl,
-      );
-
-      if (!joined || !mounted) {
-        _showSnack('No se pudo unir a la sala');
-        setState(() => _isJoining = false);
-        return;
-      }
-
-      _startGame(code, 2);
-    } catch (e) {
-      if (kDebugMode) print('Error joining by code: $e');
-      _showSnack('Error al unirse');
-    } finally {
-      if (mounted) setState(() => _isJoining = false);
-    }
   }
 
   void _joinExistingGame(String gameId) {
@@ -374,8 +298,25 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
 
       final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
       if (isMyTurn) {
-        _startTurnTimer();
+        final myHand = game.getHand(_myPlayerNumber);
+        final state = game.gameState;
+        if (!state.canPlayAny(myHand) && state.boneyard.isEmpty) {
+          if (!_autoPassPending) {
+            _autoPassPending = true;
+            Future.delayed(const Duration(milliseconds: 800), () {
+              _autoPassPending = false;
+              if (mounted && !_gameEnded) {
+                _showSnack('Sin opciones, pasas automáticamente');
+                _passTurn();
+              }
+            });
+          }
+        } else {
+          _autoPassPending = false;
+          _startTurnTimer();
+        }
       } else {
+        _autoPassPending = false;
         _stopTurnTimer();
         if (_isOpponent(game)) _scheduleOpponentTurn(game);
       }
@@ -454,8 +395,10 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     });
   }
 
-  void _makeBotMove(DominoGameMatch game) {
+  void _makeBotMove(DominoGameMatch snapshot) {
     if (!mounted) return;
+    // Use the latest game state to avoid stale snapshots
+    final game = _currentGame ?? snapshot;
     final botNum = _myPlayerNumber == 1 ? 2 : 1;
     final botHand = game.getHand(botNum);
     final state = game.gameState;
@@ -463,15 +406,55 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final playable = botHand.where((id) => state.canPlay(id)).toList();
 
     if (playable.isNotEmpty) {
-      playable.shuffle(_random);
-      final tileId = playable.first;
+      // Dificultad alta: dobles primero (el mayor), luego mayor puntaje total
+      final doubles = playable.where((id) {
+        final t = state.tiles[id]!;
+        return t['left'] == t['right'];
+      }).toList();
+      final String tileId;
+      if (doubles.isNotEmpty) {
+        doubles.sort((a, b) => state.tiles[b]!['left']!.compareTo(state.tiles[a]!['left']!));
+        tileId = doubles.first;
+      } else {
+        playable.sort((a, b) {
+          final ta = state.tiles[a]!;
+          final tb = state.tiles[b]!;
+          return (tb['left']! + tb['right']!).compareTo(ta['left']! + ta['right']!);
+        });
+        tileId = playable.first;
+      }
+
       final tileData = state.tiles[tileId]!;
+      final tl = tileData['left']!;
+      final tr = tileData['right']!;
+      final isDouble = tl == tr;
+
       String side;
       if (state.chain.isEmpty) {
         side = 'right';
       } else {
-        final canLeft = tileData['left'] == state.leftOpen || tileData['right'] == state.leftOpen;
-        side = canLeft ? 'left' : 'right';
+        final canLeft  = tl == state.leftOpen  || tr == state.leftOpen;
+        final canRight = tl == state.rightOpen || tr == state.rightOpen;
+        if (!canLeft) {
+          side = 'right';
+        } else if (!canRight) {
+          side = 'left';
+        } else {
+          // Elegir el lado que deja más fichas jugables en la mano restante
+          final newLeftIfLeft   = isDouble ? tl : (tr == state.leftOpen  ? tl : tr);
+          final newRightIfLeft  = state.rightOpen!;
+          final newLeftIfRight  = state.leftOpen!;
+          final newRightIfRight = isDouble ? tr : (tl == state.rightOpen ? tr : tl);
+          final remaining = botHand.where((id) => id != tileId);
+          int scoreLeft = 0, scoreRight = 0;
+          for (final id in remaining) {
+            final t = state.tiles[id]!;
+            final p1 = t['left']!; final p2 = t['right']!;
+            if (p1==newLeftIfLeft||p2==newLeftIfLeft||p1==newRightIfLeft||p2==newRightIfLeft) scoreLeft++;
+            if (p1==newLeftIfRight||p2==newLeftIfRight||p1==newRightIfRight||p2==newRightIfRight) scoreRight++;
+          }
+          side = scoreLeft >= scoreRight ? 'left' : 'right';
+        }
       }
       final newDeal = DominoGameState.initialDeal(_random);
       _gameService.playTile(
@@ -507,11 +490,52 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     }
   }
 
+  /// Returns the required opening double value from the player's hand,
+  /// or -1 if the player has no doubles (any tile is valid for opening).
+  int _requiredOpeningDouble(DominoGameState state, List<String> hand) {
+    int maxDouble = -1;
+    for (final id in hand) {
+      final t = state.tiles[id];
+      if (t != null && t['left'] == t['right'] && t['left']! > maxDouble) {
+        maxDouble = t['left']!;
+      }
+    }
+    return maxDouble;
+  }
+
+  /// True if tileId can legally be played given the current state and player's hand.
+  bool _isTilePlayable(String tileId, DominoGameState state, List<String> myHand) {
+    if (state.chain.isEmpty) {
+      final req = _requiredOpeningDouble(state, myHand);
+      if (req == -1) return true;
+      final t = state.tiles[tileId];
+      return t != null && t['left'] == t['right'] && t['left'] == req;
+    }
+    return state.canPlay(tileId);
+  }
+
   void _onTileTap(String tileId) {
     final game = _currentGame;
     if (game == null || !game.isPlayerTurn(_currentUser!.uid)) return;
 
     final state = game.gameState;
+    final myHand = game.getHand(_myPlayerNumber);
+
+    // Chain empty: enforce mandatory opening double
+    if (state.chain.isEmpty) {
+      final req = _requiredOpeningDouble(state, myHand);
+      if (req != -1) {
+        final td = state.tiles[tileId];
+        if (td == null || !(td['left'] == td['right'] && td['left'] == req)) {
+          _showSnack('Debes abrir con el doble $req-$req');
+          return;
+        }
+      }
+      setState(() => _selectedTileId = tileId);
+      _placeSelectedTile(tileId, 'right');
+      return;
+    }
+
     if (!state.canPlay(tileId)) {
       _showSnack('Esta ficha no conecta con los extremos');
       return;
@@ -519,11 +543,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
 
     final tileData = state.tiles[tileId]!;
     setState(() => _selectedTileId = tileId);
-
-    if (state.chain.isEmpty) {
-      _placeSelectedTile(tileId, 'right');
-      return;
-    }
 
     final canLeft = tileData['left'] == state.leftOpen || tileData['right'] == state.leftOpen;
     final canRight = tileData['left'] == state.rightOpen || tileData['right'] == state.rightOpen;
@@ -539,10 +558,25 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final prevGame = _currentGame;
     if (prevGame == null) return;
 
+    // Fly animation
+    final td = prevGame.gameState.tiles[tileId];
+    if (td != null) {
+      final dx = side == 'left' ? -2.0 : 2.0;
+      _playerFlyAnim = Tween<Offset>(begin: Offset(dx, 1.5), end: Offset.zero)
+          .animate(CurvedAnimation(parent: _playerFlyAnimCtrl, curve: Curves.easeOut));
+      setState(() => _flyingTileData = (left: td['left']!, right: td['right']!));
+      _playerFlyAnimCtrl.forward(from: 0);
+    }
+
     setState(() {
       _selectedTileId = null;
       _needsSideChoice = false;
     });
+
+    if (_flyingTileData != null) {
+      await Future.delayed(const Duration(milliseconds: 550));
+      if (mounted) setState(() => _flyingTileData = null);
+    }
 
     final optimistic = _applyTileLocally(prevGame, tileId, side);
     if (optimistic != null) {
@@ -658,6 +692,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   }
 
   Future<void> _drawFromBoneyard() async {
+    if (_isDrawing) return;
     final game = _currentGame;
     if (game == null || !game.isPlayerTurn(_currentUser!.uid)) return;
     final state = game.gameState;
@@ -670,10 +705,21 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       _showSnack('El pozo está vacío');
       return;
     }
-    await _gameService.drawFromBoneyard(
-      gameId: _activeGameId!,
-      playerId: _currentUser!.uid,
-    );
+
+    setState(() { _isDrawing = true; _boneyardFlyActive = true; });
+    _boneyardFlyAnimCtrl.forward(from: 0);
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    setState(() => _boneyardFlyActive = false);
+
+    try {
+      await _gameService.drawFromBoneyard(
+        gameId: _activeGameId!,
+        playerId: _currentUser!.uid,
+      );
+    } finally {
+      if (mounted) setState(() => _isDrawing = false);
+    }
   }
 
   Future<void> _passTurn() async {
@@ -768,8 +814,31 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
           actions: [
             if (inGame)
               IconButton(
-                icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-                onPressed: () => _chatKey.currentState?.toggleChat(),
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                    if (_unreadChatCount > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            _unreadChatCount > 9 ? '9+' : '$_unreadChatCount',
+                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                onPressed: () {
+                  _chatKey.currentState?.toggleChat();
+                  if (mounted) setState(() => _unreadChatCount = 0);
+                },
                 tooltip: 'Chat',
               ),
             if (inGame)
@@ -789,6 +858,9 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                 collectionName: 'domino_games',
                 currentUserId: _currentUser?.uid ?? '',
                 currentUserName: _currentUser?.displayName ?? 'Jugador',
+                onUnreadCountChanged: (count) {
+                  if (mounted) setState(() => _unreadChatCount = count);
+                },
               ),
           ],
         ),
@@ -927,61 +999,13 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             const SizedBox(height: 24),
           ],
           ElevatedButton.icon(
-            onPressed: (isBet && _selectedBetAmount == null) ? null : _createGame,
-            icon: const Icon(Icons.add),
-            label: const Text('Crear sala', style: TextStyle(fontSize: 16)),
+            onPressed: (isBet && _selectedBetAmount == null) ? null : _showFriendInviteDialog,
+            icon: const Icon(Icons.person_add, size: 22),
+            label: const Text('Invitar amigo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
               backgroundColor: _accentOrange,
               foregroundColor: Colors.white,
               disabledBackgroundColor: Colors.grey.shade300,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(child: Divider(color: Colors.grey.shade300)),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text('o únete con código', style: TextStyle(color: Colors.grey, fontSize: 13)),
-              ),
-              Expanded(child: Divider(color: Colors.grey.shade300)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _roomCodeCtrl,
-            style: const TextStyle(color: Colors.black87),
-            decoration: InputDecoration(
-              hintText: 'Código de sala (ID)',
-              hintStyle: const TextStyle(color: Colors.grey),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: _accentOrange),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _isJoining ? null : _joinByCode,
-            icon: _isJoining
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.login),
-            label: Text(_isJoining ? 'Uniéndose...' : 'Unirse a sala', style: const TextStyle(fontSize: 16)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal[700],
-              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -993,8 +1017,246 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     );
   }
 
+  List<String> _parseEmails(String raw) => raw
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  void _showFriendInviteDialog() {
+    if (_currentUser == null) return;
+
+    final spotsNeeded = _selectedPlayerCount - 1;
+    final emailController = TextEditingController();
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          final emails = _parseEmails(emailController.text);
+          final isValid = emails.isNotEmpty && emails.length <= spotsNeeded;
+          final tooMany = emails.length > spotsNeeded;
+          final plural = spotsNeeded > 1;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(plural ? 'Invitar amigos' : 'Invitar amigo',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: isLoading ? null : () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  if (plural) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Puedes invitar hasta $spotsNeeded amigos. Separa los emails con coma.',
+                              style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: emailController,
+                    enabled: !isLoading,
+                    keyboardType: TextInputType.emailAddress,
+                    autofocus: true,
+                    maxLines: plural ? 2 : 1,
+                    onChanged: (_) => setDlg(() {}),
+                    decoration: InputDecoration(
+                      labelText: plural
+                          ? 'Emails de los amigos (separados por coma)'
+                          : 'Email del amigo',
+                      hintText: plural
+                          ? 'amigo1@email.com, amigo2@email.com'
+                          : 'ejemplo@email.com',
+                      prefixIcon: const Icon(Icons.email),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorText: tooMany
+                          ? 'Máximo $spotsNeeded ${spotsNeeded == 1 ? 'invitado' : 'invitados'} para esta sala'
+                          : null,
+                      helperText: plural && emails.isNotEmpty
+                          ? '${emails.length} de $spotsNeeded invitado${emails.length == 1 ? '' : 's'}'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: (isLoading || !isValid)
+                          ? null
+                          : () async {
+                              setDlg(() => isLoading = true);
+                              Navigator.of(ctx).pop();
+                              await _createAndInvite(emails: emails);
+                            },
+                      icon: isLoading
+                          ? const SizedBox(width: 16, height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send),
+                      label: Text(isLoading ? 'Enviando...' : 'Enviar invitación',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accentOrange, foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _createAndInvite({required List<String> emails}) async {
+    if (_currentUser == null || !mounted || emails.isEmpty) return;
+
+    final isBet = widget.matchType == 'Apuesta';
+    final currencyType = isBet ? 'diamonds' : 'coins';
+    final effectiveBet = _selectedBetAmount;
+
+    final bool isNewGame = _activeGameId == null;
+    String? gameId = _activeGameId;
+
+    if (isNewGame) {
+      final result = await _gameService.createGame(
+        hostId: _currentUser!.uid,
+        hostName: _myName ?? 'Jugador',
+        hostPhotoUrl: _myPhotoUrl,
+        currencyType: currencyType,
+        betAmount: effectiveBet,
+        isOnlineMatchmaking: false,
+        numberOfPlayers: _selectedPlayerCount,
+      );
+      gameId = result?['gameId'];
+    }
+
+    if (gameId == null || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Error al crear la sala. Intenta de nuevo.'),
+            backgroundColor: Colors.red));
+      }
+      return;
+    }
+
+    final invService = GameInvitationService();
+    final errors = <String>[];
+
+    for (final email in emails) {
+      final error = await invService.createInvitation(
+        fromUserId: _currentUser!.uid,
+        fromUserName: _myName ?? 'Jugador',
+        toUserEmail: email,
+        gameType: 'Dominó',
+        betAmount: effectiveBet,
+        currencyType: currencyType,
+        existingGameId: gameId,
+        numberOfPlayers: _selectedPlayerCount,
+      );
+      if (error != null) errors.add('$email: $error');
+    }
+
+    if (!mounted) return;
+
+    if (errors.isNotEmpty) {
+      if (isNewGame && errors.length == emails.length) {
+        _firestore.collection('domino_games').doc(gameId).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errors.first.split(': ').last), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Algunos correos no se pudieron enviar:\n${errors.join('\n')}'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+
+    if (isNewGame) _startWaitingRoomDomino(gameId);
+
+    final sent = emails.length - errors.length;
+    if (mounted && sent > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(sent == 1
+              ? '¡Invitación enviada! Esperando que tu amigo acepte...'
+              : '¡$sent invitaciones enviadas! Esperando que tus amigos acepten...'),
+          backgroundColor: Colors.green));
+    }
+  }
+
+  void _startWaitingRoomDomino(String gameId) {
+    setState(() {
+      _activeGameId = gameId;
+      _myPlayerNumber = 1;
+      _screenState = _FriendDominoState.waitingRoom;
+    });
+
+    _enableWakeLock();
+
+    _waitingSeconds = 0;
+    _waitingTimer?.cancel();
+    _waitingTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _waitingSeconds++);
+      if (_waitingSeconds >= 120 && _selectedPlayerCount == 2) {
+        t.cancel();
+        _startBotFallback(gameId);
+      }
+    });
+
+    _waitingSubscription?.cancel();
+    _waitingSubscription = _gameService.getGameStream(gameId).listen((game) {
+      if (!mounted) return;
+      if (game == null) return;
+      setState(() => _currentGame = game);
+      if (game.isActive) {
+        _waitingTimer?.cancel();
+        _waitingSubscription?.cancel();
+        _startGame(gameId, 1);
+      }
+    });
+  }
+
   Widget _buildWaitingRoom() {
-    final gameId = _activeGameId ?? '';
     final joined = _currentGame?.currentPlayerCount ?? 1;
     final remaining = _selectedPlayerCount - joined;
     final countdown = (120 - _waitingSeconds).clamp(0, 120);
@@ -1031,36 +1293,18 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Room code
-                  const Text('Comparte el código con tu amigo:',
-                      style: TextStyle(color: Colors.black54, fontSize: 13),
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: gameId));
-                      _showSnack('Código copiado');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFEC7A34), width: 1.5),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            gameId.length > 16 ? '${gameId.substring(0, 16)}...' : gameId,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.copy, color: Color(0xFFEC7A34), size: 18),
-                        ],
+                  if (remaining > 0)
+                    ElevatedButton.icon(
+                      onPressed: _showFriendInviteDialog,
+                      icon: const Icon(Icons.person_add, size: 18),
+                      label: const Text('Invitar otro amigo'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accentOrange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       ),
                     ),
-                  ),
                   const SizedBox(height: 16),
                   if (remaining > 0) ...[
                     const SizedBox(width: 24, height: 24,
@@ -1143,12 +1387,10 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             children: [
               _buildLandscapeHeader(
                 opponents: opponents,
-                myScore: myScore,
-                isMyTurn: isMyTurn,
                 targetScore: game.targetScore,
                 roundNumber: state.roundNumber,
               ),
-              _buildChainArea(state),
+              _buildChainArea(state, canDraw: canDraw),
               _buildLandscapeFooter(
                 hand: myHand,
                 state: state,
@@ -1158,9 +1400,37 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
               ),
             ],
           ),
+          Positioned(
+            left: 8,
+            bottom: 92.0 + (state.boneyard.isNotEmpty ? 54 : 0) + 10,
+            child: _buildMyPanel(isMyTurn, myScore),
+          ),
           if (_showRoundEndBanner) _buildRoundEndOverlay(),
           if (_showGameOverBanner && _gameOverGame != null) _buildGameOverOverlay(_gameOverGame!),
+          if (_flyingTileData != null) _buildPlayerFlyOverlay(),
+          if (_boneyardFlyActive) _buildBoneyardFlyOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerFlyOverlay() {
+    final t = _flyingTileData!;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Align(
+          alignment: Alignment.center,
+          child: SlideTransition(
+            position: _playerFlyAnim,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [BoxShadow(color: Color(0xAA000000), blurRadius: 18, spreadRadius: 2)],
+              ),
+              child: DominoTileWidget(left: t.left, right: t.right, width: 46, height: 84),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1180,21 +1450,36 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
     final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
 
+    // Determine the round winner (whose score increased)
+    int? roundWinnerNum;
+    if (!wasBlocked) {
+      for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
+        if ((newScores['player$p'] ?? 0) > (prevScores['player$p'] ?? 0)) {
+          roundWinnerNum = p;
+          break;
+        }
+      }
+    }
+
+    // Show tiles of players who LOST (not the round winner) — these are the scored pips
     final opponentTiles = <({String name, List<({int left, int right})> tiles, int pips})>[];
     for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
-      if (p == _myPlayerNumber) continue;
+      if (!wasBlocked && p == roundWinnerNum) continue; // winner played all tiles, skip
       final hand = prevGame.gameState.handOf(p);
+      if (hand.isEmpty) continue;
       final tileWidgets = hand.map((id) {
         final data = prevGame.gameState.tiles[id];
         return (left: data?['left'] ?? 0, right: data?['right'] ?? 0);
       }).toList();
       final pips = tileWidgets.fold(0, (s, t) => s + t.left + t.right);
-      final name = _isPlayingVsBot && p != 1 ? _botName : (_isPlayingVsBot ? _botName : prevGame.playerNameOf(p));
+      final name = p == _myPlayerNumber
+          ? (_myName ?? 'Yo')
+          : (_isPlayingVsBot ? _botName : prevGame.playerNameOf(p));
       opponentTiles.add((name: name, tiles: tileWidgets, pips: pips));
     }
     final scoreLines = StringBuffer();
     for (int p = 1; p <= newGame.numberOfPlayers; p++) {
-      final name = p == _myPlayerNumber ? 'Tú'
+      final name = p == _myPlayerNumber ? (_myName ?? 'Yo')
           : (_isPlayingVsBot ? _botName : newGame.playerNameOf(p));
       if (p > 1) scoreLines.write('  |  ');
       scoreLines.write('$name: ${newScores['player$p'] ?? 0}');
@@ -1238,10 +1523,38 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                   height: 42,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
-                    children: opp.tiles.map((t) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: DominoTileWidget(left: t.left, right: t.right, width: 22, height: 40),
-                    )).toList(),
+                    children: List.generate(opp.tiles.length, (i) {
+                      final t = opp.tiles[i];
+                      final n = opp.tiles.length;
+                      final start = n <= 1 ? 0.0 : (i / n) * 0.7;
+                      final end = min(start + 0.5, 1.0);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: const Duration(milliseconds: 1400),
+                          curve: Interval(start, end, curve: Curves.easeInOut),
+                          builder: (_, value, __) {
+                            final revealed = value >= 0.5;
+                            final scaleX = revealed
+                                ? (value - 0.5) * 2
+                                : 1.0 - value * 2;
+                            return Transform(
+                              transform: Matrix4.identity()
+                                ..scale(scaleX.clamp(0.01, 1.0), 1.0),
+                              alignment: Alignment.center,
+                              child: DominoTileWidget(
+                                left: revealed ? t.left : 0,
+                                right: revealed ? t.right : 0,
+                                width: 22,
+                                height: 40,
+                                faceDown: !revealed,
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }),
                   ),
                 ),
               ],
@@ -1257,13 +1570,28 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                     _pendingNewGame = null;
                     if (nextGame != null) _currentGame = nextGame;
                   });
+                  _autoPassPending = false;
                   if (_currentGame != null) {
-                    final isMyTurn = _currentGame!.isPlayerTurn(_currentUser!.uid);
+                    final game = _currentGame!;
+                    final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
                     if (isMyTurn) {
-                      _startTurnTimer();
+                      final myHand = game.getHand(_myPlayerNumber);
+                      final state = game.gameState;
+                      if (!state.canPlayAny(myHand) && state.boneyard.isEmpty) {
+                        _autoPassPending = true;
+                        Future.delayed(const Duration(milliseconds: 800), () {
+                          _autoPassPending = false;
+                          if (mounted && !_gameEnded) {
+                            _showSnack('Sin opciones, pasas automáticamente');
+                            _passTurn();
+                          }
+                        });
+                      } else {
+                        _startTurnTimer();
+                      }
                     } else {
                       _stopTurnTimer();
-                      if (_isOpponent(_currentGame!)) _scheduleOpponentTurn(_currentGame!);
+                      if (_isOpponent(game)) _scheduleOpponentTurn(game);
                     }
                   }
                 },
@@ -1289,7 +1617,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final scores = game.getPlayerScores();
     final scoreLines = StringBuffer();
     for (int p = 1; p <= game.numberOfPlayers; p++) {
-      final name = p == _myPlayerNumber ? 'Tú' : (_isPlayingVsBot && p != 1 ? _botName : game.playerNameOf(p));
+      final name = p == _myPlayerNumber ? (_myName ?? 'Yo') : (_isPlayingVsBot && p != 1 ? _botName : game.playerNameOf(p));
       scoreLines.write('$name: ${scores['player$p'] ?? 0}');
       if (p < game.numberOfPlayers) scoreLines.write(' | ');
     }
@@ -1317,9 +1645,12 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             if ((game.betAmount ?? 0) > 0) ...[
               const SizedBox(height: 8),
               Text(
-                iWon
-                    ? '+${game.betAmount! + (game.betAmount! * 0.7).ceil()} ${game.currencyType}'
-                    : '-${game.betAmount} ${game.currencyType}',
+                () {
+                  final bet = game.betAmount!;
+                  final commission = game.currencyType == 'diamonds' ? 0.10 : 0.30;
+                  final prize = ((bet * 2) * (1 - commission)).floor();
+                  return iWon ? '+$prize ${game.currencyType}' : '-$bet ${game.currencyType}';
+                }(),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1350,10 +1681,50 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     );
   }
 
+  Widget _buildMyPanel(bool isActive, int myScore) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.white12 : Colors.black45,
+        borderRadius: BorderRadius.circular(8),
+        border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.person, color: Colors.white70, size: 20),
+          const SizedBox(width: 4),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_myName ?? 'Yo', style: const TextStyle(color: Colors.white70, fontSize: 9)),
+              Text(
+                '$myScore',
+                style: TextStyle(
+                  color: isActive ? _accentOrange : Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (isActive && _turnTimer != null)
+                Text(
+                  '⏱ $_turnSecondsLeft"',
+                  style: TextStyle(
+                    color: _turnSecondsLeft <= 10 ? Colors.red[300] : Colors.green[300],
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLandscapeHeader({
     required List<({int playerNum, String name, int handCount, int score, bool isActive})> opponents,
-    required int myScore,
-    required bool isMyTurn,
     required int targetScore,
     required int roundNumber,
   }) {
@@ -1371,9 +1742,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
               children: [
                 Text('Ronda $roundNumber', style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
                 Text('Meta: $targetScore', style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                if (isMyTurn && _turnTimer != null)
-                  Text('⏱ $_turnSecondsLeft"',
-                      style: TextStyle(color: _turnSecondsLeft <= 10 ? Colors.red[300] : Colors.green[300], fontSize: 12, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -1384,15 +1752,15 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: opp.isActive ? Colors.white12 : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         border: opp.isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
                       ),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.person_outline, color: Colors.white54, size: 18),
-                        Text(opp.name, style: const TextStyle(color: Colors.white60, fontSize: 9), overflow: TextOverflow.ellipsis),
+                        const Icon(Icons.person_outline, color: Colors.white54, size: 16),
+                        Text(opp.name, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1),
                         Text('${opp.score}', style: TextStyle(color: opp.isActive ? _accentOrange : Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                       ]),
                     ),
@@ -1410,20 +1778,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                 ),
               )).toList(),
             ),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isMyTurn ? Colors.white12 : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              border: isMyTurn ? Border.all(color: _accentOrange, width: 1.5) : null,
-            ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.person, color: Colors.white70, size: 18),
-              const Text('Tú', style: TextStyle(color: Colors.white60, fontSize: 9)),
-              Text('$myScore', style: TextStyle(color: isMyTurn ? _accentOrange : Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            ]),
           ),
         ],
       ),
@@ -1465,17 +1819,11 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
           ),
           const SizedBox(width: 4),
           Expanded(child: _buildPlayerArea(hand, state, isMyTurn)),
-          if (isMyTurn && (canDraw || canPass)) ...[
+          if (isMyTurn && canPass) ...[
             const SizedBox(width: 4),
             SizedBox(
               width: 90,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (canDraw) _mpActionBtn('Tomar', Icons.add_box, Colors.blue[700]!, _drawFromBoneyard),
-                  if (canPass) _mpActionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passTurn),
-                ],
-              ),
+              child: _mpActionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passTurn),
             ),
           ],
         ],
@@ -1505,34 +1853,96 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         ),
       );
 
-  Widget _buildChainArea(DominoGameState state) {
+  Widget _buildChainArea(DominoGameState state, {required bool canDraw}) {
     final showHints = _needsSideChoice && _selectedTileId != null;
+    final openingIdx = state.openingTileId != null
+        ? state.chain.indexWhere((t) => t.id == state.openingTileId)
+        : -1;
     return Expanded(
       child: Container(
         color: const Color(0xFF429936),
-        child: DominoBoardWebView(
-          tiles: state.chain
-              .map<DominoChainEntry>((t) => DominoChainEntry(left: t.displayLeft, right: t.displayRight))
-              .toList(),
-          showEndpointHints: showHints,
-          leftOpen: state.leftOpen ?? 0,
-          rightOpen: state.rightOpen ?? 0,
-          onLeftTapped: showHints ? () {
-            final id = _selectedTileId!;
-            setState(() { _needsSideChoice = false; _selectedTileId = null; });
-            _placeSelectedTile(id, 'left');
-          } : null,
-          onRightTapped: showHints ? () {
-            final id = _selectedTileId!;
-            setState(() { _needsSideChoice = false; _selectedTileId = null; });
-            _placeSelectedTile(id, 'right');
-          } : null,
+        child: Column(
+          children: [
+            Expanded(
+              child: DominoBoardWebView(
+                tiles: state.chain
+                    .map<DominoChainEntry>((t) => DominoChainEntry(left: t.displayLeft, right: t.displayRight))
+                    .toList(),
+                openingIndex: openingIdx,
+                showEndpointHints: showHints,
+                leftOpen: state.leftOpen ?? 0,
+                rightOpen: state.rightOpen ?? 0,
+                onLeftTapped: showHints ? () {
+                  final id = _selectedTileId!;
+                  setState(() { _needsSideChoice = false; _selectedTileId = null; });
+                  _placeSelectedTile(id, 'left');
+                } : null,
+                onRightTapped: showHints ? () {
+                  final id = _selectedTileId!;
+                  setState(() { _needsSideChoice = false; _selectedTileId = null; });
+                  _placeSelectedTile(id, 'right');
+                } : null,
+              ),
+            ),
+            if (state.boneyard.isNotEmpty) _buildBoneyardRow(canDraw, state.boneyard.length),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoneyardRow(bool canDraw, int count) {
+    return SizedBox(
+      height: 54,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        children: List.generate(count, (i) {
+          return GestureDetector(
+            onTap: canDraw ? _drawFromBoneyard : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Opacity(
+                opacity: canDraw ? 1.0 : 0.5,
+                child: const DominoTileWidget(
+                  left: 0,
+                  right: 0,
+                  width: 24,
+                  height: 44,
+                  faceDown: true,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildBoneyardFlyOverlay() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Align(
+          alignment: const Alignment(0, 0.5),
+          child: SlideTransition(
+            position: _boneyardFlyAnim,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [BoxShadow(color: Color(0xAA000000), blurRadius: 18, spreadRadius: 2)],
+              ),
+              child: const DominoTileWidget(left: 0, right: 0, width: 40, height: 72, faceDown: true),
+            ),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildPlayerArea(List<String> hand, DominoGameState state, bool isMyTurn) {
+    final req = isMyTurn ? _requiredOpeningDouble(state, hand) : -1;
+    final isOpeningMove = state.chain.isEmpty && req != -1;
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF8B5E3C),
@@ -1547,18 +1957,48 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         children: hand.map((tileId) {
           final td = state.tiles[tileId];
           if (td == null) return const SizedBox.shrink();
-          final isPlayable = isMyTurn && state.canPlay(tileId);
+          final isPlayable = isMyTurn && _isTilePlayable(tileId, state, hand);
           final isSelected = _selectedTileId == tileId;
-          return GestureDetector(
+          final isMandatory = isOpeningMove && td['left'] == td['right'] && td['left'] == req;
+
+          final tileWidget = GestureDetector(
             onTap: () => _onTileTap(tileId),
             child: AnimatedScale(
               scale: isSelected ? 1.1 : 1.0,
               duration: const Duration(milliseconds: 150),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: DominoTileWidget(left: td['left']!, right: td['right']!, width: 34, height: 64, isPlayable: isPlayable, isSelected: isSelected),
+                child: DominoTileWidget(
+                  left: td['left']!,
+                  right: td['right']!,
+                  width: 34,
+                  height: 64,
+                  isPlayable: isPlayable,
+                  isSelected: isSelected,
+                  isMandatory: isMandatory,
+                ),
               ),
             ),
+          );
+
+          if (!isMandatory) return tileWidget;
+
+          return AnimatedBuilder(
+            animation: _mandatoryTileAnimCtrl,
+            builder: (context, child) => Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.amber.withValues(alpha: _mandatoryTileAnimCtrl.value * 0.8),
+                    blurRadius: 18 * _mandatoryTileAnimCtrl.value,
+                    spreadRadius: 5 * _mandatoryTileAnimCtrl.value,
+                  ),
+                ],
+              ),
+              child: child,
+            ),
+            child: tileWidget,
           );
         }).toList(),
       ),

@@ -1697,11 +1697,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                               playerNumber: result['playerNumber'] ?? 2,
                                                               matchType: result['matchType'] ?? widget.matchType,
                                                             )
-                                                          : MultiplayerChessScreen(
-                                                              gameId: result['gameId'],
-                                                              isHost: false,
-                                                              matchType: widget.matchType,
-                                                            ),
+                                                          : result['isDomino'] == true
+                                                              ? MultiplayerDominoScreen(
+                                                                  gameId: result['gameId'],
+                                                                  playerNumber: result['playerNumber'] ?? 2,
+                                                                  matchType: result['matchType'] ?? widget.matchType,
+                                                                )
+                                                              : MultiplayerChessScreen(
+                                                                  gameId: result['gameId'],
+                                                                  isHost: false,
+                                                                  matchType: widget.matchType,
+                                                                ),
                                                     ),
                                                   );
                                                 } else {
