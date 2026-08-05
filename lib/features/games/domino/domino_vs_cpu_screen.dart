@@ -687,7 +687,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
 
   void _beginPlayerTurn() {
     if (!mounted || _gamePaused) return;
-    // Auto-pass if player can't play and boneyard is empty
     if (!_ctrl.canPlayerPlayAny() && _ctrl.boneyard.isEmpty) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && !_gamePaused) {
@@ -1257,83 +1256,54 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     );
   }
 
-  Widget _buildCompactScore(String name, int score, bool isActive, Widget avatar) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.white12 : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          avatar,
-          const SizedBox(width: 4),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: const TextStyle(color: Colors.white60, fontSize: 9)),
-              Text('$score',
-                  style: TextStyle(
-                    color: isActive ? _accentOrange : Colors.white,
-                    fontSize: 14, fontWeight: FontWeight.bold,
-                  )),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildLandscapeHeader() {
     final bool isCpuTurn = _ctrl.phase == _GamePhase.cpuTurn;
-    final bool cpuHasOpening = _ctrl.chain.isEmpty && _ctrl.openingDoubleValue != -1 && isCpuTurn;
 
-    return AnimatedBuilder(
-      animation: _cpuTileAnimCtrl,
-      builder: (context, _) => Container(
-        height: 52,
-        color: _panelColor,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        child: Row(
+    return Container(
+      height: 80,
+      color: _panelColor,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isCpuTurn ? Colors.white12 : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: isCpuTurn ? Border.all(color: _accentOrange, width: 1.5) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildCompactScore('CPU', _ctrl.cpuScore, isCpuTurn, _buildCpuAvatar()),
-            const SizedBox(width: 8),
+            Row(
+              children: [
+                Icon(Icons.smart_toy, color: Colors.white70, size: 16),
+                const SizedBox(width: 6),
+                const Text(
+                  'CPU',
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
             Expanded(
               child: _isCpuThinking
-                  ? const Row(mainAxisSize: MainAxisSize.min, children: [
-                      SizedBox(width: 10, height: 10, child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
-                      SizedBox(width: 4),
-                      Text('pensando...', style: TextStyle(color: Colors.white54, fontSize: 9)),
-                    ])
-                  : cpuHasOpening
-                      ? Text(
-                          'Sale con ${_ctrl.openingDoubleValue}-${_ctrl.openingDoubleValue}',
-                          style: TextStyle(color: Colors.amber[300], fontSize: 9, fontWeight: FontWeight.bold),
-                        )
-                      : ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: List.generate(
-                            _ctrl.cpuHand.length,
-                            (_) => Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                              child: _buildFaceDownTile(width: 14, height: 16),
-                            ),
-                          ),
+                  ? const Center(
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
+                        SizedBox(width: 6),
+                        Text('pensando...', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      ]),
+                    )
+                  : ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: List.generate(
+                        _ctrl.cpuHand.length,
+                        (_) => Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: _buildFaceDownTile(width: 20, height: 38),
                         ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('Ronda ${_ctrl.roundNumber}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
-                Text('Meta: ${_ctrl.targetScore}',
-                    style: const TextStyle(color: Colors.white54, fontSize: 9)),
-              ],
+                      ),
+                    ),
             ),
           ],
         ),
@@ -1448,17 +1418,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         ),
       );
 
-  Widget _buildCpuAvatar() {
-    return Container(
-      width: 24,
-      height: 24,
-      decoration: BoxDecoration(
-        color: Colors.grey[700],
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(Icons.smart_toy, color: Colors.white, size: 14),
-    );
-  }
 
   Widget _buildUserAvatar() {
     final photoUrl = _currentUser?.photoURL;

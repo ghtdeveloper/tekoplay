@@ -160,7 +160,6 @@ class DominoGameService {
     required String playerId,
     required String tileId,
     required String side,
-    required Map<String, dynamic> newRoundDeal,
   }) async {
     try {
       final gameRef = _firestore.collection(_collection).doc(gameId);
@@ -290,15 +289,16 @@ class DominoGameService {
             updates['gameState.leftOpen'] = newLeftOpen;
             updates['gameState.rightOpen'] = newRightOpen;
           } else {
+            final serverDeal = DominoGameState.initialDeal(_random, numberOfPlayers: nPlayers);
             final nextRoundState = DominoGameState.fromDeal(
-              deal: newRoundDeal,
+              deal: serverDeal,
               player1Score: newScores[1]!,
               player2Score: newScores[2]!,
               player3Score: newScores[3] ?? 0,
               player4Score: newScores[4] ?? 0,
               roundNumber: roundNum + 1,
             );
-            final newFirstTurn = newRoundDeal['firstTurn'] as String? ?? game.nextTurnAfter(game.currentTurn);
+            final newFirstTurn = serverDeal['firstTurn'] as String? ?? game.nextTurnAfter(game.currentTurn);
             updates['currentTurn'] = newFirstTurn;
             updates['gameState'] = nextRoundState.toMap();
           }
@@ -362,7 +362,6 @@ class DominoGameService {
   Future<bool> passTurn({
     required String gameId,
     required String playerId,
-    required Map<String, dynamic> newRoundDeal,
   }) async {
     try {
       final gameRef = _firestore.collection(_collection).doc(gameId);
@@ -409,15 +408,16 @@ class DominoGameService {
               updates['gameState.player${p}Score'] = newScores[p];
             }
           } else {
+            final serverDeal = DominoGameState.initialDeal(_random, numberOfPlayers: nPlayers);
             final nextRoundState = DominoGameState.fromDeal(
-              deal: newRoundDeal,
+              deal: serverDeal,
               player1Score: newScores[1]!,
               player2Score: newScores[2]!,
               player3Score: newScores[3] ?? 0,
               player4Score: newScores[4] ?? 0,
               roundNumber: game.gameState.roundNumber + 1,
             );
-            final newFirstTurn = newRoundDeal['firstTurn'] as String? ?? 'player$roundWinnerNum';
+            final newFirstTurn = serverDeal['firstTurn'] as String? ?? 'player$roundWinnerNum';
             updates['currentTurn'] = newFirstTurn;
             updates['gameState'] = nextRoundState.toMap();
           }
@@ -457,22 +457,67 @@ class DominoGameService {
     required String playerId,
   }) async {
     try {
-      final doc = await _firestore.collection(_collection).doc(gameId).get();
-      if (!doc.exists) return false;
+      // Pre-fetch bot profile outside transaction (async)
+      final botProfile = await BotNameService.pickUnseenProfile(_random);
+      final botName = botProfile['name'] as String;
 
-      final game = DominoGameMatch.fromFirestore(doc);
-      if (game.status != 'active') return false;
+      final gameRef = _firestore.collection(_collection).doc(gameId);
+      return await _firestore.runTransaction<bool>((transaction) async {
+        final doc = await transaction.get(gameRef);
+        if (!doc.exists) return false;
 
-      final winnerId = game.hostId == playerId ? game.guestId : game.hostId;
+        final game = DominoGameMatch.fromFirestore(doc);
+        if (game.status != 'active') return false;
 
-      await _firestore.collection(_collection).doc(gameId).update({
-        'status': 'abandoned',
-        'abandonedBy': playerId,
-        'winnerId': winnerId,
-        'finishedAt': FieldValue.serverTimestamp(),
-        'reason': 'abandoned',
+        final playerNum = game.getPlayerNumber(playerId);
+        if (playerNum == 0) return false;
+
+        // 2-player game: end game, other player wins (original behavior)
+        if (game.numberOfPlayers == 2) {
+          final winnerId = game.hostId == playerId ? game.guestId : game.hostId;
+          transaction.update(gameRef, {
+            'status': 'abandoned',
+            'abandonedBy': playerId,
+            'winnerId': winnerId,
+            'finishedAt': FieldValue.serverTimestamp(),
+            'reason': 'abandoned',
+          });
+          return true;
+        }
+
+        // 3-4 player game: replace leaving player with a bot
+        final botId = 'bot_$playerNum';
+        final updates = <String, dynamic>{};
+
+        switch (playerNum) {
+          case 1:
+            updates['hostId'] = botId;
+            updates['hostName'] = botName;
+            updates['hostPhotoUrl'] = null;
+            break;
+          case 2:
+            updates['guestId'] = botId;
+            updates['guestName'] = botName;
+            updates['guestPhotoUrl'] = null;
+            break;
+          case 3:
+            updates['guest2Id'] = botId;
+            updates['guest2Name'] = botName;
+            break;
+          case 4:
+            updates['guest3Id'] = botId;
+            updates['guest3Name'] = botName;
+            break;
+        }
+
+        // If it was the leaving player's turn, advance to next
+        if (game.currentTurn == 'player$playerNum') {
+          updates['currentTurn'] = game.nextTurnAfter(game.currentTurn);
+        }
+
+        transaction.update(gameRef, updates);
+        return true;
       });
-      return true;
     } catch (e) {
       if (kDebugMode) print('Error abandoning domino game: $e');
       return false;

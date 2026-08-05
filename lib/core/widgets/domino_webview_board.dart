@@ -1,7 +1,7 @@
 
 import 'dart:convert';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show compute, listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -157,7 +157,7 @@ class _DominoBoardWebViewState extends State<DominoBoardWebView> {
   @override
   void didUpdateWidget(DominoBoardWebView old) {
     super.didUpdateWidget(old);
-    if (old.tiles != widget.tiles) {
+    if (!listEquals(old.tiles, widget.tiles)) {
       _send(widget.tiles);
     }
     if (old.showEndpointHints != widget.showEndpointHints ||

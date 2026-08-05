@@ -11,6 +11,7 @@ class GameChatWidget extends StatefulWidget {
   final String currentUserId;
   final String currentUserName;
   final void Function(int count)? onUnreadCountChanged;
+  final void Function(String senderId, String senderName)? onNewMessageFromOther;
 
   const GameChatWidget({
     super.key,
@@ -19,6 +20,7 @@ class GameChatWidget extends StatefulWidget {
     required this.currentUserId,
     required this.currentUserName,
     this.onUnreadCountChanged,
+    this.onNewMessageFromOther,
   });
 
   @override
@@ -65,6 +67,13 @@ class GameChatWidgetState extends State<GameChatWidget>
           widget.onUnreadCountChanged?.call(unreadCount);
         }
       });
+      if (messages.length > hadMessages) {
+        for (int i = hadMessages; i < messages.length; i++) {
+          if (messages[i].senderId != widget.currentUserId) {
+            widget.onNewMessageFromOther?.call(messages[i].senderId, messages[i].senderName);
+          }
+        }
+      }
       _scrollToBottom();
     });
   }
@@ -131,7 +140,6 @@ class GameChatWidgetState extends State<GameChatWidget>
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Chat panel
         if (_isOpen || _animController.isAnimating)
           Positioned(
             right: 0,
@@ -200,7 +208,41 @@ class GameChatWidgetState extends State<GameChatWidget>
                                 },
                               ),
                       ),
-                      // Input
+                      // Emojis rápidos
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF333333),
+                          border: Border(top: BorderSide(color: Colors.white12)),
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              '👍', '👎', '😂', '😅', '😮', '😯', '🤣',
+                              '😍', '🥰', '😎', '🤩', '😜', '😏', '🤔',
+                              '😢', '😭', '😡', '🤬', '🤦', '🤷', '😤',
+                              '🔥', '🥵', '💪', '🙌', '👏', '🎉', '🏆', '💯',
+                              '❤️', '💔', '😴', '🤯', '😱', '🥶', '🤮',
+                            ].map((emoji) =>
+                              GestureDetector(
+                                onTap: () {
+                                  _chatService.sendMessage(
+                                    senderId: widget.currentUserId,
+                                    senderName: widget.currentUserName,
+                                    text: emoji,
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  child: Text(emoji, style: const TextStyle(fontSize: 20)),
+                                ),
+                              ),
+                            ).toList(),
+                          ),
+                        ),
+                      ),
+                      // Input de texto
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: const BoxDecoration(

@@ -1,13 +1,3 @@
-// lib/core/widgets/domino_board_widgets.dart
-//
-// Sprite-based Domino tile and chain-board widgets.
-// Uses bg1.png sprite sheet (from CodeCanyon Domino v3).
-//
-// Public API:
-//   DominoSpriteSheet.preload()  – call once in initState
-//   DominoTileWidget             – single tile (hand / chain)
-//   DominoChainBoard             – full snake-layout board
-//   DominoChainEntry             – (left, right) pair for the board
 
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -15,19 +5,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SPRITE SHEET
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Loads and caches the bg1.png domino sprite sheet.
 class DominoSpriteSheet {
   DominoSpriteSheet._();
 
   static ui.Image? _image;
   static bool _loading = false;
 
-  /// Frame data from bg1.json — [x, y, width, height] in pixels.
-  /// Sprite is 1496 × 1788 px.  Tile frames are 99 × 188 px (portrait).
   static const Map<String, List<double>> _frames = {
     '0-0': [630, 586, 99, 188],
     '0-1': [769, 586, 99, 188],
@@ -57,11 +40,9 @@ class DominoSpriteSheet {
     '5-5': [1397, 1140, 99, 188],
     '5-6': [0, 1412, 99, 188],
     '6-6': [139, 1412, 99, 188],
-    // "0.png" in the original JSON — used as face-down (back) tile
     'back': [980, 1140, 99, 188],
   };
 
-  /// Start loading the sprite sheet. Safe to call multiple times.
   static Future<void> preload() async {
     if (_image != null || _loading) return;
     _loading = true;
@@ -71,7 +52,6 @@ class DominoSpriteSheet {
       final frame = await codec.getNextFrame();
       _image = frame.image;
     } catch (_) {
-      // Asset missing → fallback pip renderer kicks in automatically.
     } finally {
       _loading = false;
     }
@@ -80,8 +60,6 @@ class DominoSpriteSheet {
   static bool get isLoaded => _image != null;
   static ui.Image? get image => _image;
 
-  /// Source [Rect] for the given tile values in the sprite sheet.
-  /// Always uses canonical form min(a,b)–max(a,b).
   static ui.Rect frameFor(int a, int b) {
     final lo = math.min(a, b);
     final hi = math.max(a, b);
@@ -95,22 +73,12 @@ class DominoSpriteSheet {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DOMINO TILE WIDGET
-// ─────────────────────────────────────────────────────────────────────────────
 
 const Color _kTileBorder = Color(0xFF4A3728);
 const Color _kAccentOrange = Color(0xFFEC7A34);
 const Color _kTileColor = Color(0xFFFFF8E1);
 
-/// Renders a single domino tile using the sprite sheet (pip fallback if not loaded).
-///
-/// Orientation rules:
-/// • [landscape] = false (default) → portrait tile — used in hand displays.
-/// • [landscape] = true            → horizontal chain tile:
-///     - regular tiles rotate 90° to appear landscape (wide & short).
-///     - double tiles stay portrait (narrow & tall) — same visual as CodeCanyon.
-/// • [faceDown]  = true            → shows the back of the tile.
+
 class DominoTileWidget extends StatelessWidget {
   const DominoTileWidget({
     super.key,
@@ -134,7 +102,6 @@ class DominoTileWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Doubles in a chain stay portrait even when landscape is requested.
     final bool actualLandscape = landscape && !_isDouble;
 
     Color borderColor = _kTileBorder;
@@ -189,7 +156,6 @@ class DominoTileWidget extends StatelessWidget {
   }
 }
 
-// ── Sprite painter ────────────────────────────────────────────────────────────
 
 class _TileSpritePainter extends CustomPainter {
   const _TileSpritePainter({
@@ -211,15 +177,10 @@ class _TileSpritePainter extends CustomPainter {
     final paint = Paint()..filterQuality = FilterQuality.medium;
 
     if (landscape) {
-      // Sprite is stored portrait (low value on top, high value on bottom).
-      // Rotate canvas so it appears landscape:
-      //   left ≤ right → rotate −90° (CCW): "top" of portrait → LEFT of landscape.
-      //   left >  right → rotate +90° (CW):  "bottom" → LEFT, which puts high value left.
       final angle = (faceDown || left <= right) ? -math.pi / 2 : math.pi / 2;
       canvas.save();
       canvas.translate(size.width / 2, size.height / 2);
       canvas.rotate(angle);
-      // Portrait sprite draws into (height × width) area in the rotated frame.
       canvas.drawImageRect(
         image,
         src,
@@ -228,8 +189,6 @@ class _TileSpritePainter extends CustomPainter {
       );
       canvas.restore();
     } else {
-      // Portrait.  Sprite: low value on top, high value on bottom.
-      // If left > right we need to flip 180° so displayLeft appears on top.
       if (!faceDown && left > right) {
         canvas.save();
         canvas.translate(size.width / 2, size.height / 2);
@@ -255,8 +214,6 @@ class _TileSpritePainter extends CustomPainter {
       old.landscape != landscape ||
       old.faceDown != faceDown;
 }
-
-// ── Fallback pip renderer (used while sprite sheet is loading) ────────────────
 
 class _FallbackTile extends StatelessWidget {
   const _FallbackTile({
@@ -366,23 +323,19 @@ class _PipGrid extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DOMINO CHAIN BOARD
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// A single tile entry for [DominoChainBoard].
 class DominoChainEntry {
   const DominoChainEntry({required this.left, required this.right});
   final int left, right;
   bool get isDouble => left == right;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DominoChainEntry && other.left == left && other.right == right;
+
+  @override
+  int get hashCode => Object.hash(left, right);
 }
 
-/// Renders the full domino chain as a snake (zigzag) layout.
-///
-/// Layout rules (matching CodeCanyon visual):
-/// • Regular tiles → landscape (wide & short) in each horizontal row.
-/// • Double tiles  → portrait  (narrow & tall) in each horizontal row.
-/// • Rows alternate left-to-right and right-to-left.
 class DominoChainBoard extends StatelessWidget {
   const DominoChainBoard({
     super.key,
@@ -393,16 +346,15 @@ class DominoChainBoard extends StatelessWidget {
   final List<DominoChainEntry> tiles;
   final String emptyMessage;
 
-  // ── Layout constants ──────────────────────────────────────────────────────
-  static const double _tw = 50.0; // portrait tile width
-  static const double _th = 95.0; // portrait tile height
-  static const double _gap = 4.0; // gap between tiles in a row
-  static const double _rowGap = 6.0; // gap between rows
-  static const double _hPad = 8.0;  // horizontal padding
+  static const double _tw = 50.0;
+  static const double _th = 95.0;
+  static const double _gap = 4.0;
+  static const double _rowGap = 6.0;
+  static const double _hPad = 8.0;
 
-  // Display dimensions for a tile in a horizontal row:
-  static double _dw(bool isDouble) => isDouble ? _tw : _th; // landscape W = portrait H
-  static double _dh(bool isDouble) => isDouble ? _th : _tw; // landscape H = portrait W
+
+  static double _dw(bool isDouble) => isDouble ? _tw : _th;
+  static double _dh(bool isDouble) => isDouble ? _th : _tw;
 
   @override
   Widget build(BuildContext context) {
@@ -418,7 +370,6 @@ class DominoChainBoard extends StatelessWidget {
   Widget _buildSnake(double availWidth) {
     final rowW = availWidth - _hPad * 2;
 
-    // Split chain into rows that fit within rowW.
     final rows = <List<DominoChainEntry>>[];
     var current = <DominoChainEntry>[];
     var curW = 0.0;
@@ -459,7 +410,6 @@ class DominoChainBoard extends StatelessWidget {
     double rowW,
     bool single,
   ) {
-    // Even rows: left → right.  Odd rows: right → left (reversed display).
     final isLTR = idx.isEven;
     final ordered = isLTR ? rowTiles : rowTiles.reversed.toList();
 
@@ -472,7 +422,7 @@ class DominoChainBoard extends StatelessWidget {
           DominoTileWidget(
             left: ordered[i].left,
             right: ordered[i].right,
-            landscape: true, // doubles handled internally
+            landscape: true,
             width: _dw(ordered[i].isDouble),
             height: _dh(ordered[i].isDouble),
           ),
