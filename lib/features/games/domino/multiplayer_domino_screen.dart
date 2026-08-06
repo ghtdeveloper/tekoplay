@@ -82,6 +82,8 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   int _unreadChatCount = 0;
   String? _lastMsgSenderId;
   Timer? _msgBubbleTimer;
+  Timer? _roundEndTimer;
+  int _roundEndCountdown = 15;
   bool _showRoundEndBanner = false;
   bool _showGameOverBanner = false;
   DominoGameMatch? _gameOverGame;
@@ -225,6 +227,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     _turnTimer?.cancel();
     _awayTimer?.cancel();
     _msgBubbleTimer?.cancel();
+    _roundEndTimer?.cancel();
     _chainScrollCtrl.dispose();
     _playerFlyAnimCtrl.dispose();
     _boneyardFlyAnimCtrl.dispose();
@@ -268,6 +271,8 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         return;
       }
 
+      final serverPlayerNum = game.getPlayerNumber(_currentUser!.uid);
+
       if (game.isFinished || game.isAbandoned) {
         _stopTurnTimer();
         setState(() { _currentGame = game; _gameEnded = true; });
@@ -276,10 +281,14 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         return;
       }
 
-      if (game.getPlayerNumber(_currentUser!.uid) == 0) {
+      if (serverPlayerNum == 0) {
         setState(() { _gameEnded = true; });
         if (mounted) Navigator.of(context).pop();
         return;
+      }
+
+      if (serverPlayerNum != _myPlayerNumber) {
+        _myPlayerNumber = serverPlayerNum;
       }
 
       if (_showRoundEndBanner) {
@@ -293,8 +302,19 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
           _roundEndPrevGame = _currentGame;
           _pendingNewGame = game;
           _showRoundEndBanner = true;
+          _roundEndCountdown = 15;
         });
         _stopTurnTimer();
+        _roundEndTimer?.cancel();
+        _roundEndTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (!mounted) { t.cancel(); return; }
+          if (_roundEndCountdown <= 1) {
+            t.cancel();
+            _advanceToNextRound();
+          } else {
+            setState(() => _roundEndCountdown--);
+          }
+        });
         return;
       }
 
@@ -325,6 +345,43 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         if (_isOpponent(game)) _scheduleOpponentTurn(game);
       }
     });
+  }
+
+  void _advanceToNextRound() {
+    _roundEndTimer?.cancel();
+    _roundEndTimer = null;
+    final nextGame = _pendingNewGame;
+    setState(() {
+      _showRoundEndBanner = false;
+      _roundEndPrevGame = null;
+      _pendingNewGame = null;
+      _roundEndCountdown = 15;
+      if (nextGame != null) _currentGame = nextGame;
+    });
+    _autoPassPending = false;
+    if (_currentGame != null) {
+      final game = _currentGame!;
+      final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
+      if (isMyTurn) {
+        final myHand = game.getHand(_myPlayerNumber);
+        final state = game.gameState;
+        if (!state.canPlayAny(myHand) && state.boneyard.isEmpty) {
+          _autoPassPending = true;
+          Future.delayed(const Duration(milliseconds: 800), () {
+            _autoPassPending = false;
+            if (mounted && !_gameEnded) {
+              _showSnack('Sin opciones, pasas automáticamente');
+              _passTurn();
+            }
+          });
+        } else {
+          _startTurnTimer();
+        }
+      } else {
+        _stopTurnTimer();
+        if (_isOpponent(game)) _scheduleOpponentTurn(game);
+      }
+    }
   }
 
   void _startTurnTimer() {
@@ -411,6 +468,41 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
 
     final botHand = game.getHand(botNum);
     final state = game.gameState;
+
+    if (state.chain.isEmpty) {
+      String? tileId;
+      int maxDouble = -1;
+      for (final id in botHand) {
+        final t = state.tiles[id];
+        if (t != null && t['left'] == t['right'] && t['left']! > maxDouble) {
+          maxDouble = t['left']!;
+          tileId = id;
+        }
+      }
+      if (tileId == null && botHand.isNotEmpty) {
+        final shuffled = List<String>.from(botHand)..shuffle(_random);
+        tileId = shuffled.first;
+      }
+      if (tileId == null) {
+        setState(() => _isOpponentThinking = false);
+        return;
+      }
+      _gameService.playTile(
+        gameId: _activeGameId!,
+        playerId: botId,
+        tileId: tileId,
+        side: 'right',
+      ).then((success) {
+        if (mounted) {
+          setState(() => _isOpponentThinking = false);
+          if (!success) _scheduleOpponentTurn(game);
+        }
+      }).catchError((_) {
+        if (mounted) setState(() => _isOpponentThinking = false);
+      });
+      return;
+    }
+
     final playable = botHand.where((id) => state.canPlay(id)).toList();
 
     if (playable.isNotEmpty) {
@@ -419,27 +511,27 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       final tileData = state.tiles[tileId]!;
       final tl = tileData['left']!;
       final tr = tileData['right']!;
-
+      final canLeft = tl == state.leftOpen || tr == state.leftOpen;
+      final canRight = tl == state.rightOpen || tr == state.rightOpen;
       String side;
-      if (state.chain.isEmpty) {
+      if (canLeft && !canRight) {
+        side = 'left';
+      } else if (canRight && !canLeft) {
         side = 'right';
       } else {
-        final canLeft = tl == state.leftOpen || tr == state.leftOpen;
-        final canRight = tl == state.rightOpen || tr == state.rightOpen;
-        if (canLeft && !canRight) {
-          side = 'left';
-        } else if (canRight && !canLeft) {
-          side = 'right';
-        } else {
-          side = _random.nextBool() ? 'left' : 'right';
-        }
+        side = _random.nextBool() ? 'left' : 'right';
       }
       _gameService.playTile(
         gameId: _activeGameId!,
         playerId: botId,
         tileId: tileId,
         side: side,
-      ).then((_) {
+      ).then((success) {
+        if (mounted) {
+          setState(() => _isOpponentThinking = false);
+          if (!success) _scheduleOpponentTurn(game);
+        }
+      }).catchError((_) {
         if (mounted) setState(() => _isOpponentThinking = false);
       });
     } else if (state.boneyard.isNotEmpty) {
@@ -451,12 +543,16 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             _scheduleOpponentTurn(updated);
           }
         }
+      }).catchError((_) {
+        if (mounted) setState(() => _isOpponentThinking = false);
       });
     } else {
       _gameService.passTurn(
         gameId: _activeGameId!,
         playerId: botId,
       ).then((_) {
+        if (mounted) setState(() => _isOpponentThinking = false);
+      }).catchError((_) {
         if (mounted) setState(() => _isOpponentThinking = false);
       });
     }
@@ -1418,19 +1514,19 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final myNewScore = newScores['player$_myPlayerNumber'] ?? 0;
     final iWon = myNewScore > myPrevScore;
 
-    final wasBlocked = prevGame.gameState.consecutivePasses >= prevGame.numberOfPlayers;
-    final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
-    final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
-
     int? roundWinnerNum;
-    if (!wasBlocked) {
-      for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
-        if ((newScores['player$p'] ?? 0) > (prevScores['player$p'] ?? 0)) {
-          roundWinnerNum = p;
-          break;
-        }
+    for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
+      if ((newScores['player$p'] ?? 0) > (prevScores['player$p'] ?? 0)) {
+        roundWinnerNum = p;
+        break;
       }
     }
+
+    final wasBlocked = roundWinnerNum != null &&
+        prevGame.gameState.handOf(roundWinnerNum).isNotEmpty;
+
+    final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
+    final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
 
     final opponentTiles = <({String name, List<({int left, int right})> tiles, int pips})>[];
     for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
@@ -1532,46 +1628,14 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  final nextGame = _pendingNewGame;
-                  setState(() {
-                    _showRoundEndBanner = false;
-                    _roundEndPrevGame = null;
-                    _pendingNewGame = null;
-                    if (nextGame != null) _currentGame = nextGame;
-                  });
-                  _autoPassPending = false;
-                  if (_currentGame != null) {
-                    final game = _currentGame!;
-                    final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
-                    if (isMyTurn) {
-                      final myHand = game.getHand(_myPlayerNumber);
-                      final state = game.gameState;
-                      if (!state.canPlayAny(myHand) && state.boneyard.isEmpty) {
-                        _autoPassPending = true;
-                        Future.delayed(const Duration(milliseconds: 800), () {
-                          _autoPassPending = false;
-                          if (mounted && !_gameEnded) {
-                            _showSnack('Sin opciones, pasas automáticamente');
-                            _passTurn();
-                          }
-                        });
-                      } else {
-                        _startTurnTimer();
-                      }
-                    } else {
-                      _stopTurnTimer();
-                      if (_isOpponent(game)) _scheduleOpponentTurn(game);
-                    }
-                  }
-                },
+                onPressed: _advanceToNextRound,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accentOrange,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 9),
                 ),
-                child: const Text('Siguiente ronda', style: TextStyle(fontSize: 13)),
+                child: Text('Siguiente ronda ($_roundEndCountdown)', style: const TextStyle(fontSize: 13)),
               ),
             ),
           ],

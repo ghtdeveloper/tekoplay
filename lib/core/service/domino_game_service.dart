@@ -67,59 +67,82 @@ class DominoGameService {
   }) async {
     try {
       final gameRef = _firestore.collection(_collection).doc(gameId);
-      final doc = await gameRef.get();
-      if (!doc.exists) return false;
 
-      final game = DominoGameMatch.fromFirestore(doc);
-      if (game.status != 'waiting') return false;
-      if (game.hostId == guestId) return false;
-      if (game.guestId == guestId || game.guest2Id == guestId || game.guest3Id == guestId) return false;
+      final joinResult = await _firestore.runTransaction<Map<String, dynamic>?>((transaction) async {
+        final doc = await transaction.get(gameRef);
+        if (!doc.exists) return null;
 
-      // Find next available slot
-      final Map<String, dynamic> updates = {};
-      if (game.guestId == null) {
-        updates['guestId'] = guestId;
-        updates['guestName'] = guestName;
-        updates['guestPhotoUrl'] = guestPhotoUrl;
-        updates['guestQuota'] = game.betAmount;
-      } else if (game.numberOfPlayers >= 3 && game.guest2Id == null) {
-        updates['guest2Id'] = guestId;
-        updates['guest2Name'] = guestName;
-      } else if (game.numberOfPlayers >= 4 && game.guest3Id == null) {
-        updates['guest3Id'] = guestId;
-        updates['guest3Name'] = guestName;
-      } else {
-        return false; // no slot available
-      }
+        final game = DominoGameMatch.fromFirestore(doc);
+        if (game.status != 'waiting') return null;
+        if (game.hostId == guestId) return null;
+        if (game.guestId == guestId || game.guest2Id == guestId || game.guest3Id == guestId) return null;
 
-      final newPlayerCount = game.currentPlayerCount + 1;
-      final willBeActive = newPlayerCount >= game.numberOfPlayers;
-      if (willBeActive) {
-        updates['status'] = 'active';
-        updates['startedAt'] = FieldValue.serverTimestamp();
-      }
+        final Map<String, dynamic> updates = {};
+        bool isGuestSlot = false;
+        if (game.guestId == null) {
+          updates['guestId'] = guestId;
+          updates['guestName'] = guestName;
+          updates['guestPhotoUrl'] = guestPhotoUrl;
+          updates['guestQuota'] = game.betAmount;
+          isGuestSlot = true;
+        } else if (game.numberOfPlayers >= 3 && game.guest2Id == null) {
+          updates['guest2Id'] = guestId;
+          updates['guest2Name'] = guestName;
+        } else if (game.numberOfPlayers >= 4 && game.guest3Id == null) {
+          updates['guest3Id'] = guestId;
+          updates['guest3Name'] = guestName;
+        } else {
+          return null;
+        }
 
-      await gameRef.update(updates);
+        final newPlayerCount = game.currentPlayerCount + 1;
+        final willBeActive = newPlayerCount >= game.numberOfPlayers;
+        if (willBeActive) {
+          updates['status'] = 'active';
+          updates['startedAt'] = FieldValue.serverTimestamp();
+        }
 
-      // game.guestId is null in the OLD snapshot when the first guest joins,
-      // so use updates.containsKey('guestId') to detect a 2-player game activation.
-      if (willBeActive && (game.betAmount ?? 0) > 0 && updates.containsKey('guestId')) {
+        transaction.update(gameRef, updates);
+        return {
+          'willBeActive': willBeActive,
+          'isGuestSlot': isGuestSlot,
+          'hostId': game.hostId,
+          'betAmount': game.betAmount,
+          'currencyType': game.currencyType,
+        };
+      });
+
+      if (joinResult == null) return false;
+
+      final willBeActive = joinResult['willBeActive'] as bool;
+      final isGuestSlot = joinResult['isGuestSlot'] as bool;
+      final betAmount = joinResult['betAmount'] as int?;
+
+      if (willBeActive && (betAmount ?? 0) > 0 && isGuestSlot) {
         final quotaService = GameQuotaService();
         final result = await quotaService.collectQuotas(
           gameId: gameId,
-          hostId: game.hostId,
+          hostId: joinResult['hostId'] as String,
           guestId: guestId,
-          quotaAmount: game.betAmount!,
-          currencyType: game.currencyType,
+          quotaAmount: betAmount!,
+          currencyType: joinResult['currencyType'] as String,
           collectionName: _collection,
         );
         if (result['success'] != true) {
-          // Rollback
-          final rollback = <String, dynamic>{'status': 'waiting', 'startedAt': null};
-          if (updates.containsKey('guestId')) { rollback['guestId'] = null; rollback['guestName'] = null; rollback['guestPhotoUrl'] = null; rollback['guestQuota'] = null; }
-          if (updates.containsKey('guest2Id')) { rollback['guest2Id'] = null; rollback['guest2Name'] = null; }
-          if (updates.containsKey('guest3Id')) { rollback['guest3Id'] = null; rollback['guest3Name'] = null; }
-          await gameRef.update(rollback);
+          await _firestore.runTransaction((transaction) async {
+            final doc = await transaction.get(gameRef);
+            if (!doc.exists) return;
+            final g = DominoGameMatch.fromFirestore(doc);
+            if (g.guestId != guestId) return;
+            transaction.update(gameRef, {
+              'status': 'waiting',
+              'startedAt': null,
+              'guestId': null,
+              'guestName': null,
+              'guestPhotoUrl': null,
+              'guestQuota': null,
+            });
+          });
           return false;
         }
       }
@@ -133,22 +156,26 @@ class DominoGameService {
 
   Future<bool> addBotAndStart(String gameId) async {
     try {
-      final gameRef = _firestore.collection(_collection).doc(gameId);
-      final doc = await gameRef.get();
-      if (!doc.exists) return false;
-
-      final game = DominoGameMatch.fromFirestore(doc);
-      if (game.status != 'waiting') return false;
-
       final profile = await BotNameService.pickUnseenProfile(_random);
-      await gameRef.update({
-        'guestId': 'bot_1',
-        'guestName': profile['name'],
-        'guestPhotoUrl': null,
-        'status': 'active',
-        'startedAt': FieldValue.serverTimestamp(),
+      final gameRef = _firestore.collection(_collection).doc(gameId);
+
+      return await _firestore.runTransaction<bool>((transaction) async {
+        final doc = await transaction.get(gameRef);
+        if (!doc.exists) return false;
+
+        final game = DominoGameMatch.fromFirestore(doc);
+        if (game.status != 'waiting') return false;
+        if (game.guestId != null) return false;
+
+        transaction.update(gameRef, {
+          'guestId': 'bot_1',
+          'guestName': profile['name'],
+          'guestPhotoUrl': null,
+          'status': 'active',
+          'startedAt': FieldValue.serverTimestamp(),
+        });
+        return true;
       });
-      return true;
     } catch (e) {
       if (kDebugMode) print('Error adding bot: $e');
       return false;
@@ -457,10 +484,6 @@ class DominoGameService {
     required String playerId,
   }) async {
     try {
-      // Pre-fetch bot profile outside transaction (async)
-      final botProfile = await BotNameService.pickUnseenProfile(_random);
-      final botName = botProfile['name'] as String;
-
       final gameRef = _firestore.collection(_collection).doc(gameId);
       return await _firestore.runTransaction<bool>((transaction) async {
         final doc = await transaction.get(gameRef);
@@ -472,7 +495,6 @@ class DominoGameService {
         final playerNum = game.getPlayerNumber(playerId);
         if (playerNum == 0) return false;
 
-        // 2-player game: end game, other player wins (original behavior)
         if (game.numberOfPlayers == 2) {
           final winnerId = game.hostId == playerId ? game.guestId : game.hostId;
           transaction.update(gameRef, {
@@ -485,32 +507,39 @@ class DominoGameService {
           return true;
         }
 
-        // 3-4 player game: replace leaving player with a bot
+        if ((game.betAmount ?? 0) > 0) {
+          final userRef = _firestore.collection('users').doc(playerId);
+          final userDoc = await transaction.get(userRef);
+          if (userDoc.exists) {
+            final userData = userDoc.data()!;
+            final currentBalance = game.currencyType == 'coins'
+                ? (userData['coins'] as num? ?? 0).toInt()
+                : (userData['diamonds'] as num? ?? 0).toInt();
+            final newBalance = (currentBalance - game.betAmount!).clamp(0, currentBalance);
+            transaction.update(userRef, {game.currencyType: newBalance});
+          }
+        }
+
         final botId = 'bot_$playerNum';
         final updates = <String, dynamic>{};
 
         switch (playerNum) {
           case 1:
             updates['hostId'] = botId;
-            updates['hostName'] = botName;
             updates['hostPhotoUrl'] = null;
             break;
           case 2:
             updates['guestId'] = botId;
-            updates['guestName'] = botName;
             updates['guestPhotoUrl'] = null;
             break;
           case 3:
             updates['guest2Id'] = botId;
-            updates['guest2Name'] = botName;
             break;
           case 4:
             updates['guest3Id'] = botId;
-            updates['guest3Name'] = botName;
             break;
         }
 
-        // If it was the leaving player's turn, advance to next
         if (game.currentTurn == 'player$playerNum') {
           updates['currentTurn'] = game.nextTurnAfter(game.currentTurn);
         }

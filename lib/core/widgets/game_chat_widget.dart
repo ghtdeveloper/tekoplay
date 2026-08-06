@@ -39,6 +39,12 @@ class GameChatWidgetState extends State<GameChatWidget>
   late final AnimationController _animController;
   late final Animation<Offset> _slideAnimation;
 
+  String? _ownBubbleText;
+  String? _otherBubbleText;
+  String? _otherBubbleName;
+  Timer? _ownBubbleTimer;
+  Timer? _otherBubbleTimer;
+
   @override
   void initState() {
     super.initState();
@@ -69,8 +75,10 @@ class GameChatWidgetState extends State<GameChatWidget>
       });
       if (messages.length > hadMessages) {
         for (int i = hadMessages; i < messages.length; i++) {
-          if (messages[i].senderId != widget.currentUserId) {
-            widget.onNewMessageFromOther?.call(messages[i].senderId, messages[i].senderName);
+          final msg = messages[i];
+          if (msg.senderId != widget.currentUserId) {
+            widget.onNewMessageFromOther?.call(msg.senderId, msg.senderName);
+            _showOtherBubble(msg.text, msg.senderName);
           }
         }
       }
@@ -84,8 +92,33 @@ class GameChatWidgetState extends State<GameChatWidget>
     _textController.dispose();
     _scrollController.dispose();
     _animController.dispose();
+    _ownBubbleTimer?.cancel();
+    _otherBubbleTimer?.cancel();
     super.dispose();
   }
+
+  void _showOwnBubble(String text) {
+    if (_isOpen) return;
+    _ownBubbleTimer?.cancel();
+    setState(() => _ownBubbleText = text);
+    _ownBubbleTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _ownBubbleText = null);
+    });
+  }
+
+  void _showOtherBubble(String text, String senderName) {
+    if (_isOpen) return;
+    _otherBubbleTimer?.cancel();
+    setState(() {
+      _otherBubbleText = text;
+      _otherBubbleName = senderName;
+    });
+    _otherBubbleTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() { _otherBubbleText = null; _otherBubbleName = null; });
+    });
+  }
+
+  // ---- Chat panel ----
 
   void toggleChat() {
     setState(() {
@@ -95,6 +128,9 @@ class GameChatWidgetState extends State<GameChatWidget>
         widget.onUnreadCountChanged?.call(0);
         _animController.forward();
         _scrollToBottom();
+        _ownBubbleText = null;
+        _otherBubbleText = null;
+        _otherBubbleName = null;
       } else {
         _animController.reverse();
       }
@@ -134,12 +170,36 @@ class GameChatWidgetState extends State<GameChatWidget>
       text: text,
     );
     _textController.clear();
+    _showOwnBubble(text);
   }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
+        if (_otherBubbleText != null)
+          Positioned(
+            top: 56,
+            left: 12,
+            child: _buildBubble(
+              key: ValueKey('other:$_otherBubbleText:$_otherBubbleName'),
+              text: _otherBubbleText!,
+              name: _otherBubbleName,
+              isMe: false,
+            ),
+          ),
+        if (_ownBubbleText != null)
+          Positioned(
+            bottom: 130,
+            right: 12,
+            child: _buildBubble(
+              key: ValueKey('own:$_ownBubbleText'),
+              text: _ownBubbleText!,
+              name: null,
+              isMe: true,
+            ),
+          ),
+
         if (_isOpen || _animController.isAnimating)
           Positioned(
             right: 0,
@@ -154,7 +214,6 @@ class GameChatWidgetState extends State<GameChatWidget>
                 child: SafeArea(
                   child: Column(
                     children: [
-                      // Header
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
@@ -208,7 +267,6 @@ class GameChatWidgetState extends State<GameChatWidget>
                                 },
                               ),
                       ),
-                      // Emojis rápidos
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: const BoxDecoration(
@@ -232,6 +290,7 @@ class GameChatWidgetState extends State<GameChatWidget>
                                     senderName: widget.currentUserName,
                                     text: emoji,
                                   );
+                                  _showOwnBubble(emoji);
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -242,7 +301,6 @@ class GameChatWidgetState extends State<GameChatWidget>
                           ),
                         ),
                       ),
-                      // Input de texto
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: const BoxDecoration(
@@ -294,6 +352,82 @@ class GameChatWidgetState extends State<GameChatWidget>
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildBubble({
+    required Key key,
+    required String text,
+    required String? name,
+    required bool isMe,
+  }) {
+    final bool isEmoji = text.characters.length <= 3 &&
+        !text.contains(RegExp(r'[a-zA-Z0-9]'));
+
+    return TweenAnimationBuilder<double>(
+      key: key,
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutBack,
+      builder: (_, v, child) => Transform.scale(
+        scale: v.clamp(0.0, 1.0),
+        alignment: isMe ? Alignment.bottomRight : Alignment.topLeft,
+        child: child,
+      ),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 190),
+        padding: EdgeInsets.symmetric(
+          horizontal: isEmoji ? 10 : 12,
+          vertical: isEmoji ? 6 : 8,
+        ),
+        decoration: BoxDecoration(
+          color: isMe
+              ? const Color(0xFFF57F17)
+              : Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft:
+                isMe ? const Radius.circular(16) : const Radius.circular(3),
+            bottomRight:
+                isMe ? const Radius.circular(3) : const Radius.circular(16),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black45,
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment:
+              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (!isMe && name != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    color: Color(0xFFF57F17),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            Text(
+              text,
+              style: TextStyle(
+                color: isMe ? Colors.white : Colors.black87,
+                fontSize: isEmoji ? 30 : 13,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
