@@ -81,7 +81,10 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   bool _isScreenKeepOnActive = false;
   int _unreadChatCount = 0;
   String? _lastMsgSenderId;
+  String? _lastMsgText;
+  String? _ownMsgText;
   Timer? _msgBubbleTimer;
+  Timer? _ownMsgBubbleTimer;
   Timer? _roundEndTimer;
   int _roundEndCountdown = 15;
   bool _showRoundEndBanner = false;
@@ -89,6 +92,8 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   DominoGameMatch? _gameOverGame;
   DominoGameMatch? _pendingNewGame;
   DominoGameMatch? _roundEndPrevGame;
+  int? _roundWinnerNum;
+  bool _roundWasBlocked = false;
   final ScrollController _chainScrollCtrl = ScrollController();
 
   Timer? _turnTimer;
@@ -227,6 +232,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     _turnTimer?.cancel();
     _awayTimer?.cancel();
     _msgBubbleTimer?.cancel();
+    _ownMsgBubbleTimer?.cancel();
     _roundEndTimer?.cancel();
     _chainScrollCtrl.dispose();
     _playerFlyAnimCtrl.dispose();
@@ -298,11 +304,23 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
 
       final prevRound = _currentGame?.gameState.roundNumber;
       if (prevRound != null && game.gameState.roundNumber > prevRound) {
+        final prevScoresNow = _currentGame!.getPlayerScores();
+        final newScoresNow = game.getPlayerScores();
+        int? detectedWinner;
+        for (int p = 1; p <= game.numberOfPlayers; p++) {
+          if ((newScoresNow['player$p'] ?? 0) > (prevScoresNow['player$p'] ?? 0)) {
+            detectedWinner = p;
+            break;
+          }
+        }
+        final wasBlockedNow = _currentGame!.gameState.consecutivePasses >= _currentGame!.numberOfPlayers - 1;
         setState(() {
           _roundEndPrevGame = _currentGame;
           _pendingNewGame = game;
           _showRoundEndBanner = true;
           _roundEndCountdown = 15;
+          _roundWinnerNum = detectedWinner;
+          _roundWasBlocked = wasBlockedNow;
         });
         _stopTurnTimer();
         _roundEndTimer?.cancel();
@@ -318,7 +336,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         return;
       }
 
-      setState(() => _currentGame = game);
+      setState(() { _currentGame = game; _isDrawing = false; });
 
       final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
       if (isMyTurn) {
@@ -356,6 +374,8 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       _roundEndPrevGame = null;
       _pendingNewGame = null;
       _roundEndCountdown = 15;
+      _roundWinnerNum = null;
+      _roundWasBlocked = false;
       if (nextGame != null) _currentGame = nextGame;
     });
     _autoPassPending = false;
@@ -458,13 +478,29 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     });
   }
 
+  void _onBotActionDone({bool success = true, required DominoGameMatch fallback}) {
+    if (!mounted) return;
+    setState(() => _isOpponentThinking = false);
+    final latest = _lastServerGame ?? _currentGame ?? fallback;
+    if (latest.isPlayerTurn(_currentUser!.uid)) return;
+    if (_isOpponent(latest)) {
+      _scheduleOpponentTurn(latest);
+    }
+  }
+
   void _makeBotMove(DominoGameMatch snapshot) {
     if (!mounted) return;
     final game = _lastServerGame ?? snapshot;
     final botNum = int.tryParse(game.currentTurn.replaceAll('player', '')) ?? 0;
-    if (botNum == 0) return;
+    if (botNum == 0) {
+      setState(() => _isOpponentThinking = false);
+      return;
+    }
     final botId = game.playerIdOf(botNum);
-    if (botId == null || !botId.startsWith('bot_')) return;
+    if (botId == null || !botId.startsWith('bot_')) {
+      setState(() => _isOpponentThinking = false);
+      return;
+    }
 
     final botHand = game.getHand(botNum);
     final state = game.gameState;
@@ -493,12 +529,9 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         tileId: tileId,
         side: 'right',
       ).then((success) {
-        if (mounted) {
-          setState(() => _isOpponentThinking = false);
-          if (!success) _scheduleOpponentTurn(game);
-        }
+        _onBotActionDone(success: success, fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
       return;
     }
@@ -527,33 +560,24 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         tileId: tileId,
         side: side,
       ).then((success) {
-        if (mounted) {
-          setState(() => _isOpponentThinking = false);
-          if (!success) _scheduleOpponentTurn(game);
-        }
+        _onBotActionDone(success: success, fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
     } else if (state.boneyard.isNotEmpty) {
       _gameService.drawFromBoneyard(gameId: _activeGameId!, playerId: botId).then((_) {
-        if (mounted) {
-          setState(() => _isOpponentThinking = false);
-          final updated = _currentGame;
-          if (updated != null && !updated.isPlayerTurn(_currentUser!.uid)) {
-            _scheduleOpponentTurn(updated);
-          }
-        }
+        _onBotActionDone(fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
     } else {
       _gameService.passTurn(
         gameId: _activeGameId!,
         playerId: botId,
       ).then((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
     }
   }
@@ -776,11 +800,12 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     setState(() => _boneyardFlyActive = false);
 
     try {
-      await _gameService.drawFromBoneyard(
+      final ok = await _gameService.drawFromBoneyard(
         gameId: _activeGameId!,
         playerId: _currentUser!.uid,
       );
-    } finally {
+      if (!ok && mounted) setState(() => _isDrawing = false);
+    } catch (_) {
       if (mounted) setState(() => _isDrawing = false);
     }
   }
@@ -920,6 +945,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                 collectionName: 'domino_games',
                 currentUserId: _currentUser?.uid ?? '',
                 currentUserName: _currentUser?.displayName ?? 'Jugador',
+                showFloatingBubbles: false,
                 onUnreadCountChanged: (count) {
                   if (mounted) setState(() => _unreadChatCount = count);
                 },
@@ -929,6 +955,25 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                   _msgBubbleTimer?.cancel();
                   _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
                     if (mounted) setState(() => _lastMsgSenderId = null);
+                  });
+                },
+                onNewMessageWithText: (senderId, _, text) {
+                  if (!mounted) return;
+                  setState(() {
+                    _lastMsgSenderId = senderId;
+                    _lastMsgText = text;
+                  });
+                  _msgBubbleTimer?.cancel();
+                  _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() { _lastMsgSenderId = null; _lastMsgText = null; });
+                  });
+                },
+                onOwnMessageSent: (text) {
+                  if (!mounted) return;
+                  setState(() => _ownMsgText = text);
+                  _ownMsgBubbleTimer?.cancel();
+                  _ownMsgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() => _ownMsgText = null);
                   });
                 },
               ),
@@ -1441,10 +1486,11 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     for (final p in rotationOrder.reversed) {
       final pid = game.playerIdOf(p);
       final isBot = pid != null && pid.startsWith('bot_');
+      final isRoundWinner = _showRoundEndBanner && !_roundWasBlocked && p == _roundWinnerNum;
       opponents.add((
         playerNum: p,
         name: game.playerNameOf(p),
-        handCount: game.gameState.handOf(p).length,
+        handCount: isRoundWinner ? 0 : game.gameState.handOf(p).length,
         score: scores['player$p'] ?? 0,
         isActive: game.currentTurn == 'player$p',
         photoUrl: isBot ? null : (p == 1 ? game.hostPhotoUrl : p == 2 ? game.guestPhotoUrl : null),
@@ -1457,7 +1503,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         children: [
           Column(
             children: [
-              _buildLandscapeHeader(opponents: opponents, activeSpeakerId: _lastMsgSenderId),
+              _buildLandscapeHeader(opponents: opponents, activeSpeakerId: _lastMsgSenderId, activeSpeakerText: _lastMsgText),
               _buildChainArea(state, canDraw: canDraw),
               _buildLandscapeFooter(
                 hand: myHand,
@@ -1473,6 +1519,12 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
             bottom: 92.0 + (state.boneyard.isNotEmpty ? 54 : 0) + 10,
             child: _buildMyPanel(isMyTurn, myScore),
           ),
+          if (_ownMsgText != null)
+            Positioned(
+              right: 12,
+              bottom: 92.0 + (state.boneyard.isNotEmpty ? 54 : 0) + 10,
+              child: _buildChatBubble(_ownMsgText!, isMe: true),
+            ),
           if (_showRoundEndBanner) _buildRoundEndOverlay(),
           if (_showGameOverBanner && _gameOverGame != null) _buildGameOverOverlay(_gameOverGame!),
           if (_flyingTileData != null) _buildPlayerFlyOverlay(),
@@ -1514,16 +1566,8 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final myNewScore = newScores['player$_myPlayerNumber'] ?? 0;
     final iWon = myNewScore > myPrevScore;
 
-    int? roundWinnerNum;
-    for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
-      if ((newScores['player$p'] ?? 0) > (prevScores['player$p'] ?? 0)) {
-        roundWinnerNum = p;
-        break;
-      }
-    }
-
-    final wasBlocked = roundWinnerNum != null &&
-        prevGame.gameState.handOf(roundWinnerNum).isNotEmpty;
+    final roundWinnerNum = _roundWinnerNum;
+    final wasBlocked = _roundWasBlocked;
 
     final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
     final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
@@ -1682,7 +1726,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
                 () {
                   final bet = game.betAmount!;
                   final commission = game.currencyType == 'diamonds' ? 0.10 : 0.30;
-                  final prize = ((bet * 2) * (1 - commission)).floor();
+                  final prize = ((bet * game.numberOfPlayers) * (1 - commission)).floor();
                   return iWon ? '+$prize ${game.currencyType}' : '-$bet ${game.currencyType}';
                 }(),
                 style: TextStyle(
@@ -1757,9 +1801,39 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     );
   }
 
+  Widget _buildChatBubble(String text, {required bool isMe}) {
+    final isEmoji = text.characters.length <= 3 && !text.contains(RegExp(r'[a-zA-Z0-9]'));
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('bubble_${isMe ? 'me' : 'other'}_$text'),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutBack,
+      builder: (_, v, child) => Transform.scale(scale: v.clamp(0.0, 1.0), child: child),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 150),
+        padding: EdgeInsets.symmetric(horizontal: isEmoji ? 6 : 10, vertical: isEmoji ? 4 : 6),
+        decoration: BoxDecoration(
+          color: isMe ? const Color(0xFFF57F17) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: isEmoji ? 28 : 13,
+            color: isMe ? Colors.white : Colors.black87,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   Widget _buildLandscapeHeader({
     required List<({int playerNum, String name, int handCount, int score, bool isActive, String? photoUrl, String? playerId})> opponents,
     String? activeSpeakerId,
+    String? activeSpeakerText,
   }) {
     final tileW = opponents.length > 1 ? 16.0 : 20.0;
     final tileH = opponents.length > 1 ? 30.0 : 38.0;
@@ -1768,57 +1842,80 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       height: 80,
       color: _panelColor,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      clipBehavior: Clip.none,
       child: Row(
         children: opponents.map((opp) {
           final isSpeaking = activeSpeakerId != null && opp.playerId == activeSpeakerId;
+          final bubbleText = isSpeaking ? activeSpeakerText : null;
           return Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: opp.isActive ? Colors.white12 : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-                border: opp.isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Fila superior: icono + nombre + burbuja chat
-                  Row(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: opp.isActive ? Colors.white12 : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: opp.isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.person_outline, color: Colors.white70, size: 16),
-                      const SizedBox(width: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.person_outline, color: Colors.white70, size: 16),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              opp.name,
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          if (isSpeaking && bubbleText == null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Icon(Icons.chat_bubble, color: Colors.green, size: 12),
+                            ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: opp.score > 0 ? _accentOrange : Colors.white24,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${opp.score}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       Expanded(
-                        child: Text(
-                          opp.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: List.generate(
+                            opp.handCount,
+                            (_) => Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: _buildFaceDown(width: tileW, height: tileH),
+                            ),
+                          ),
                         ),
                       ),
-                      if (isSpeaking)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Icon(Icons.chat_bubble, color: Colors.green, size: 12),
-                        ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  // Fila inferior: fichas boca abajo
-                  Expanded(
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: List.generate(
-                        opp.handCount,
-                        (_) => Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: _buildFaceDown(width: tileW, height: tileH),
-                        ),
-                      ),
-                    ),
+                ),
+                if (bubbleText != null)
+                  Positioned(
+                    bottom: -28,
+                    left: 8,
+                    child: _buildChatBubble(bubbleText, isMe: false),
                   ),
-                ],
-              ),
+              ],
             ),
           );
         }).toList(),
@@ -1847,19 +1944,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Row(
         children: [
-          SizedBox(
-            width: 76,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _mpInfoChip('Pozo: ${state.boneyard.length}'),
-                const SizedBox(height: 3),
-                if (state.chain.isNotEmpty) _mpInfoChip('${state.leftOpen ?? '-'} ↔ ${state.rightOpen ?? '-'}'),
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
           Expanded(child: _buildPlayerArea(hand, state, isMyTurn)),
           if (isMyTurn && canPass) ...[
             const SizedBox(width: 4),
@@ -1872,12 +1956,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       ),
     );
   }
-
-  Widget _mpInfoChip(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(6)),
-        child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 10)),
-      );
 
   Widget _mpActionBtn(String label, IconData icon, Color color, VoidCallback onTap) =>
       SizedBox(

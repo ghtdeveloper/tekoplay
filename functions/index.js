@@ -847,13 +847,17 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
 
     const hostId      = afterData.hostId;
     const guestId     = afterData.guestId;
+    const guest2Id    = afterData.guest2Id || null;
+    const guest3Id    = afterData.guest3Id || null;
     const winnerId    = afterData.winnerId;
     const abandonedBy = afterData.abandonedBy;
+    const numberOfPlayers = afterData.numberOfPlayers || 2;
 
-    const realPlayerIds = [hostId, guestId].filter(id => id && !String(id).startsWith('bot_'));
+    const allPlayerIds = [hostId, guestId, guest2Id, guest3Id].filter(id => !!id);
+    const realPlayerIds = allPlayerIds.filter(id => !String(id).startsWith('bot_'));
 
-    if (realPlayerIds.length < 2) {
-      console.log(`❌ [Domino ${gameId}] Menos de 2 jugadores reales (SALIENDO)\n`);
+    if (realPlayerIds.length === 0) {
+      console.log(`❌ [Domino ${gameId}] Sin jugadores reales (SALIENDO)\n`);
       return null;
     }
 
@@ -882,7 +886,7 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
 
         const isCoins   = currencyType === 'coins';
         const isBetMode = !isCoins && betAmount > 0;
-        const totalPot  = betAmount * 2;
+        const totalPot  = betAmount * numberOfPlayers;
         const commissionRate = isBetMode ? 0.10 : 0.30;
         const winnerPrize    = Math.floor(totalPot * (1 - commissionRate));
         const houseCommission = totalPot - winnerPrize;
@@ -890,7 +894,7 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
         console.log(`💵 [Domino] bet:${betAmount} | totalPot:${totalPot} | winner:${winnerPrize} | casa:${houseCommission}`);
 
         const effectiveWinnerId = gameJustAbandoned
-          ? (abandonedBy === hostId ? guestId : hostId)
+          ? (currentGameData.winnerId || (abandonedBy === hostId ? guestId : hostId))
           : winnerId;
 
         if (!realPlayerIds.includes(effectiveWinnerId)) {

@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/domino_game_match.dart';
 import 'bot_name_service.dart';
-import 'game_quota_service.dart';
 
 class DominoGameService {
   static final DominoGameService _instance = DominoGameService._internal();
@@ -78,19 +77,21 @@ class DominoGameService {
         if (game.guestId == guestId || game.guest2Id == guestId || game.guest3Id == guestId) return null;
 
         final Map<String, dynamic> updates = {};
-        bool isGuestSlot = false;
+        String slotField;
         if (game.guestId == null) {
           updates['guestId'] = guestId;
           updates['guestName'] = guestName;
           updates['guestPhotoUrl'] = guestPhotoUrl;
           updates['guestQuota'] = game.betAmount;
-          isGuestSlot = true;
+          slotField = 'guestId';
         } else if (game.numberOfPlayers >= 3 && game.guest2Id == null) {
           updates['guest2Id'] = guestId;
           updates['guest2Name'] = guestName;
+          slotField = 'guest2Id';
         } else if (game.numberOfPlayers >= 4 && game.guest3Id == null) {
           updates['guest3Id'] = guestId;
           updates['guest3Name'] = guestName;
+          slotField = 'guest3Id';
         } else {
           return null;
         }
@@ -105,7 +106,7 @@ class DominoGameService {
         transaction.update(gameRef, updates);
         return {
           'willBeActive': willBeActive,
-          'isGuestSlot': isGuestSlot,
+          'slotField': slotField,
           'hostId': game.hostId,
           'betAmount': game.betAmount,
           'currencyType': game.currencyType,
@@ -115,33 +116,74 @@ class DominoGameService {
       if (joinResult == null) return false;
 
       final willBeActive = joinResult['willBeActive'] as bool;
-      final isGuestSlot = joinResult['isGuestSlot'] as bool;
       final betAmount = joinResult['betAmount'] as int?;
+      final currencyType = joinResult['currencyType'] as String;
+      final slotField = joinResult['slotField'] as String;
 
-      if (willBeActive && (betAmount ?? 0) > 0 && isGuestSlot) {
-        final quotaService = GameQuotaService();
-        final result = await quotaService.collectQuotas(
-          gameId: gameId,
-          hostId: joinResult['hostId'] as String,
-          guestId: guestId,
-          quotaAmount: betAmount!,
-          currencyType: joinResult['currencyType'] as String,
-          collectionName: _collection,
-        );
-        if (result['success'] != true) {
+      if (willBeActive && (betAmount ?? 0) > 0) {
+        try {
+          await _firestore.runTransaction((transaction) async {
+            final doc = await transaction.get(gameRef);
+            if (!doc.exists) throw Exception('Game not found');
+            final game = DominoGameMatch.fromFirestore(doc);
+            if (game.quotasCollected) {
+              if (kDebugMode) print('⚠️ Quotas already collected (idempotent)');
+              return;
+            }
+
+            final playerIds = <String>[
+              game.hostId,
+              if (game.guestId != null && !game.guestId!.startsWith('bot_')) game.guestId!,
+              if (game.guest2Id != null && !game.guest2Id!.startsWith('bot_')) game.guest2Id!,
+              if (game.guest3Id != null && !game.guest3Id!.startsWith('bot_')) game.guest3Id!,
+            ];
+
+            final field = currencyType == 'coins' ? 'coins' : 'diamonds';
+
+            final playerDocs = <DocumentSnapshot>[];
+            for (final pid in playerIds) {
+              playerDocs.add(await transaction.get(_firestore.collection('users').doc(pid)));
+            }
+
+            for (int i = 0; i < playerIds.length; i++) {
+              final data = playerDocs[i].data() as Map<String, dynamic>?;
+              final balance = data?[field] ?? 0;
+              if (balance < betAmount!) {
+                throw Exception('Player ${playerIds[i]} has insufficient funds');
+              }
+            }
+
+            for (int i = 0; i < playerIds.length; i++) {
+              transaction.update(playerDocs[i].reference, {
+                field: FieldValue.increment(-betAmount!),
+              });
+            }
+
+            transaction.update(gameRef, {
+              'quotasCollected': true,
+              'quotasCollectedAt': FieldValue.serverTimestamp(),
+              'totalPot': betAmount! * playerIds.length,
+            });
+          });
+        } catch (e) {
+          if (kDebugMode) print('💥 Error collecting quotas: $e');
           await _firestore.runTransaction((transaction) async {
             final doc = await transaction.get(gameRef);
             if (!doc.exists) return;
-            final g = DominoGameMatch.fromFirestore(doc);
-            if (g.guestId != guestId) return;
-            transaction.update(gameRef, {
+            final slotValue = doc.data()?[slotField];
+            if (slotValue != guestId) return;
+
+            final rollbackUpdates = <String, dynamic>{
               'status': 'waiting',
               'startedAt': null,
-              'guestId': null,
-              'guestName': null,
-              'guestPhotoUrl': null,
-              'guestQuota': null,
-            });
+              slotField: null,
+              '${slotField.replaceAll('Id', 'Name')}': null,
+            };
+            if (slotField == 'guestId') {
+              rollbackUpdates['guestPhotoUrl'] = null;
+              rollbackUpdates['guestQuota'] = null;
+            }
+            transaction.update(gameRef, rollbackUpdates);
           });
           return false;
         }
@@ -178,6 +220,59 @@ class DominoGameService {
       });
     } catch (e) {
       if (kDebugMode) print('Error adding bot: $e');
+      return false;
+    }
+  }
+
+
+  Future<bool> fillRemainingWithBots(String gameId) async {
+    try {
+      final profiles = <Map<String, dynamic>>[];
+      for (int i = 0; i < 3; i++) {
+        profiles.add(await BotNameService.pickUnseenProfile(_random));
+      }
+
+      final gameRef = _firestore.collection(_collection).doc(gameId);
+
+      return await _firestore.runTransaction<bool>((transaction) async {
+        final doc = await transaction.get(gameRef);
+        if (!doc.exists) return false;
+
+        final game = DominoGameMatch.fromFirestore(doc);
+        if (game.status != 'waiting') return false;
+
+        final updates = <String, dynamic>{};
+        int botIndex = 1;
+        int profileIdx = 0;
+
+        if (game.guestId == null) {
+          updates['guestId'] = 'bot_$botIndex';
+          updates['guestName'] = profiles[profileIdx]['name'];
+          updates['guestPhotoUrl'] = null;
+          botIndex++;
+          profileIdx++;
+        }
+        if (game.numberOfPlayers >= 3 && game.guest2Id == null) {
+          updates['guest2Id'] = 'bot_$botIndex';
+          updates['guest2Name'] = profiles[profileIdx]['name'];
+          botIndex++;
+          profileIdx++;
+        }
+        if (game.numberOfPlayers >= 4 && game.guest3Id == null) {
+          updates['guest3Id'] = 'bot_$botIndex';
+          updates['guest3Name'] = profiles[profileIdx]['name'];
+          botIndex++;
+        }
+
+        if (updates.isEmpty) return false;
+
+        updates['status'] = 'active';
+        updates['startedAt'] = FieldValue.serverTimestamp();
+        transaction.update(gameRef, updates);
+        return true;
+      });
+    } catch (e) {
+      if (kDebugMode) print('Error filling bots: $e');
       return false;
     }
   }
@@ -507,7 +602,21 @@ class DominoGameService {
           return true;
         }
 
-        if ((game.betAmount ?? 0) > 0) {
+        bool shouldDeductOnAbandon = !game.quotasCollected && (game.betAmount ?? 0) > 0;
+        if (shouldDeductOnAbandon) {
+          bool allBotOpponents = true;
+          for (int p = 1; p <= game.numberOfPlayers; p++) {
+            if (p == playerNum) continue;
+            final pid = game.playerIdOf(p);
+            if (pid != null && !pid.startsWith('bot_')) {
+              allBotOpponents = false;
+              break;
+            }
+          }
+          if (allBotOpponents) shouldDeductOnAbandon = false;
+        }
+
+        if (shouldDeductOnAbandon) {
           final userRef = _firestore.collection('users').doc(playerId);
           final userDoc = await transaction.get(userRef);
           if (userDoc.exists) {

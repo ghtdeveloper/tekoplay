@@ -1330,23 +1330,13 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       child: Row(
         children: [
           Expanded(child: _buildPlayerArea()),
-          const SizedBox(width: 4),
-          SizedBox(
-            width: 80,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_ctrl.chain.isNotEmpty) ...[
-                  _infoChip('${_ctrl.leftOpen ?? '-'} ↔ ${_ctrl.rightOpen ?? '-'}'),
-                ],
-                if (canPass) ...[
-                  const SizedBox(height: 4),
-                  _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
-                ],
-              ],
+          if (canPass) ...[
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 80,
+              child: _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1393,12 +1383,6 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       ),
     );
   }
-
-  Widget _infoChip(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(6)),
-        child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 10)),
-      );
 
   Widget _actionBtn(String label, IconData icon, Color color, VoidCallback onTap) =>
       SizedBox(

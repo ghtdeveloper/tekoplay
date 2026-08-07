@@ -81,6 +81,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   DominoGameMatch? _gameOverGame;
   DominoGameMatch? _pendingNewGame;
   DominoGameMatch? _roundEndPrevGame;
+  int? _roundWinnerNum;
+  bool _roundWasBlocked = false;
   Timer? _roundEndTimer;
   int _roundEndCountdown = 15;
   Timer? _botMoveTimer;
@@ -92,7 +94,10 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   bool _isScreenKeepOnActive = false;
   int _unreadChatCount = 0;
   String? _lastMsgSenderId;
+  String? _lastMsgText;
+  String? _ownMsgText;
   Timer? _msgBubbleTimer;
+  Timer? _ownMsgBubbleTimer;
 
   static const Color _panelColor   = Colors.white;
   static const Color _accentOrange = Color(0xFFEC7A34);
@@ -218,6 +223,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     _turnTimer?.cancel();
     _awayTimer?.cancel();
     _msgBubbleTimer?.cancel();
+    _ownMsgBubbleTimer?.cancel();
     _roundEndTimer?.cancel();
     _chainScrollCtrl.dispose();
     _playerFlyAnimCtrl.dispose();
@@ -249,13 +255,17 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       if (!mounted) { t.cancel(); return; }
       setState(() => _matchmakingSeconds++);
 
-      if (_matchmakingSeconds % 5 == 0 && !_navigated) {
+      if (_matchmakingSeconds % 5 == 0 && !_navigated && _screenState == _DominoOnlineState.matchmaking) {
         _retryMatchmaking();
       }
 
-      if (_matchmakingSeconds >= 60 && !_navigated && _selectedPlayerCount == 2) {
+      if (_matchmakingSeconds >= 60 && !_navigated) {
         t.cancel();
-        _startBotGame();
+        if (_selectedPlayerCount == 2) {
+          _startBotGame();
+        } else {
+          _fillBotsAndStart();
+        }
       }
     });
 
@@ -285,9 +295,20 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           guestPhotoUrl: _myPhotoUrl,
         );
         if (joined && !_navigated) {
-          _navigated = true;
-          _matchmakingTimer?.cancel();
-          _openGame(game.id, 2);
+          final doc = await _firestore.collection('domino_games').doc(game.id).get();
+          final updatedGame = doc.exists ? DominoGameMatch.fromFirestore(doc) : null;
+          if (updatedGame != null && updatedGame.isActive) {
+            _navigated = true;
+            _matchmakingTimer?.cancel();
+            final myNum = updatedGame.getPlayerNumber(_currentUser!.uid);
+            _openGame(game.id, myNum > 0 ? myNum : 2);
+          } else {
+            setState(() {
+              _activeGameId = game.id;
+              _screenState = _DominoOnlineState.waitingRoom;
+            });
+            _listenForOpponent(game.id);
+          }
           return;
         }
       }
@@ -340,7 +361,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         if (joined && !_navigated) {
           try {
             final oldId = _activeGameId;
-            if (oldId != null) {
+            if (oldId != null && oldId != game.id) {
               await _firestore.runTransaction((tx) async {
                 final oldDoc = await tx.get(_firestore.collection('domino_games').doc(oldId));
                 if (!oldDoc.exists) return;
@@ -351,9 +372,21 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               });
             }
           } catch (_) {}
-          _navigated = true;
-          _matchmakingTimer?.cancel();
-          _openGame(game.id, 2);
+
+          final doc = await _firestore.collection('domino_games').doc(game.id).get();
+          final updatedGame = doc.exists ? DominoGameMatch.fromFirestore(doc) : null;
+          if (updatedGame != null && updatedGame.isActive) {
+            _navigated = true;
+            _matchmakingTimer?.cancel();
+            final myNum = updatedGame.getPlayerNumber(_currentUser!.uid);
+            _openGame(game.id, myNum > 0 ? myNum : 2);
+          } else {
+            setState(() {
+              _activeGameId = game.id;
+              _screenState = _DominoOnlineState.waitingRoom;
+            });
+            _listenForOpponent(game.id);
+          }
         }
       }
     } catch (e) {
@@ -370,7 +403,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       if (game.isActive && game.isFullyJoined) {
         _navigated = true;
         _matchmakingTimer?.cancel();
-        _openGame(gameId, 1);
+        final myNum = game.getPlayerNumber(_currentUser!.uid);
+        _openGame(gameId, myNum > 0 ? myNum : 1);
       }
     });
   }
@@ -405,6 +439,70 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     });
 
     _openGame(_activeGameId!, 1);
+  }
+
+  Future<void> _fillBotsAndStart() async {
+    if (!mounted || _navigated) return;
+    _navigated = true;
+    _matchmakingTimer?.cancel();
+
+    try {
+      if (_activeGameId == null) {
+        final result = await _gameService.createGame(
+          hostId: _currentUser!.uid,
+          hostName: _myName ?? 'Jugador',
+          hostPhotoUrl: _myPhotoUrl,
+          currencyType: _currencyType,
+          betAmount: widget.matchType == 'Apuesta' ? _selectedBetAmount : 0,
+          isOnlineMatchmaking: true,
+          numberOfPlayers: _selectedPlayerCount,
+        );
+        if (result == null || !mounted) return;
+        _activeGameId = result['gameId'];
+      }
+
+      bool filled = false;
+      for (int attempt = 0; attempt < 3 && !filled; attempt++) {
+        filled = await _gameService.fillRemainingWithBots(_activeGameId!);
+        if (!filled && attempt < 2) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+
+      if (!filled || !mounted) {
+        if (mounted) {
+          _showSnack('Error al iniciar partida. Intenta de nuevo.');
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+      final doc = await _firestore.collection('domino_games').doc(_activeGameId!).get();
+      if (!doc.exists || !mounted) return;
+      final game = DominoGameMatch.fromFirestore(doc);
+      final myNum = game.getPlayerNumber(_currentUser!.uid);
+
+      bool allBots = true;
+      for (int p = 1; p <= game.numberOfPlayers; p++) {
+        if (p == myNum) continue;
+        final pid = game.playerIdOf(p);
+        if (pid != null && !pid.startsWith('bot_')) { allBots = false; break; }
+      }
+
+      if (allBots) {
+        if (widget.matchType == 'Apuesta' && (_selectedBetAmount ?? 0) > 0 && _currentUser != null) {
+          await _firestoreService.incrementUserDiamonds(_currentUser!.uid, -_selectedBetAmount!);
+        }
+        setState(() => _isPlayingVsBot = true);
+      }
+
+      _openGame(_activeGameId!, myNum > 0 ? myNum : 1);
+    } catch (e) {
+      if (kDebugMode) print('Error in _fillBotsAndStart: $e');
+      if (mounted) {
+        _showSnack('Error al iniciar partida. Intenta de nuevo.');
+        Navigator.of(context).pop();
+      }
+    }
   }
 
   void _openGame(String gameId, int playerNumber) {
@@ -456,11 +554,23 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
       final prevRound = _currentGame?.gameState.roundNumber;
       if (prevRound != null && game.gameState.roundNumber > prevRound) {
+        final prevScoresNow = _currentGame!.getPlayerScores();
+        final newScoresNow = game.getPlayerScores();
+        int? detectedWinner;
+        for (int p = 1; p <= game.numberOfPlayers; p++) {
+          if ((newScoresNow['player$p'] ?? 0) > (prevScoresNow['player$p'] ?? 0)) {
+            detectedWinner = p;
+            break;
+          }
+        }
+        final wasBlockedNow = _currentGame!.gameState.consecutivePasses >= _currentGame!.numberOfPlayers - 1;
         setState(() {
           _roundEndPrevGame = _currentGame;
           _pendingNewGame = game;
           _showRoundEndBanner = true;
           _roundEndCountdown = 15;
+          _roundWinnerNum = detectedWinner;
+          _roundWasBlocked = wasBlockedNow;
         });
         _stopTurnTimer();
         _roundEndTimer?.cancel();
@@ -476,7 +586,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         return;
       }
 
-      setState(() => _currentGame = game);
+      setState(() { _currentGame = game; _isDrawing = false; });
 
       final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
       if (isMyTurn) {
@@ -516,6 +626,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       _roundEndPrevGame = null;
       _pendingNewGame = null;
       _roundEndCountdown = 15;
+      _roundWinnerNum = null;
+      _roundWasBlocked = false;
       if (nextGame != null) _currentGame = nextGame;
     });
     _autoPassPending = false;
@@ -608,7 +720,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
     final isCoins = (game.currencyType) == 'coins';
     final commission = isCoins ? 0.30 : 0.10;
-    final prize = ((betAmount * 2) * (1 - commission)).floor();
+    final prize = ((betAmount * game.numberOfPlayers) * (1 - commission)).floor();
 
     if (isCoins) {
       await _firestoreService.incrementUserCoins(_currentUser!.uid, prize);
@@ -639,13 +751,29 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     });
   }
 
+  void _onBotActionDone({bool success = true, required DominoGameMatch fallback}) {
+    if (!mounted) return;
+    setState(() => _isOpponentThinking = false);
+    final latest = _lastServerGame ?? _currentGame ?? fallback;
+    if (latest.isPlayerTurn(_currentUser!.uid)) return;
+    if (_isOpponent(latest)) {
+      _scheduleOpponentTurn(latest);
+    }
+  }
+
   void _makeBotMove(DominoGameMatch snapshot) {
     if (!mounted) return;
     final game = _lastServerGame ?? snapshot;
     final botNum = int.tryParse(game.currentTurn.replaceAll('player', '')) ?? 0;
-    if (botNum == 0) return;
+    if (botNum == 0) {
+      setState(() => _isOpponentThinking = false);
+      return;
+    }
     final botId = game.playerIdOf(botNum);
-    if (botId == null || !botId.startsWith('bot_')) return;
+    if (botId == null || !botId.startsWith('bot_')) {
+      setState(() => _isOpponentThinking = false);
+      return;
+    }
 
     final botHand = game.getHand(botNum);
     final state = game.gameState;
@@ -674,12 +802,9 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         tileId: tileId,
         side: 'right',
       ).then((success) {
-        if (mounted) {
-          setState(() => _isOpponentThinking = false);
-          if (!success) _scheduleOpponentTurn(game);
-        }
+        _onBotActionDone(success: success, fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
       return;
     }
@@ -708,33 +833,24 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         tileId: tileId,
         side: side,
       ).then((success) {
-        if (mounted) {
-          setState(() => _isOpponentThinking = false);
-          if (!success) _scheduleOpponentTurn(game);
-        }
+        _onBotActionDone(success: success, fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
     } else if (state.boneyard.isNotEmpty) {
       _gameService.drawFromBoneyard(gameId: _activeGameId!, playerId: botId).then((_) {
-        if (mounted) {
-          setState(() => _isOpponentThinking = false);
-          final updated = _currentGame;
-          if (updated != null && !updated.isPlayerTurn(_currentUser!.uid)) {
-            _scheduleOpponentTurn(updated);
-          }
-        }
+        _onBotActionDone(fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
     } else {
       _gameService.passTurn(
         gameId: _activeGameId!,
         playerId: botId,
       ).then((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(fallback: game);
       }).catchError((_) {
-        if (mounted) setState(() => _isOpponentThinking = false);
+        _onBotActionDone(success: false, fallback: game);
       });
     }
   }
@@ -958,11 +1074,12 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     setState(() => _boneyardFlyActive = false);
 
     try {
-      await _gameService.drawFromBoneyard(
+      final ok = await _gameService.drawFromBoneyard(
         gameId: _activeGameId!,
         playerId: _currentUser!.uid,
       );
-    } finally {
+      if (!ok && mounted) setState(() => _isDrawing = false);
+    } catch (_) {
       if (mounted) setState(() => _isDrawing = false);
     }
   }
@@ -1104,6 +1221,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                 collectionName: 'domino_games',
                 currentUserId: _currentUser?.uid ?? '',
                 currentUserName: _currentUser?.displayName ?? 'Jugador',
+                showFloatingBubbles: false,
                 onUnreadCountChanged: (count) {
                   if (mounted) setState(() => _unreadChatCount = count);
                 },
@@ -1113,6 +1231,25 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                   _msgBubbleTimer?.cancel();
                   _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
                     if (mounted) setState(() => _lastMsgSenderId = null);
+                  });
+                },
+                onNewMessageWithText: (senderId, _, text) {
+                  if (!mounted) return;
+                  setState(() {
+                    _lastMsgSenderId = senderId;
+                    _lastMsgText = text;
+                  });
+                  _msgBubbleTimer?.cancel();
+                  _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() { _lastMsgSenderId = null; _lastMsgText = null; });
+                  });
+                },
+                onOwnMessageSent: (text) {
+                  if (!mounted) return;
+                  setState(() => _ownMsgText = text);
+                  _ownMsgBubbleTimer?.cancel();
+                  _ownMsgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() => _ownMsgText = null);
                   });
                 },
               ),
@@ -1442,10 +1579,11 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     for (final p in rotationOrder.reversed) {
       final pid = game.playerIdOf(p);
       final isBot = pid != null && pid.startsWith('bot_');
+      final isRoundWinner = _showRoundEndBanner && !_roundWasBlocked && p == _roundWinnerNum;
       opponents.add((
         playerNum: p,
         name: game.playerNameOf(p),
-        handCount: game.gameState.handOf(p).length,
+        handCount: isRoundWinner ? 0 : game.gameState.handOf(p).length,
         score: scores['player$p'] ?? 0,
         isActive: game.currentTurn == 'player$p',
         photoUrl: isBot ? null : (p == 1 ? game.hostPhotoUrl : p == 2 ? game.guestPhotoUrl : null),
@@ -1459,7 +1597,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         children: [
           Column(
             children: [
-              _buildOnlineLandscapeHeader(opponents: opponents, activeSpeakerId: _lastMsgSenderId),
+              _buildOnlineLandscapeHeader(opponents: opponents, activeSpeakerId: _lastMsgSenderId, activeSpeakerText: _lastMsgText),
               _buildOnlineChainArea(state, canDraw: canDraw),
               _buildOnlineLandscapeFooter(
                 hand: myHand,
@@ -1475,6 +1613,12 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             bottom: 92.0 + (state.boneyard.isNotEmpty ? 54 : 0) + 10,
             child: _buildMyPanel(isMyTurn, myScore),
           ),
+          if (_ownMsgText != null)
+            Positioned(
+              right: 12,
+              bottom: 92.0 + (state.boneyard.isNotEmpty ? 54 : 0) + 10,
+              child: _buildChatBubble(_ownMsgText!, isMe: true),
+            ),
           if (_showRoundEndBanner) _buildRoundEndOverlay(),
           if (_showGameOverBanner && _gameOverGame != null) _buildGameOverOverlay(_gameOverGame!),
           if (_flyingTileData != null) _buildPlayerFlyOverlay(),
@@ -1516,16 +1660,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     final myNewScore = newScores['player$_myPlayerNumber'] ?? 0;
     final iWon = myNewScore > myPrevScore;
 
-    int? roundWinnerNum;
-    for (int p = 1; p <= prevGame.numberOfPlayers; p++) {
-      if ((newScores['player$p'] ?? 0) > (prevScores['player$p'] ?? 0)) {
-        roundWinnerNum = p;
-        break;
-      }
-    }
-
-    final wasBlocked = roundWinnerNum != null &&
-        prevGame.gameState.handOf(roundWinnerNum).isNotEmpty;
+    final roundWinnerNum = _roundWinnerNum;
+    final wasBlocked = _roundWasBlocked;
 
     final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
     final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
@@ -1685,7 +1821,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                 () {
                   final bet = game.betAmount!;
                   final commission = game.currencyType == 'diamonds' ? 0.10 : 0.30;
-                  final prize = ((bet * 2) * (1 - commission)).floor();
+                  final prize = ((bet * game.numberOfPlayers) * (1 - commission)).floor();
                   return iWon ? '+$prize ${game.currencyType}' : '-$bet ${game.currencyType}';
                 }(),
                 style: TextStyle(
@@ -1760,9 +1896,39 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     );
   }
 
+  Widget _buildChatBubble(String text, {required bool isMe}) {
+    final isEmoji = text.characters.length <= 3 && !text.contains(RegExp(r'[a-zA-Z0-9]'));
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('bubble_${isMe ? 'me' : 'other'}_$text'),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutBack,
+      builder: (_, v, child) => Transform.scale(scale: v.clamp(0.0, 1.0), child: child),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 150),
+        padding: EdgeInsets.symmetric(horizontal: isEmoji ? 6 : 10, vertical: isEmoji ? 4 : 6),
+        decoration: BoxDecoration(
+          color: isMe ? const Color(0xFFF57F17) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: isEmoji ? 28 : 13,
+            color: isMe ? Colors.white : Colors.black87,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   Widget _buildOnlineLandscapeHeader({
     required List<({int playerNum, String name, int handCount, int score, bool isActive, String? photoUrl, String? playerId})> opponents,
     String? activeSpeakerId,
+    String? activeSpeakerText,
   }) {
     final tileW = opponents.length > 1 ? 16.0 : 20.0;
     final tileH = opponents.length > 1 ? 30.0 : 38.0;
@@ -1771,55 +1937,80 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       height: 80,
       color: const Color(0xFF0D2010),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      clipBehavior: Clip.none,
       child: Row(
         children: opponents.map((opp) {
           final isSpeaking = activeSpeakerId != null && opp.playerId == activeSpeakerId;
+          final bubbleText = isSpeaking ? activeSpeakerText : null;
           return Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: opp.isActive ? Colors.white12 : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-                border: opp.isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: opp.isActive ? Colors.white12 : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: opp.isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.person_outline, color: Colors.white70, size: 16),
-                      const SizedBox(width: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.person_outline, color: Colors.white70, size: 16),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              opp.name,
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          if (isSpeaking && bubbleText == null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Icon(Icons.chat_bubble, color: Colors.green, size: 12),
+                            ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: opp.score > 0 ? _accentOrange : Colors.white24,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${opp.score}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       Expanded(
-                        child: Text(
-                          opp.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: List.generate(
+                            opp.handCount,
+                            (_) => Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: _buildFaceDownTile(width: tileW, height: tileH),
+                            ),
+                          ),
                         ),
                       ),
-                      if (isSpeaking)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Icon(Icons.chat_bubble, color: Colors.green, size: 12),
-                        ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Expanded(
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: List.generate(
-                        opp.handCount,
-                        (_) => Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: _buildFaceDownTile(width: tileW, height: tileH),
-                        ),
-                      ),
-                    ),
+                ),
+                if (bubbleText != null)
+                  Positioned(
+                    bottom: -28,
+                    left: 8,
+                    child: _buildChatBubble(bubbleText, isMe: false),
                   ),
-                ],
-              ),
+              ],
             ),
           );
         }).toList(),
@@ -1848,20 +2039,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Row(
         children: [
-          SizedBox(
-            width: 76,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _onlineInfoChip('Pozo: ${state.boneyard.length}'),
-                const SizedBox(height: 3),
-                if (state.chain.isNotEmpty)
-                  _onlineInfoChip('${state.leftOpen ?? '-'} ↔ ${state.rightOpen ?? '-'}'),
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
           Expanded(child: _buildOnlinePlayerArea(hand, state, isMyTurn)),
           if (isMyTurn && canPass) ...[
             const SizedBox(width: 4),
@@ -1874,12 +2051,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       ),
     );
   }
-
-  Widget _onlineInfoChip(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(6)),
-        child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 10)),
-      );
 
   Widget _onlineActionBtn(String label, IconData icon, Color color, VoidCallback onTap) =>
       SizedBox(

@@ -12,6 +12,9 @@ class GameChatWidget extends StatefulWidget {
   final String currentUserName;
   final void Function(int count)? onUnreadCountChanged;
   final void Function(String senderId, String senderName)? onNewMessageFromOther;
+  final void Function(String senderId, String senderName, String text)? onNewMessageWithText;
+  final void Function(String text)? onOwnMessageSent;
+  final bool showFloatingBubbles;
 
   const GameChatWidget({
     super.key,
@@ -21,6 +24,9 @@ class GameChatWidget extends StatefulWidget {
     required this.currentUserName,
     this.onUnreadCountChanged,
     this.onNewMessageFromOther,
+    this.onNewMessageWithText,
+    this.onOwnMessageSent,
+    this.showFloatingBubbles = true,
   });
 
   @override
@@ -42,6 +48,8 @@ class GameChatWidgetState extends State<GameChatWidget>
   String? _ownBubbleText;
   String? _otherBubbleText;
   String? _otherBubbleName;
+
+  String? get lastOwnBubbleText => _ownBubbleText;
   Timer? _ownBubbleTimer;
   Timer? _otherBubbleTimer;
 
@@ -78,6 +86,7 @@ class GameChatWidgetState extends State<GameChatWidget>
           final msg = messages[i];
           if (msg.senderId != widget.currentUserId) {
             widget.onNewMessageFromOther?.call(msg.senderId, msg.senderName);
+            widget.onNewMessageWithText?.call(msg.senderId, msg.senderName, msg.text);
             _showOtherBubble(msg.text, msg.senderName);
           }
         }
@@ -171,13 +180,14 @@ class GameChatWidgetState extends State<GameChatWidget>
     );
     _textController.clear();
     _showOwnBubble(text);
+    widget.onOwnMessageSent?.call(text);
   }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        if (_otherBubbleText != null)
+        if (widget.showFloatingBubbles && _otherBubbleText != null)
           Positioned(
             top: 56,
             left: 12,
@@ -188,7 +198,7 @@ class GameChatWidgetState extends State<GameChatWidget>
               isMe: false,
             ),
           ),
-        if (_ownBubbleText != null)
+        if (widget.showFloatingBubbles && _ownBubbleText != null)
           Positioned(
             bottom: 130,
             right: 12,
@@ -285,12 +295,10 @@ class GameChatWidgetState extends State<GameChatWidget>
                             ].map((emoji) =>
                               GestureDetector(
                                 onTap: () {
-                                  _chatService.sendMessage(
-                                    senderId: widget.currentUserId,
-                                    senderName: widget.currentUserName,
-                                    text: emoji,
+                                  _textController.text = _textController.text + emoji;
+                                  _textController.selection = TextSelection.fromPosition(
+                                    TextPosition(offset: _textController.text.length),
                                   );
-                                  _showOwnBubble(emoji);
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 6),
