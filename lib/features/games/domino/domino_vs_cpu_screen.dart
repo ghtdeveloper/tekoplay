@@ -1346,7 +1346,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: isActive ? Colors.white12 : Colors.black26,
+        color: Colors.black87,
         borderRadius: BorderRadius.circular(8),
         border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
       ),
@@ -1363,7 +1363,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
               Text(
                 '${_ctrl.playerScore}',
                 style: TextStyle(
-                  color: isActive ? _accentOrange : Colors.white,
+                  color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                 ),

@@ -49,7 +49,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   int _selectedPlayerCount = 2;
   String? _activeGameId;
   int? _selectedBetAmount;
-  String _currencyType = 'coins';
 
   static const List<int> _betOptions = [10, 25, 50, 100, 250, 500, 1000];
 
@@ -136,8 +135,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
       DeviceOrientation.portraitDown,
     ]);
     WidgetsBinding.instance.addObserver(this);
-    _currencyType = widget.matchType == 'Apuesta' ? 'diamonds' : 'coins';
-    if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
+if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     _loadUserData();
 
     if (widget.gameId != null) {
@@ -1875,7 +1873,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: isActive ? Colors.white12 : Colors.black45,
+        color: Colors.black87,
         borderRadius: BorderRadius.circular(8),
         border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
       ),
@@ -1892,7 +1890,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
               Text(
                 '$myScore',
                 style: TextStyle(
-                  color: isActive ? _accentOrange : Colors.white,
+                  color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                 ),
@@ -2123,13 +2121,13 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     );
   }
 
-  Widget _buildBoneyardRow(bool canDraw, int count) {
+  Widget _buildBoneyardRow(bool canDraw, int tileCount) {
     return SizedBox(
       height: 54,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        children: List.generate(count, (i) {
+        children: List.generate(tileCount, (i) {
           return GestureDetector(
             onTap: canDraw ? _drawFromBoneyard : null,
             child: Padding(

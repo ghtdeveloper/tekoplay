@@ -888,8 +888,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     }
   }
 
-  /// Omniscient cooperative bot: all bots work as a TEAM against the human.
-  /// Bots help other bots and aggressively block the human player.
   ({String tileId, String side}) _pickSmartMove(
     DominoGameState state,
     List<String> botHand,
@@ -897,10 +895,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     int botNum,
     DominoGameMatch game,
   ) {
-    // Separate human hand from ally bot hands
     final humanHand = <String>[];
     final allyBotHands = <List<String>>[];
-    int humanPlayerNum = 0;
     for (int p = 1; p <= game.numberOfPlayers; p++) {
       if (p == botNum) continue;
       final pid = game.playerIdOf(p);
@@ -909,7 +905,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         allyBotHands.add(hand);
       } else {
         humanHand.addAll(hand);
-        humanPlayerNum = p;
       }
     }
 
@@ -2000,7 +1995,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: isActive ? Colors.white12 : Colors.black45,
+        color: Colors.black87,
         borderRadius: BorderRadius.circular(8),
         border: isActive ? Border.all(color: _accentOrange, width: 1.5) : null,
       ),
@@ -2017,7 +2012,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               Text(
                 '$myScore',
                 style: TextStyle(
-                  color: isActive ? _accentOrange : Colors.white,
+                  color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                 ),
@@ -2248,13 +2243,13 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     );
   }
 
-  Widget _buildBoneyardRow(bool canDraw, int count) {
+  Widget _buildBoneyardRow(bool canDraw, int tileCount) {
     return SizedBox(
       height: 54,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        children: List.generate(count, (i) {
+        children: List.generate(tileCount, (i) {
           return GestureDetector(
             onTap: canDraw ? _drawFromBoneyard : null,
             child: Padding(
