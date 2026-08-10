@@ -19,6 +19,7 @@ class BotNameService {
 
   static const _suffixes = [
     '_99',   '_07',   '_2024', '_MX',   '_CR',
+    '_19',   '_77',   '_2010', '_RD',   '_FA',
     '_GT',   '_COL',  '_VE',   '_ARG',  '_PE',
     '_pro',  '_play', '_game', '_top',  '_win',
     '01',    '55',    '77',    'X',     '_boss',

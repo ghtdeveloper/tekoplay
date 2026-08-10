@@ -211,6 +211,14 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
   @override
   void dispose() {
+    // Cancel any waiting game left in Firestore when leaving during matchmaking
+    if (_activeGameId != null && (_screenState == _DominoOnlineState.matchmaking || _screenState == _DominoOnlineState.waitingRoom) && !_navigated) {
+      final gameId = _activeGameId!;
+      _firestore.collection('domino_games').doc(gameId).update({
+        'status': 'cancelled',
+        'finishedAt': FieldValue.serverTimestamp(),
+      }).catchError((_) {});
+    }
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -231,6 +239,24 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     _mandatoryTileAnimCtrl.dispose();
     _disableWakeLock();
     super.dispose();
+  }
+
+  Future<void> _cancelMatchmaking() async {
+    _matchmakingTimer?.cancel();
+    _gameSubscription?.cancel();
+    final gameId = _activeGameId;
+    _activeGameId = null;
+    _navigated = false;
+    setState(() => _screenState = _DominoOnlineState.playerCountSelection);
+    // Cancel the waiting game in Firestore so others don't find it
+    if (gameId != null) {
+      try {
+        await _firestore.collection('domino_games').doc(gameId).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
   }
 
   Future<void> _startMatchmaking() async {
@@ -489,9 +515,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       }
 
       if (allBots) {
-        if (widget.matchType == 'Apuesta' && (_selectedBetAmount ?? 0) > 0 && _currentUser != null) {
-          await _firestoreService.incrementUserDiamonds(_currentUser!.uid, -_selectedBetAmount!);
-        }
         setState(() => _isPlayingVsBot = true);
       }
 
@@ -709,6 +732,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   }
 
   Future<void> _handleBotGameReward(DominoGameMatch game) async {
+    if (game.quotasCollected) return;
     if (_botGameRewardHandled) return;
     _botGameRewardHandled = true;
 
@@ -733,7 +757,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     final turnNum = int.tryParse(game.currentTurn.replaceAll('player', '')) ?? 0;
     final turnPlayerId = game.playerIdOf(turnNum);
     if (turnPlayerId == null || !turnPlayerId.startsWith('bot_')) return false;
-    // Only the first real player handles bot turns (avoid duplicates)
     for (int p = 1; p <= game.numberOfPlayers; p++) {
       final pid = game.playerIdOf(p);
       if (pid != null && !pid.startsWith('bot_')) return pid == _currentUser!.uid;
@@ -810,23 +833,33 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     }
 
     final playable = botHand.where((id) => state.canPlay(id)).toList();
+    final isBetMode = widget.matchType == 'Apuesta';
 
     if (playable.isNotEmpty) {
-      playable.shuffle(_random);
-      final tileId = playable.first;
-      final tileData = state.tiles[tileId]!;
-      final tl = tileData['left']!;
-      final tr = tileData['right']!;
-      final canLeft = tl == state.leftOpen || tr == state.leftOpen;
-      final canRight = tl == state.rightOpen || tr == state.rightOpen;
+      String tileId;
       String side;
-      if (canLeft && !canRight) {
-        side = 'left';
-      } else if (canRight && !canLeft) {
-        side = 'right';
+
+      if (isBetMode) {
+        final pick = _pickSmartMove(state, botHand, playable, botNum, game);
+        tileId = pick.tileId;
+        side = pick.side;
       } else {
-        side = _random.nextBool() ? 'left' : 'right';
+        playable.shuffle(_random);
+        tileId = playable.first;
+        final tileData = state.tiles[tileId]!;
+        final tl = tileData['left']!;
+        final tr = tileData['right']!;
+        final canLeft = tl == state.leftOpen || tr == state.leftOpen;
+        final canRight = tl == state.rightOpen || tr == state.rightOpen;
+        if (canLeft && !canRight) {
+          side = 'left';
+        } else if (canRight && !canLeft) {
+          side = 'right';
+        } else {
+          side = _random.nextBool() ? 'left' : 'right';
+        }
       }
+
       _gameService.playTile(
         gameId: _activeGameId!,
         playerId: botId,
@@ -854,6 +887,118 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       });
     }
   }
+
+  /// Omniscient cooperative bot: all bots work as a TEAM against the human.
+  /// Bots help other bots and aggressively block the human player.
+  ({String tileId, String side}) _pickSmartMove(
+    DominoGameState state,
+    List<String> botHand,
+    List<String> playable,
+    int botNum,
+    DominoGameMatch game,
+  ) {
+    // Separate human hand from ally bot hands
+    final humanHand = <String>[];
+    final allyBotHands = <List<String>>[];
+    int humanPlayerNum = 0;
+    for (int p = 1; p <= game.numberOfPlayers; p++) {
+      if (p == botNum) continue;
+      final pid = game.playerIdOf(p);
+      final hand = game.getHand(p);
+      if (pid != null && pid.startsWith('bot_')) {
+        allyBotHands.add(hand);
+      } else {
+        humanHand.addAll(hand);
+        humanPlayerNum = p;
+      }
+    }
+
+    ({String tileId, String side})? bestMove;
+    int bestScore = -99999;
+
+    for (final tid in playable) {
+      final td = state.tiles[tid]!;
+      final tl = td['left']!;
+      final tr = td['right']!;
+      final isDouble = tl == tr;
+
+      for (final s in ['left', 'right']) {
+        final openVal = s == 'left' ? state.leftOpen : state.rightOpen;
+        if (openVal == null) continue;
+        if (tl != openVal && tr != openVal) continue;
+
+        int newOpen;
+        if (isDouble) {
+          newOpen = tl;
+        } else if (s == 'left') {
+          newOpen = (tr == openVal) ? tl : tr;
+        } else {
+          newOpen = (tl == openVal) ? tr : tl;
+        }
+
+        final newLeft = s == 'left' ? newOpen : state.leftOpen!;
+        final newRight = s == 'right' ? newOpen : state.rightOpen!;
+
+        final remaining = botHand.where((id) => id != tid).toList();
+
+        if (remaining.isEmpty) return (tileId: tid, side: s);
+
+        int score = 0;
+
+        int botPlayable = 0;
+        for (final id in remaining) {
+          final t = state.tiles[id]!;
+          if (t['left'] == newLeft || t['right'] == newLeft ||
+              t['left'] == newRight || t['right'] == newRight) {
+            botPlayable++;
+          }
+        }
+        score += botPlayable * 15;
+
+        int allyPlayable = 0;
+        for (final allyHand in allyBotHands) {
+          for (final id in allyHand) {
+            final t = state.tiles[id]!;
+            if (t['left'] == newLeft || t['right'] == newLeft ||
+                t['left'] == newRight || t['right'] == newRight) {
+              allyPlayable++;
+            }
+          }
+        }
+        score += allyPlayable * 10;
+
+        int humanPlayable = 0;
+        for (final id in humanHand) {
+          final t = state.tiles[id]!;
+          if (t['left'] == newLeft || t['right'] == newLeft ||
+              t['left'] == newRight || t['right'] == newRight) {
+            humanPlayable++;
+          }
+        }
+        score -= humanPlayable * 25;
+
+        if (humanPlayable == 0 && state.boneyard.isEmpty) score += 800;
+        if (humanPlayable == 0) score += 200;
+
+        score += (tl + tr);
+
+        if (isDouble) score += 5;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = (tileId: tid, side: s);
+        }
+      }
+    }
+
+    if (bestMove != null) return bestMove;
+
+    final tid = playable.first;
+    final td = state.tiles[tid]!;
+    final canLeft = td['left'] == state.leftOpen || td['right'] == state.leftOpen;
+    return (tileId: tid, side: canLeft ? 'left' : 'right');
+  }
+
   int _requiredOpeningDouble(DominoGameState state, List<String> hand) {
     int maxDouble = -1;
     for (final id in hand) {
@@ -1451,10 +1596,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             ),
             const SizedBox(height: 40),
             OutlinedButton.icon(
-              onPressed: () {
-                _matchmakingTimer?.cancel();
-                setState(() => _screenState = _DominoOnlineState.playerCountSelection);
-              },
+              onPressed: () => _cancelMatchmaking(),
               icon: const Icon(Icons.close),
               label: const Text('Cancelar búsqueda'),
               style: OutlinedButton.styleFrom(

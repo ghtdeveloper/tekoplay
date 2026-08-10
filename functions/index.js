@@ -886,12 +886,14 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
 
         const isCoins   = currencyType === 'coins';
         const isBetMode = !isCoins && betAmount > 0;
-        const totalPot  = betAmount * numberOfPlayers;
+        const realPlayerCount = realPlayerIds.length;
+        // Use stored totalPot (reflects only real players who paid), fallback to calculation
+        const totalPot  = currentGameData.totalPot || (betAmount * realPlayerCount);
         const commissionRate = isBetMode ? 0.10 : 0.30;
         const winnerPrize    = Math.floor(totalPot * (1 - commissionRate));
         const houseCommission = totalPot - winnerPrize;
 
-        console.log(`💵 [Domino] bet:${betAmount} | totalPot:${totalPot} | winner:${winnerPrize} | casa:${houseCommission}`);
+        console.log(`💵 [Domino] bet:${betAmount} | realPlayers:${realPlayerCount} | totalPot:${totalPot} | winner:${winnerPrize} | casa:${houseCommission}`);
 
         const effectiveWinnerId = gameJustAbandoned
           ? (currentGameData.winnerId || (abandonedBy === hostId ? guestId : hostId))

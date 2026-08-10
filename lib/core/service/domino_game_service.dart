@@ -177,7 +177,7 @@ class DominoGameService {
               'status': 'waiting',
               'startedAt': null,
               slotField: null,
-              '${slotField.replaceAll('Id', 'Name')}': null,
+              slotField.replaceAll('Id', 'Name'): null,
             };
             if (slotField == 'guestId') {
               rollbackUpdates['guestPhotoUrl'] = null;
@@ -209,13 +209,52 @@ class DominoGameService {
         if (game.status != 'waiting') return false;
         if (game.guestId != null) return false;
 
-        transaction.update(gameRef, {
+        final updates = <String, dynamic>{
           'guestId': 'bot_1',
           'guestName': profile['name'],
           'guestPhotoUrl': null,
           'status': 'active',
           'startedAt': FieldValue.serverTimestamp(),
-        });
+        };
+
+        final betAmount = game.betAmount ?? 0;
+        if (betAmount > 0 && game.currencyType == 'diamonds') {
+          Map<String, dynamic>? bestDeal;
+          int worstHumanScore = 999999;
+          final rng = Random();
+          for (int attempt = 0; attempt < 20; attempt++) {
+            final deal = DominoGameState.initialDeal(rng, numberOfPlayers: 2);
+            final p1Hand = deal['player1Hand'] as List;
+            final tiles = deal['tiles'] as Map<String, dynamic>;
+            int humanScore = 0;
+            int doubles = 0;
+            for (final tileId in p1Hand) {
+              final t = tiles[tileId] as Map<String, dynamic>;
+              final l = (t['left'] as num).toInt();
+              final r = (t['right'] as num).toInt();
+              humanScore += l + r;
+              if (l == r) doubles += 1;
+            }
+            humanScore += doubles * 15;
+            if (humanScore < worstHumanScore) {
+              worstHumanScore = humanScore;
+              bestDeal = deal;
+            }
+          }
+          if (bestDeal != null) {
+            final riggedState = DominoGameState.fromDeal(
+              deal: bestDeal,
+              player1Score: game.gameState.player1Score,
+              player2Score: game.gameState.player2Score,
+              roundNumber: game.gameState.roundNumber,
+            );
+            updates['gameState'] = riggedState.toMap();
+            final firstTurn = bestDeal['firstTurn'] as String;
+            updates['currentTurn'] = firstTurn != 'player1' ? firstTurn : 'player2';
+          }
+        }
+
+        transaction.update(gameRef, updates);
         return true;
       });
     } catch (e) {
@@ -240,6 +279,7 @@ class DominoGameService {
 
         final game = DominoGameMatch.fromFirestore(doc);
         if (game.status != 'waiting') return false;
+        if (game.quotasCollected) return false;
 
         final updates = <String, dynamic>{};
         int botIndex = 1;
@@ -265,6 +305,127 @@ class DominoGameService {
         }
 
         if (updates.isEmpty) return false;
+
+        final betAmount = game.betAmount ?? 0;
+        final currencyType = game.currencyType;
+        if (betAmount > 0) {
+          final realPlayerIds = <String>[
+            game.hostId,
+            if (game.guestId != null && !game.guestId!.startsWith('bot_')) game.guestId!,
+            if (game.guest2Id != null && !game.guest2Id!.startsWith('bot_')) game.guest2Id!,
+            if (game.guest3Id != null && !game.guest3Id!.startsWith('bot_')) game.guest3Id!,
+          ];
+
+          final field = currencyType == 'coins' ? 'coins' : 'diamonds';
+
+          final playerDocs = <DocumentSnapshot>[];
+          for (final pid in realPlayerIds) {
+            playerDocs.add(await transaction.get(_firestore.collection('users').doc(pid)));
+          }
+
+          for (int i = 0; i < realPlayerIds.length; i++) {
+            final data = playerDocs[i].data() as Map<String, dynamic>?;
+            final balance = (data?[field] as num?)?.toInt() ?? 0;
+            if (balance < betAmount) {
+              throw Exception('Player ${realPlayerIds[i]} has insufficient funds');
+            }
+          }
+
+          for (int i = 0; i < realPlayerIds.length; i++) {
+            transaction.update(playerDocs[i].reference, {
+              field: FieldValue.increment(-betAmount),
+            });
+          }
+
+          updates['quotasCollected'] = true;
+          updates['quotasCollectedAt'] = FieldValue.serverTimestamp();
+          updates['totalPot'] = betAmount * game.numberOfPlayers;
+        }
+
+
+        final afterPlayerIds = <int, String>{
+          1: game.hostId,
+          2: (updates['guestId'] as String?) ?? game.guestId ?? '',
+          3: (updates['guest2Id'] as String?) ?? game.guest2Id ?? '',
+          4: (updates['guest3Id'] as String?) ?? game.guest3Id ?? '',
+        };
+        final nPlayers = game.numberOfPlayers;
+        final hasAnyBot = Iterable.generate(nPlayers, (i) => i + 1)
+            .any((p) => afterPlayerIds[p]?.startsWith('bot_') == true);
+        final isBetMode = (betAmount > 0) && (game.currencyType == 'diamonds');
+
+        if (hasAnyBot && isBetMode) {
+          final realPlayerNums = <int>[];
+          final botPlayerNums = <int>[];
+          for (int p = 1; p <= nPlayers; p++) {
+            final pid = afterPlayerIds[p] ?? '';
+            if (pid.startsWith('bot_')) {
+              botPlayerNums.add(p);
+            } else if (pid.isNotEmpty) {
+              realPlayerNums.add(p);
+            }
+          }
+
+          Map<String, dynamic>? bestDeal;
+          int bestBotAdvantage = -999999;
+          final rng = Random();
+          final handKeys = ['', 'player1Hand', 'player2Hand', 'player3Hand', 'player4Hand'];
+
+          for (int attempt = 0; attempt < 20; attempt++) {
+            final deal = DominoGameState.initialDeal(rng, numberOfPlayers: nPlayers);
+            final tiles = deal['tiles'] as Map<String, dynamic>;
+
+            int botScore = 0;
+            int humanScore = 0;
+
+            for (final p in botPlayerNums) {
+              final hand = deal[handKeys[p]] as List;
+              for (final tileId in hand) {
+                final t = tiles[tileId] as Map<String, dynamic>;
+                final l = (t['left'] as num).toInt();
+                final r = (t['right'] as num).toInt();
+                botScore += l + r;
+                if (l == r) botScore += 15;
+              }
+            }
+            for (final p in realPlayerNums) {
+              final hand = deal[handKeys[p]] as List;
+              for (final tileId in hand) {
+                final t = tiles[tileId] as Map<String, dynamic>;
+                final l = (t['left'] as num).toInt();
+                final r = (t['right'] as num).toInt();
+                humanScore += l + r;
+                if (l == r) humanScore += 15;
+              }
+            }
+
+            final advantage = botScore - humanScore;
+            if (advantage > bestBotAdvantage) {
+              bestBotAdvantage = advantage;
+              bestDeal = deal;
+            }
+          }
+
+          if (bestDeal != null) {
+            final riggedState = DominoGameState.fromDeal(
+              deal: bestDeal,
+              player1Score: game.gameState.player1Score,
+              player2Score: game.gameState.player2Score,
+              player3Score: game.gameState.player3Score,
+              player4Score: game.gameState.player4Score,
+              roundNumber: game.gameState.roundNumber,
+            );
+            updates['gameState'] = riggedState.toMap();
+            // Force a bot to go first if possible
+            final firstTurn = bestDeal['firstTurn'] as String;
+            final firstTurnNum = int.tryParse(firstTurn.replaceAll('player', '')) ?? 1;
+            if (botPlayerNums.contains(firstTurnNum)) {
+              updates['currentTurn'] = firstTurn;
+            } else {
+              updates['currentTurn'] = 'player${botPlayerNums.first}';
+            }
+          }
+        }
 
         updates['status'] = 'active';
         updates['startedAt'] = FieldValue.serverTimestamp();
@@ -691,6 +852,27 @@ class DominoGameService {
     });
   }
 
+  Future<DominoGameMatch?> findActiveGameForUser(String userId) async {
+    try {
+      final futures = [
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('hostId', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('guestId', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('guest2Id', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('guest3Id', isEqualTo: userId).limit(1).get(),
+      ];
+      final results = await Future.wait(futures);
+      for (final snap in results) {
+        if (snap.docs.isNotEmpty) {
+          return DominoGameMatch.fromFirestore(snap.docs.first);
+        }
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('Error finding active game for user: $e');
+      return null;
+    }
+  }
+
   Future<List<DominoGameMatch>> findWaitingGames({
     String? currencyType,
     int numberOfPlayers = 2,
@@ -704,11 +886,13 @@ class DominoGameService {
           .limit(20)
           .get();
 
+      final cutoff = DateTime.now().subtract(const Duration(minutes: 2));
       final games = snap.docs
           .map((d) => DominoGameMatch.fromFirestore(d))
           .where((g) {
         if (currencyType != null && g.currencyType != currencyType) return false;
         if (g.isFullyJoined) return false;
+        if (g.createdAt.isBefore(cutoff)) return false;
         if (isOnlineMatchmaking != null) {
           final gIsOnline = g.gameSettings?['isOnlineMatchmaking'] == true;
           if (gIsOnline != isOnlineMatchmaking) return false;

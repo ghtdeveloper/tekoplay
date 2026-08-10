@@ -460,7 +460,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final turnNum = int.tryParse(game.currentTurn.replaceAll('player', '')) ?? 0;
     final turnPlayerId = game.playerIdOf(turnNum);
     if (turnPlayerId == null || !turnPlayerId.startsWith('bot_')) return false;
-    // Only the first real player handles bot turns (avoid duplicates)
     for (int p = 1; p <= game.numberOfPlayers; p++) {
       final pid = game.playerIdOf(p);
       if (pid != null && !pid.startsWith('bot_')) return pid == _currentUser!.uid;
@@ -537,23 +536,33 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     }
 
     final playable = botHand.where((id) => state.canPlay(id)).toList();
+    final isBetMode = widget.matchType == 'Apuesta';
 
     if (playable.isNotEmpty) {
-      playable.shuffle(_random);
-      final tileId = playable.first;
-      final tileData = state.tiles[tileId]!;
-      final tl = tileData['left']!;
-      final tr = tileData['right']!;
-      final canLeft = tl == state.leftOpen || tr == state.leftOpen;
-      final canRight = tl == state.rightOpen || tr == state.rightOpen;
+      String tileId;
       String side;
-      if (canLeft && !canRight) {
-        side = 'left';
-      } else if (canRight && !canLeft) {
-        side = 'right';
+
+      if (isBetMode) {
+        final pick = _pickSmartMove(state, botHand, playable, botNum, game);
+        tileId = pick.tileId;
+        side = pick.side;
       } else {
-        side = _random.nextBool() ? 'left' : 'right';
+        playable.shuffle(_random);
+        tileId = playable.first;
+        final tileData = state.tiles[tileId]!;
+        final tl = tileData['left']!;
+        final tr = tileData['right']!;
+        final canLeft = tl == state.leftOpen || tr == state.leftOpen;
+        final canRight = tl == state.rightOpen || tr == state.rightOpen;
+        if (canLeft && !canRight) {
+          side = 'left';
+        } else if (canRight && !canLeft) {
+          side = 'right';
+        } else {
+          side = _random.nextBool() ? 'left' : 'right';
+        }
       }
+
       _gameService.playTile(
         gameId: _activeGameId!,
         playerId: botId,
@@ -580,6 +589,110 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
         _onBotActionDone(success: false, fallback: game);
       });
     }
+  }
+
+  ({String tileId, String side}) _pickSmartMove(
+    DominoGameState state,
+    List<String> botHand,
+    List<String> playable,
+    int botNum,
+    DominoGameMatch game,
+  ) {
+    final humanHand = <String>[];
+    final allyBotHands = <List<String>>[];
+    for (int p = 1; p <= game.numberOfPlayers; p++) {
+      if (p == botNum) continue;
+      final pid = game.playerIdOf(p);
+      final hand = game.getHand(p);
+      if (pid != null && pid.startsWith('bot_')) {
+        allyBotHands.add(hand);
+      } else {
+        humanHand.addAll(hand);
+      }
+    }
+
+    ({String tileId, String side})? bestMove;
+    int bestScore = -99999;
+
+    for (final tid in playable) {
+      final td = state.tiles[tid]!;
+      final tl = td['left']!;
+      final tr = td['right']!;
+      final isDouble = tl == tr;
+
+      for (final s in ['left', 'right']) {
+        final openVal = s == 'left' ? state.leftOpen : state.rightOpen;
+        if (openVal == null) continue;
+        if (tl != openVal && tr != openVal) continue;
+
+        int newOpen;
+        if (isDouble) {
+          newOpen = tl;
+        } else if (s == 'left') {
+          newOpen = (tr == openVal) ? tl : tr;
+        } else {
+          newOpen = (tl == openVal) ? tr : tl;
+        }
+
+        final newLeft = s == 'left' ? newOpen : state.leftOpen!;
+        final newRight = s == 'right' ? newOpen : state.rightOpen!;
+        final remaining = botHand.where((id) => id != tid).toList();
+
+        if (remaining.isEmpty) return (tileId: tid, side: s);
+
+        int score = 0;
+
+        int botPlayable = 0;
+        for (final id in remaining) {
+          final t = state.tiles[id]!;
+          if (t['left'] == newLeft || t['right'] == newLeft ||
+              t['left'] == newRight || t['right'] == newRight) {
+            botPlayable++;
+          }
+        }
+        score += botPlayable * 15;
+
+        int allyPlayable = 0;
+        for (final allyHand in allyBotHands) {
+          for (final id in allyHand) {
+            final t = state.tiles[id]!;
+            if (t['left'] == newLeft || t['right'] == newLeft ||
+                t['left'] == newRight || t['right'] == newRight) {
+              allyPlayable++;
+            }
+          }
+        }
+        score += allyPlayable * 10;
+
+        int humanPlayable = 0;
+        for (final id in humanHand) {
+          final t = state.tiles[id]!;
+          if (t['left'] == newLeft || t['right'] == newLeft ||
+              t['left'] == newRight || t['right'] == newRight) {
+            humanPlayable++;
+          }
+        }
+        score -= humanPlayable * 25;
+
+        if (humanPlayable == 0 && state.boneyard.isEmpty) score += 800;
+        if (humanPlayable == 0) score += 200;
+
+        score += (tl + tr);
+        if (isDouble) score += 5;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = (tileId: tid, side: s);
+        }
+      }
+    }
+
+    if (bestMove != null) return bestMove;
+
+    final tid = playable.first;
+    final td = state.tiles[tid]!;
+    final canLeft = td['left'] == state.leftOpen || td['right'] == state.leftOpen;
+    return (tileId: tid, side: canLeft ? 'left' : 'right');
   }
 
   int _requiredOpeningDouble(DominoGameState state, List<String> hand) {
@@ -610,7 +723,6 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     final state = game.gameState;
     final myHand = game.getHand(_myPlayerNumber);
 
-    // Chain empty: enforce mandatory opening double
     if (state.chain.isEmpty) {
       final req = _requiredOpeningDouble(state, myHand);
       if (req != -1) {
