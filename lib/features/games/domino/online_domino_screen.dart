@@ -52,6 +52,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   int _matchmakingSeconds = 0;
   Timer? _matchmakingTimer;
   bool _navigated = false;
+  bool _isRetrying = false;
 
   String? _myName;
   String? _myPhotoUrl;
@@ -306,11 +307,15 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         numberOfPlayers: _selectedPlayerCount,
         isOnlineMatchmaking: true,
       );
+      final uid = _currentUser!.uid;
       final eligible = games.where((g) {
-        if (g.hostId == _currentUser!.uid) return false;
+        if (g.hostId == uid) return false;
+        if (g.guestId == uid || g.guest2Id == uid || g.guest3Id == uid) return false;
         if (_selectedBetAmount != null && g.betAmount != _selectedBetAmount) return false;
         return true;
       }).toList();
+      // Prefer games closest to being full (most players first)
+      eligible.sort((a, b) => b.currentPlayerCount.compareTo(a.currentPlayerCount));
 
       if (eligible.isNotEmpty && !_navigated) {
         final game = eligible.first;
@@ -363,15 +368,120 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   }
 
   Future<void> _retryMatchmaking() async {
-    if (!mounted || _navigated || _activeGameId == null) return;
+    if (!mounted || _navigated || _activeGameId == null || _isRetrying) return;
+    _isRetrying = true;
     try {
+      final currentDoc = await _firestore.collection('domino_games').doc(_activeGameId!).get();
+      if (!currentDoc.exists || !mounted || _navigated) return;
+      final currentGame = DominoGameMatch.fromFirestore(currentDoc);
+
+      if (currentGame.status == 'cancelled') {
+        _gameSubscription?.cancel();
+        _activeGameId = null;
+        if (mounted) {
+          setState(() => _screenState = _DominoOnlineState.matchmaking);
+          await _tryJoinOrCreate();
+        }
+        return;
+      }
+
+      if (currentGame.isActive) return;
+
+      final uid = _currentUser!.uid;
+      final amHost = currentGame.hostId == uid;
+      final playerCount = currentGame.currentPlayerCount;
+
+      if (_selectedPlayerCount >= 3) {
+        if (!amHost) return;
+
+        if (playerCount == 1) {
+          final games = await _gameService.findWaitingGames(
+            currencyType: _currencyType,
+            numberOfPlayers: _selectedPlayerCount,
+            isOnlineMatchmaking: true,
+          );
+          final eligible = games.where((g) {
+            if (g.hostId == uid) return false;
+            if (g.guestId == uid || g.guest2Id == uid || g.guest3Id == uid) return false;
+            if (_selectedBetAmount != null && g.betAmount != _selectedBetAmount) return false;
+            return true;
+          }).toList();
+          eligible.sort((a, b) => b.currentPlayerCount.compareTo(a.currentPlayerCount));
+
+          if (eligible.isNotEmpty && !_navigated) {
+            final target = eligible.first;
+            final joined = await _gameService.joinGame(
+              gameId: target.id,
+              guestId: uid,
+              guestName: _myName ?? 'Jugador',
+              guestPhotoUrl: _myPhotoUrl,
+            );
+            if (joined && !_navigated) {
+              // Cancel our empty game
+              try {
+                await _firestore.collection('domino_games').doc(_activeGameId!).update({
+                  'status': 'cancelled',
+                  'finishedAt': FieldValue.serverTimestamp(),
+                });
+              } catch (_) {}
+
+              final doc = await _firestore.collection('domino_games').doc(target.id).get();
+              final updatedGame = doc.exists ? DominoGameMatch.fromFirestore(doc) : null;
+              if (updatedGame != null && updatedGame.isActive) {
+                _navigated = true;
+                _matchmakingTimer?.cancel();
+                final myNum = updatedGame.getPlayerNumber(uid);
+                _openGame(target.id, myNum > 0 ? myNum : 2);
+              } else {
+                setState(() {
+                  _activeGameId = target.id;
+                  _screenState = _DominoOnlineState.waitingRoom;
+                });
+                _listenForOpponent(target.id);
+              }
+            }
+          }
+          return;
+        }
+
+        if (playerCount > 1 && !currentGame.isFullyJoined) {
+          final games = await _gameService.findWaitingGames(
+            currencyType: _currencyType,
+            numberOfPlayers: _selectedPlayerCount,
+            isOnlineMatchmaking: true,
+          );
+          final olderGame = games.where((g) {
+            if (g.id == _activeGameId) return false;
+            if (_selectedBetAmount != null && g.betAmount != _selectedBetAmount) return false;
+            return g.createdAt.isBefore(currentGame.createdAt);
+          }).toList();
+
+          if (olderGame.isNotEmpty && !_navigated) {
+            try {
+              await _firestore.collection('domino_games').doc(_activeGameId!).update({
+                'status': 'cancelled',
+                'finishedAt': FieldValue.serverTimestamp(),
+              });
+            } catch (_) {}
+            _gameSubscription?.cancel();
+            _activeGameId = null;
+            if (mounted) {
+              setState(() => _screenState = _DominoOnlineState.matchmaking);
+              await _tryJoinOrCreate();
+            }
+          }
+        }
+        return;
+      }
+
       final games = await _gameService.findWaitingGames(
         currencyType: _currencyType,
         numberOfPlayers: _selectedPlayerCount,
         isOnlineMatchmaking: true,
       );
       final eligible = games.where((g) {
-        if (g.hostId == _currentUser!.uid) return false;
+        if (g.hostId == uid) return false;
+        if (g.guestId == uid) return false;
         if (_selectedBetAmount != null && g.betAmount != _selectedBetAmount) return false;
         return true;
       }).toList();
@@ -380,7 +490,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         final game = eligible.first;
         final joined = await _gameService.joinGame(
           gameId: game.id,
-          guestId: _currentUser!.uid,
+          guestId: uid,
           guestName: _myName ?? 'Jugador',
           guestPhotoUrl: _myPhotoUrl,
         );
@@ -404,7 +514,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           if (updatedGame != null && updatedGame.isActive) {
             _navigated = true;
             _matchmakingTimer?.cancel();
-            final myNum = updatedGame.getPlayerNumber(_currentUser!.uid);
+            final myNum = updatedGame.getPlayerNumber(uid);
             _openGame(game.id, myNum > 0 ? myNum : 2);
           } else {
             setState(() {
@@ -417,6 +527,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       }
     } catch (e) {
       if (kDebugMode) print('Retry matchmaking error: $e');
+    } finally {
+      _isRetrying = false;
     }
   }
 
@@ -425,6 +537,17 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     _gameSubscription = _gameService.getGameStream(gameId).listen((game) {
       if (!mounted || _navigated) return;
       if (game == null) return;
+
+      if (game.status == 'cancelled') {
+        _gameSubscription?.cancel();
+        _activeGameId = null;
+        if (mounted && !_navigated) {
+          setState(() => _screenState = _DominoOnlineState.matchmaking);
+          _tryJoinOrCreate();
+        }
+        return;
+      }
+
       if (game.status == 'waiting') setState(() => _currentGame = game);
       if (game.isActive && game.isFullyJoined) {
         _navigated = true;
@@ -750,6 +873,10 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       await _firestoreService.incrementUserCoins(_currentUser!.uid, prize);
     } else {
       await _firestoreService.incrementUserDiamonds(_currentUser!.uid, prize);
+      final netGain = prize - betAmount;
+      if (netGain > 0) {
+        await _firestoreService.incrementUserDiamondsEarned(_currentUser!.uid, netGain);
+      }
     }
   }
 
@@ -1756,6 +1883,13 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               bottom: 92.0 + (state.boneyard.isNotEmpty ? 54 : 0) + 10,
               child: _buildChatBubble(_ownMsgText!, isMe: true),
             ),
+          for (final entry in opponents.asMap().entries)
+            if (_lastMsgText != null && entry.value.playerId == _lastMsgSenderId)
+              Positioned(
+                top: 80,
+                left: entry.key * (MediaQuery.of(context).size.width / opponents.length) + 8,
+                child: _buildChatBubble(_lastMsgText!, isMe: false),
+              ),
           if (_showRoundEndBanner) _buildRoundEndOverlay(),
           if (_showGameOverBanner && _gameOverGame != null) _buildGameOverOverlay(_gameOverGame!),
           if (_flyingTileData != null) _buildPlayerFlyOverlay(),
@@ -2141,12 +2275,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                     ],
                   ),
                 ),
-                if (bubbleText != null)
-                  Positioned(
-                    bottom: -28,
-                    left: 8,
-                    child: _buildChatBubble(bubbleText, isMe: false),
-                  ),
               ],
             ),
           );

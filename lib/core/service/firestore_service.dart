@@ -306,6 +306,17 @@ class FirestoreService {
     }
   }
 
+  Future<bool> incrementUserDiamondsEarned(String userId, int amount) async {
+    try {
+      await _firestore.collection(_usersCollection).doc(userId).update({
+        'diamondsEarned': FieldValue.increment(amount),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> updateGamePoints(
     String userId,
     GameTypeModel gameType,

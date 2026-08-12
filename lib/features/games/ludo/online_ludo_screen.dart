@@ -104,6 +104,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   final Map<String, int> _botMissedFive = {};
   int _humanHomeDoubles = 0;
   final Map<String, int> _botHomeDoubles = {};
+  int _botTurnCounter = 0;
   Timer? _awayTimer;
 
   Timer? _turnTimer;
@@ -474,8 +475,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           }
         });
       } else if (game.status == 'cancelled' && !_navigated) {
-        // The host cancelled the waiting room (e.g. their timeout fired).
-        // Fall back to a local bot game so the guest isn't left stranded.
         _gameSubscription?.cancel();
         _keepAliveTimer?.cancel();
         _activeGameId = null;
@@ -558,7 +557,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final isBetMode = _isBetMode;
     _botIsWeak = isBetMode && await BotNameService.shouldBotPlayWeak();
 
-    const allColors = ['yellow', 'green', 'red', 'blue']; // CCW: Yellow→Green→Red→Blue
+    const allColors = ['yellow', 'green', 'red', 'blue'];
     _myColor = 'yellow';
     final botCount = (_selectedPlayerCount) - 1;
     _botColors = allColors.skip(1).take(botCount).toList();
@@ -680,12 +679,19 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       d1 = _random.nextInt(6) + 1;
       d2 = _random.nextInt(6) + 1;
 
-      final hasHomePieces = myPieces.any((p) => p.isHome);
-      final humanMissed = _botMissedFive[_myColor] ?? 0;
-      if (humanMissed >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
-        if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+      if (_isPlayingAgainstBot && _isBetMode && !_botIsWeak) {
+        if (_random.nextInt(3) != 0) {
+          if (d1 > 4) d1 = _random.nextInt(4) + 1;
+          if (d2 > 4) d2 = _random.nextInt(4) + 1;
+        }
+      } else {
+        final hasHomePieces = myPieces.any((p) => p.isHome);
+        final humanMissed = _botMissedFive[_myColor] ?? 0;
+        if (humanMissed >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
+          if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+        }
+        _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
       }
-      _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
 
       if (allInHome && d1 == d2 && d1 != 5) {
         _humanHomeDoubles++;
@@ -1185,6 +1191,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       return (bestD1, bestD2);
     }
 
+    _botTurnCounter++;
+    final isWeakTurn = (_botTurnCounter % 3 == 0);
+
+    if (isWeakTurn) {
+      final d1 = _random.nextInt(2) + 1;
+      final d2 = _random.nextInt(2) + 1;
+      return (d1, d2);
+    }
+
     int bestScore = -1;
     int bestD1 = 1, bestD2 = 1;
     for (int d1 = 1; d1 <= 6; d1++) {
@@ -1237,7 +1252,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   int _scoreSingleAction(LudoPiece piece, int np) {
-    final bc = piece.color; // color del bot que mueve
+    final bc = piece.color;
     int s = 0;
     if (np < 52 && !_isSafeForColor(np, bc)) {
       for (final ec in _activePlayers) {
@@ -1483,7 +1498,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         .where((p) => p != moving && !p.isHome && !p.isFinished && p.position == newPos)
         .length;
     if (myCount >= 2) return false;
-    // Regla especial: salida de casa con barrera enemiga en tu casilla de salida → permitido (rompe barrera)
     if (moving.isHome && newPos == _getStartPosition(color) && _isEnemyBarrierAt(newPos, color)) {
       return true;
     }
@@ -1602,6 +1616,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               : (betAmount * playerCount * 0.7).floor());
       if (isBet) {
         _firestoreService.incrementUserDiamonds(_currentUser!.uid, prize);
+        final netGain = prize - betAmount;
+        if (netGain > 0) {
+          _firestoreService.incrementUserDiamondsEarned(_currentUser!.uid, netGain);
+        }
         if (mounted) setState(() => _userDiamonds = (_userDiamonds ?? 0) + prize);
       } else {
         _firestoreService.incrementUserCoins(_currentUser!.uid, prize);

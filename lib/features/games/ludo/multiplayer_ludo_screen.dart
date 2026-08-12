@@ -63,6 +63,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   final Map<String, int> _botMissedFive = {};
   int _humanHomeDoubles = 0;
   final Map<String, int> _botHomeDoubles = {};
+  int _botTurnCounter = 0;
 
   int _rollBotDie() {
     final r = _random.nextDouble();
@@ -344,7 +345,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     if (isMyTurnNow && !_bonusSelectionActive) _calculateMovablePieces();
 
-    // Sync turn timer from server-side deadline so all clients see the same countdown
     final prevDeadline = prevGame?.turnDeadline;
     final newDeadline = game.turnDeadline;
     final turnChanged = prevTurn != _currentTurn;
@@ -358,7 +358,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       }
     }
 
-    // Host maneja turnos de bots
+
     if (!_gameEnded && _isHost && _botColors.isNotEmpty) {
       final curColor = _colorForCurrentTurn();
       if (_botColors.contains(curColor) && !_botTurnScheduled &&
@@ -449,8 +449,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     });
   }
 
-  /// Sincroniza el timer local a un deadline del servidor. Todos los clientes
-  /// llaman esto cuando reciben un `turnDeadline` actualizado desde Firestore.
   void _syncTimerToDeadline(DateTime deadline) {
     _turnTimer?.cancel();
     final remaining = deadline.difference(DateTime.now()).inSeconds.clamp(0, _turnTimeoutSeconds);
@@ -471,7 +469,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     });
   }
 
-  /// Escribe el turnDeadline en Firestore para que todos los clientes lo vean.
   Future<void> _writeTurnDeadline() async {
     if (_activeGameId == null) return;
     try {
@@ -528,12 +525,20 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       d1 = _random.nextInt(6) + 1;
       d2 = _random.nextInt(6) + 1;
 
-      final hasHomePieces = myPieces.any((p) => p.isHome);
-      final humanMissed = _botMissedFive[_myColor] ?? 0;
-      if (humanMissed >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
-        if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+      final hasBots = _botColors.isNotEmpty;
+      if (hasBots && widget.matchType == 'Apuesta') {
+        if (_random.nextInt(3) != 0) {
+          if (d1 > 4) d1 = _random.nextInt(4) + 1;
+          if (d2 > 4) d2 = _random.nextInt(4) + 1;
+        }
+      } else {
+        final hasHomePieces = myPieces.any((p) => p.isHome);
+        final humanMissed = _botMissedFive[_myColor] ?? 0;
+        if (humanMissed >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
+          if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+        }
+        _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
       }
-      _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
 
       if (allInHome && d1 == d2 && d1 != 5) {
         _humanHomeDoubles++;
@@ -590,8 +595,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) await _advanceTurn();
     } else {
-      // Start timer locally immediately and also update Firestore so
-      // opponents can see the countdown even if we leave the app.
       _startTurnTimer();
       unawaited(_writeTurnDeadline());
     }
@@ -835,7 +838,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
             .toList();
         if (isBarrierBreak && enemyPiecesHere.length >= 2) {
-          // Rompe barrera: captura solo la última en llegar (mayor id)
           enemyPiecesHere.last.position = -1;
           captured = true;
         } else {
@@ -920,7 +922,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _bonusHadDouble = hadDouble;
 
     if (_botColors.contains(color)) {
-      // Bot: auto-ejecuta el mejor bonus tras breve pausa
       final best = _pendingBonusMoves.reduce((a, b) {
         final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition(color));
         final stB = _stepsFromStart((b['piece'] as LudoPiece).position, _getStartPosition(color));
@@ -1103,7 +1104,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         .where((p) => p != moving && !p.isHome && !p.isFinished && p.position == newPos)
         .length;
     if (myCount >= 2) return false;
-    // Regla especial: salida de casa con barrera enemiga en tu casilla de salida → permitido (rompe barrera)
     if (moving.isHome && newPos == _getStartPosition(color) && _isEnemyBarrierAt(newPos, color)) {
       return true;
     }
@@ -1199,7 +1199,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return positions[id];
   }
 
-  // ── Bot turn handling (host only) ─────────────────────────────────────────
 
   void _scheduleMultiplayerBotMove(String botColor) {
     if (_botTurnScheduled || _gameEnded || !mounted) return;
@@ -1221,38 +1220,45 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final allInHome = botPieces.every((p) => p.isHome);
     int d1 = 0, d2 = 0;
 
+    final isBetMode = widget.matchType == 'Apuesta';
     do {
-      d1 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble() : _rollBotDie();
-      d2 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble(exclude: d1) : _rollBotDie();
+      _botTurnCounter++;
+      final isWeakTurn = isBetMode && (_botTurnCounter % 3 == 0);
 
-      final hasHomePieces = botPieces.any((p) => p.isHome);
-      final missedCount = _botMissedFive[botColor] ?? 0;
-      if (missedCount >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
-        if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
-      }
-      _botMissedFive[botColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? missedCount + 1 : 0;
+      if (isWeakTurn) {
+        d1 = _random.nextInt(2) + 1; // 1 or 2
+        d2 = _random.nextInt(2) + 1; // 1 or 2
+      } else {
+        d1 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble() : _rollBotDie();
+        d2 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble(exclude: d1) : _rollBotDie();
 
-      // Home-stretch bias: when bot has pieces in recta final (pos >= 52),
-      // favor the exact values those pieces need to advance without overshooting.
-      final piecesInStretch = botPieces
-          .where((p) => p.position >= 52 && !p.isFinished)
-          .toList();
-      if (piecesInStretch.isNotEmpty && _random.nextDouble() < 0.80) {
-        final usefulValues = <int>{};
-        for (final p in piecesInStretch) {
-          final rem = 57 - p.position;
-          if (rem >= 1 && rem <= 6) usefulValues.add(rem);
+        final hasHomePieces = botPieces.any((p) => p.isHome);
+        final missedCount = _botMissedFive[botColor] ?? 0;
+        if (missedCount >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
+          if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
         }
-        if (usefulValues.isNotEmpty) {
-          final list = usefulValues.toList()..sort();
-          d1 = list[_random.nextInt(list.length)];
-          int d2c = list.length > 1
-              ? list[_random.nextInt(list.length)]
-              : (_random.nextInt(3) + 1); // 1-3 fallback
-          if (_consecutiveDoubles >= 2 && d2c == d1) {
-            d2c = d1 == 1 ? 2 : d1 - 1;
+        _botMissedFive[botColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? missedCount + 1 : 0;
+
+        final piecesInStretch = botPieces
+            .where((p) => p.position >= 52 && !p.isFinished)
+            .toList();
+        if (piecesInStretch.isNotEmpty && _random.nextDouble() < 0.80) {
+          final usefulValues = <int>{};
+          for (final p in piecesInStretch) {
+            final rem = 57 - p.position;
+            if (rem >= 1 && rem <= 6) usefulValues.add(rem);
           }
-          d2 = d2c;
+          if (usefulValues.isNotEmpty) {
+            final list = usefulValues.toList()..sort();
+            d1 = list[_random.nextInt(list.length)];
+            int d2c = list.length > 1
+                ? list[_random.nextInt(list.length)]
+                : (_random.nextInt(3) + 1); // 1-3 fallback
+            if (_consecutiveDoubles >= 2 && d2c == d1) {
+              d2c = d1 == 1 ? 2 : d1 - 1;
+            }
+            d2 = d2c;
+          }
         }
       }
 
@@ -1391,7 +1397,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _hasUsedDice2 = true;
     }
 
-    // Captura (incluye rompe-barrera en salida)
     bool captured = false;
     if (newPos < 52 && !_isSafeForColor(newPos, botColor)) {
       final isBarrierBreak = wasHome && newPos == _getStartPosition(botColor);
@@ -1415,7 +1420,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     if (captured) {
-      // Bot: bonus automático (pieza más avanzada)
       _pendingBonusMoves.clear();
       for (int i = 0; i < pieces.length; i++) {
         final p = pieces[i];
@@ -1445,7 +1449,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       return;
     }
 
-    // Si quedan movimientos con el otro dado
     _calculateMovablePieces(botColor);
     if (_movablePieces.isNotEmpty) {
       await _syncGameState(advanceTurn: false);
@@ -1459,8 +1462,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     await _syncGameState(advanceTurn: !hadDouble);
     if (hadDouble) _scheduleMultiplayerBotMove(botColor);
   }
-
-  // ──────────────────────────────────────────────────────────────────────────
 
   void _endGame(String winnerColor) {
     if (_gameEnded) return;
@@ -1484,10 +1485,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   void _handleAbandon(LudoGameMatch game) {
     final abandonedBy = game.abandonedBy;
     if (abandonedBy != null && abandonedBy != _currentUser?.uid) {
-      // This player did NOT abandon — game cancelled, no loss, bet will be refunded
       _showCancelledByOtherDialog(game);
     } else {
-      // This player abandoned
       if (!_hasUserExited) {
         _recordResult(GameResultModel.loss);
       }
@@ -1608,8 +1607,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final isWin = message.contains('GANASTE') || message.contains('Ganaste');
     final betAmount = game?.betAmount;
     final isBetGame = betAmount != null && betAmount > 0 && game?.currencyType == 'diamonds';
-    // Solo cuentan jugadores reales (los bots no aportan apuesta real).
-    // Mismo cálculo que la Cloud Function: pot = betAmount * realPlayers * 90%.
     final int realPlayerCount = _activePlayers
         .where((c) => !_botColors.contains(c))
         .length

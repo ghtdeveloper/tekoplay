@@ -88,8 +88,13 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
         case 'muy difícil':
           _cpuMoveTime = 600;
           break;
+        case 'ultra difícil':
+        case 'ultra difficult':
+        case 'ultra difficile':
+          _cpuMoveTime = 1000;
+          break;
         default:
-          _cpuMoveTime = 250;
+          _cpuMoveTime = 1000;
       }
     } else {
       switch (widget.selectedDifficulty.toLowerCase()) {
@@ -777,6 +782,11 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
               currentUser!.uid,
               newDiamonds,
             );
+            final netGain = currencyChange - gameCost;
+            if (netGain > 0) {
+              final newDiamondsEarned = userData.diamondsEarned + netGain;
+              await _firestoreService.updateUserDiamondsEarned(currentUser!.uid, newDiamondsEarned);
+            }
             if (!mounted) return;
             setState(() => _userDiamonds = newDiamonds);
           } else {

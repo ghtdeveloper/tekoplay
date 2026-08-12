@@ -1635,6 +1635,13 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
               bottom: 92.0 + (state.boneyard.isNotEmpty ? 54 : 0) + 10,
               child: _buildChatBubble(_ownMsgText!, isMe: true),
             ),
+          for (final entry in opponents.asMap().entries)
+            if (_lastMsgText != null && entry.value.playerId == _lastMsgSenderId)
+              Positioned(
+                top: 80,
+                left: entry.key * (MediaQuery.of(context).size.width / opponents.length) + 8,
+                child: _buildChatBubble(_lastMsgText!, isMe: false),
+              ),
           if (_showRoundEndBanner) _buildRoundEndOverlay(),
           if (_showGameOverBanner && _gameOverGame != null) _buildGameOverOverlay(_gameOverGame!),
           if (_flyingTileData != null) _buildPlayerFlyOverlay(),
@@ -2019,12 +2026,6 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                     ],
                   ),
                 ),
-                if (bubbleText != null)
-                  Positioned(
-                    bottom: -28,
-                    left: 8,
-                    child: _buildChatBubble(bubbleText, isMe: false),
-                  ),
               ],
             ),
           );

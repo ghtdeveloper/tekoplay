@@ -214,9 +214,21 @@ class _DominoController {
     _startRound();
   }
 
+  bool get _isUltra => difficulty.toLowerCase().contains('ultra');
+
   DominoTile? getBestCpuMove() {
     final playable = cpuHand.where(canPlay).toList();
     if (playable.isEmpty) return null;
+
+    if (_isUltra) {
+      playable.sort((a, b) {
+        int scoreA = _evaluateMove(a);
+        int scoreB = _evaluateMove(b);
+        if (scoreB != scoreA) return scoreB.compareTo(scoreA);
+        return b.total.compareTo(a.total);
+      });
+      return playable.first;
+    }
 
     switch (difficulty) {
       case 'muy fácil':
@@ -233,6 +245,28 @@ class _DominoController {
         playable.sort((a, b) => b.total.compareTo(a.total));
         return playable.first;
     }
+  }
+
+  int _evaluateMove(DominoTile tile) {
+    int score = tile.total;
+    final remaining = cpuHand.where((t) => t != tile).toList();
+
+    int? newLeft = leftOpen;
+    int? newRight = rightOpen;
+    if (chain.isEmpty) {
+      newLeft = tile.left;
+      newRight = tile.right;
+    } else if (tile.canConnectTo(leftOpen!)) {
+      newLeft = tile.left == leftOpen ? tile.right : tile.left;
+    } else {
+      newRight = tile.left == rightOpen ? tile.right : tile.left;
+    }
+
+    for (final t in remaining) {
+      if (newLeft != null && t.canConnectTo(newLeft)) score += 3;
+      if (newRight != null && t.canConnectTo(newRight)) score += 3;
+    }
+    return score;
   }
 
   String getCpuPlaySide(DominoTile tile) {
@@ -868,6 +902,11 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           if (isBet) {
             final newDiamonds = userData.diamonds + prize;
             await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
+            final netGain = prize - gameCost;
+            if (netGain > 0) {
+              final newDiamondsEarned = userData.diamondsEarned + netGain;
+              await _firestoreService.updateUserDiamondsEarned(_currentUser!.uid, newDiamondsEarned);
+            }
           } else {
             final newCoins = userData.coins + prize;
             await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);

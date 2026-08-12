@@ -2126,7 +2126,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           context,
           MaterialPageRoute(
             builder: (context) => ChessVsComputerScreen(
-              'Muy difícil',
+              S.of(context).ultraDifficult,
               matchType: widget.matchType,
             ),
           ),
@@ -2556,7 +2556,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        String selectedDifficulty = S.of(context).normal;
+        final isBet = widget.matchType == 'Apuesta';
+        String selectedDifficulty = isBet ? S.of(context).ultraDifficult : S.of(context).normal;
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -2587,26 +2588,57 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     ),
                     SizedBox(height: 20),
 
-                    Column(
-                      children:
-                          [
-                            S.of(context).veryEasy,
-                            S.of(context).easy,
-                            S.of(context).normal,
-                            S.of(context).difficult,
-                          ].map((level) {
-                            return RadioListTile<String>(
-                              title: Text(level),
-                              value: level,
-                              groupValue: selectedDifficulty,
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedDifficulty = value!;
-                                });
-                              },
-                            );
-                          }).toList(),
-                    ),
+                    if (!isBet)
+                      Column(
+                        children:
+                            [
+                              S.of(context).veryEasy,
+                              S.of(context).easy,
+                              S.of(context).normal,
+                              S.of(context).difficult,
+                            ].map((level) {
+                              return RadioListTile<String>(
+                                title: Text(level),
+                                value: level,
+                                groupValue: selectedDifficulty,
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedDifficulty = value!;
+                                  });
+                                },
+                              );
+                            }).toList(),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.psychology, color: Colors.red, size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Dificultad: Máxima',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red),
+                                  ),
+                                  Text(
+                                    'En modo apuesta la CPU juega al máximo nivel.',
+                                    style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
                     SizedBox(height: 20),
 
