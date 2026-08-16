@@ -2705,7 +2705,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           ),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: null, // TODO: abrir chat completo
+            onTap: () => _chatKey.currentState?.toggleChat(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(

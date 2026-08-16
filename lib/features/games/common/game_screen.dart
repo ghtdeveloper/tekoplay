@@ -1364,14 +1364,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       if (!_isDisposed) _showComputerGameDialog(context);
                     },
                   ),
-                  if (matchType != S.of(context).fun)
-                    GameModeButton(
-                      imagePath: 'assets/images/icon_play_online.png',
-                      label: S.of(context).online,
-                      onPressed: () {
-                        if (!_isDisposed) _showOnlineGameDialog(context);
-                      },
-                    ),
+                  GameModeButton(
+                    imagePath: 'assets/images/icon_play_online.png',
+                    label: S.of(context).online,
+                    onPressed: () {
+                      if (!_isDisposed) _showOnlineGameDialog(context);
+                    },
+                  ),
                 ],
               ),
             ),
