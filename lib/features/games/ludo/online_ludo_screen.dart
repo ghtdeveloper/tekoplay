@@ -2133,7 +2133,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           ),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: null,
+            onTap: () => _chatKey.currentState?.toggleChat(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
