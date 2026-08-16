@@ -43,6 +43,8 @@ dependencies:
   dio: ^5.7.0
   open_filex: ^4.6.0
   path_provider: ^2.1.5
+  webview_flutter: ^4.10.0
+  encrypt: ^5.0.3
 
 
 
@@ -68,6 +70,10 @@ flutter:
     - assets/images/splash_tekoplay.png
     - assets/images/chess.png
     - assets/images/domino.png
+    - assets/images/domino_table.png
+    - assets/images/bg1.png
+    - assets/domino_board/board.html
+    - assets/domino_board/bg1.png
     - assets/images/parchis.png
     - assets/images/poker.png
     - assets/images/coin.png

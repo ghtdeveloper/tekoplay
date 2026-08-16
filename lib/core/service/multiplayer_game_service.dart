@@ -255,7 +255,6 @@ class MultiplayerGameService {
   }
 
 
-  /// Método específico para unirse a juegos de matchmaking online
   Future<bool> joinGameOnline(String gameId,
       String playerId,
       String playerName,
@@ -273,7 +272,6 @@ class MultiplayerGameService {
 
       final game = MultiplayerGameMatch.fromFirestore(gameDoc);
 
-      // Validaciones específicas para online
       if (game.guestId != null) {
         if (kDebugMode) {
           print('⚠️ El juego ya tiene un guest');
@@ -295,7 +293,6 @@ class MultiplayerGameService {
         return false;
       }
 
-      // Verificar que el juego sea de matchmaking online
       final isOnlineMatchmaking = game.gameSettings?['isOnlineMatchmaking'] ??
           false;
       if (!isOnlineMatchmaking) {
@@ -315,7 +312,6 @@ class MultiplayerGameService {
         print('   Quota Amount: ${game.hostQuota}');
       }
 
-      // Actualizar el juego con el guest
       await gameRef.update({
         'guestId': playerId,
         'guestName': playerName,
@@ -330,7 +326,6 @@ class MultiplayerGameService {
         print('✅ Guest añadido al juego');
       }
 
-      // 💰 COBRAR CUOTAS si hay apuesta
       if (game.hostQuota != null && game.hostQuota! > 0) {
         if (kDebugMode) {
           print('\n💰 === COBRANDO CUOTAS ONLINE ===');
@@ -355,7 +350,6 @@ class MultiplayerGameService {
             print('   Revirtiendo join...');
           }
 
-          // Revertir el join si falla el cobro de cuotas
           await gameRef.update({
             'guestId': null,
             'guestName': null,
@@ -402,7 +396,6 @@ class MultiplayerGameService {
     }
   }
 
-  /// Método específico para abandonar juegos online
   Future<bool> abandonGameOnline({
     required String gameId,
     required String playerId,
@@ -421,7 +414,6 @@ class MultiplayerGameService {
       final gameData = gameDoc.data() as Map<String, dynamic>;
       final currentStatus = gameData['status'] ?? '';
 
-      // Solo permitir abandono si el juego está activo
       if (currentStatus != 'active') {
         if (kDebugMode) {
           print('⚠️ No se puede abandonar juego con status: $currentStatus');
@@ -429,7 +421,6 @@ class MultiplayerGameService {
         return false;
       }
 
-      // Verificar que sea un juego online
       final isOnlineMatchmaking = gameData['gameSettings']?['isOnlineMatchmaking'] ??
           false;
       if (!isOnlineMatchmaking) {
@@ -439,7 +430,6 @@ class MultiplayerGameService {
         return false;
       }
 
-      // Determinar el ganador (el que no abandonó)
       String? winnerId;
       final hostId = gameData['hostId'];
       final guestId = gameData['guestId'];
@@ -465,12 +455,11 @@ class MultiplayerGameService {
         print('   Quotas Collected: ${gameData['quotasCollected']}');
       }
 
-      // Marcar el juego como abandonado
       await gameRef.update({
         'status': 'abandoned',
         'abandonedBy': playerId,
         'winnerId': winnerId,
-        'result': 'win', // El resultado es victoria para el oponente
+        'result': 'win',
         'finishedAt': FieldValue.serverTimestamp(),
         'endTime': FieldValue.serverTimestamp(),
         'reason': 'abandoned',
@@ -569,20 +558,20 @@ class MultiplayerGameService {
             '   La Cloud Function distribuirá las recompensas automáticamente');
 
         if (currencyType == 'diamonds' && betAmount != null) {
-          final totalPot = betAmount * 2;
-          final winnerPrize = betAmount + (betAmount * 0.7).round();
-          final commission = (betAmount * 0.3).round();
+          final totalPot    = betAmount * 2;
+          final winnerPrize = betAmount + (betAmount * 0.90).floor();
+          final commission  = totalPot - winnerPrize; // 10% exacto
 
-          print('\n💎 Distribución esperada:');
+          print('\n💎 Distribución esperada (10% comisión apuesta):');
           print('   Total Pot: $totalPot diamantes');
           if (result == GameResultModel.draw) {
-            final drawReturn = (betAmount * 0.15).round();
+            final drawReturn = (betAmount * 0.90).floor();
             print('   Cada jugador recupera: $drawReturn diamantes');
             print('   Comisión: ${totalPot - (drawReturn * 2)} diamantes');
           } else {
             print('   Ganador recibirá: $winnerPrize diamantes');
             print('   Perdedor pierde: $betAmount diamantes');
-            print('   Comisión: $commission diamantes');
+            print('   Comisión casa: $commission diamantes');
           }
         }
       }
@@ -698,7 +687,6 @@ class MultiplayerGameService {
         },
       );
 
-      // Guest
       if (game.guestId != null) {
         await firestoreService.recordGameMatch(
           userId: game.guestId!,

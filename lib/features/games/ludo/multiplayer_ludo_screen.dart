@@ -6,22 +6,26 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/ludo_game_match.dart';
+import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/ludo_game_service.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'ludo_board_painter.dart';
+import '../../../core/widgets/game_chat_widget.dart';
+
+enum _FriendLudoState { setup, waitingRoom, gameActive }
 
 class MultiplayerLudoScreen extends StatefulWidget {
-  final String gameId;
+  final String? gameId;
   final int playerNumber;
   final String matchType;
 
   const MultiplayerLudoScreen({
     super.key,
-    required this.gameId,
-    required this.playerNumber,
+    this.gameId,
+    this.playerNumber = 1,
     required this.matchType,
   });
 
@@ -37,12 +41,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   final LudoGameService _gameService = LudoGameService();
   User? get _currentUser => FirebaseAuth.instance.currentUser;
 
+  int? _userDiamonds;
+  int? _userCoins;
+  StreamSubscription<DocumentSnapshot>? _balanceSubscription;
+
   LudoGameMatch? _currentGame;
   StreamSubscription<LudoGameMatch?>? _gameSubscription;
   LudoGameState _gameState = LudoGameState.initial();
   String _myColor = 'yellow';
   String _currentTurn = 'player1';
-  bool get _isMyTurn => _currentTurn == 'player${widget.playerNumber}';
+  bool get _isMyTurn => _currentTurn == 'player$_myPlayerNumber';
 
   int _dice1Value = 0;
   int _dice2Value = 0;
@@ -50,7 +58,28 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   bool _hasUsedDice2 = false;
   bool _isRollingDice = false;
   int _consecutiveDoubles = 0;
+  int? _lastMovedPieceId;
   final Random _random = Random();
+  final Map<String, int> _botMissedFive = {};
+  int _humanHomeDoubles = 0;
+  final Map<String, int> _botHomeDoubles = {};
+  int _botTurnCounter = 0;
+
+  int _rollBotDie() {
+    final r = _random.nextDouble();
+    if (r < 0.02) return 1;
+    if (r < 0.05) return 2;
+    if (r < 0.10) return 3;
+    if (r < 0.18) return 4;
+    if (r < 0.55) return 5;
+    return 6;
+  }
+
+  int _rollBotDieNoDouble({int exclude = -1}) {
+    int v;
+    do { v = _rollBotDie(); } while (v == exclude);
+    return v;
+  }
 
 
   List<Map<String, dynamic>> _movablePieces = [];
@@ -59,15 +88,24 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   bool _bonusSelectionActive = false;
   bool _bonusHadDouble = false;
   final List<Map<String, dynamic>> _pendingBonusMoves = [];
+  Set<int> _bridgeBreakPieceIds = {};
 
   double _boardSize = 0;
   List<String> _activePlayers = ['yellow', 'red', 'green', 'blue'];
 
   bool _gameEnded = false;
   bool _hasUserExited = false;
-  bool _hasDeductedEntryFee = false;
   DateTime? _gameStartTime;
-  bool _isScreenKeepOnActive = false;
+
+  _FriendLudoState _screenState = _FriendLudoState.setup;
+  int _myPlayerNumber = 1;
+  String? _activeGameId;
+  final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
+  int _selectedPlayerCount = 2;
+  int? _selectedBetAmount;
+  StreamSubscription<LudoGameMatch?>? _waitingSubscription;
+
+  static const List<int> _betOptions = [10, 25, 50, 100, 250, 500];
 
   String _toastMessage = '';
   bool _showToast = false;
@@ -85,7 +123,14 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
-  static const int _turnTimeoutSeconds = 30;
+  static const int _turnTimeoutSeconds = 20;
+
+  Timer? _waitRoomTimer;
+  int _waitRoomCountdown = 60;
+  DateTime? _waitRoomPausedAt;
+  final Set<String> _botColors = {};
+  bool _botTurnScheduled = false;
+  bool get _isHost => _myPlayerNumber == 1;
 
 
   static const List<_Coord> _boardPath = [
@@ -107,8 +152,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _gameStartTime = DateTime.now();
-    _enableWakeLock();
+    _myPlayerNumber = widget.playerNumber;
 
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 900), vsync: this,
@@ -131,14 +175,26 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     );
     _bannerAnim = CurvedAnimation(parent: _bannerController, curve: Curves.easeOut);
 
-    _initializeGame();
+    if (widget.gameId != null) {
+      _activeGameId = widget.gameId;
+      _screenState = _FriendLudoState.gameActive;
+      _gameStartTime = DateTime.now();
+      _enableWakeLock();
+      _initializeGame();
+    } else {
+      _screenState = _FriendLudoState.setup;
+      _setupBalanceListener();
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _waitingSubscription?.cancel();
     _gameSubscription?.cancel();
+    _balanceSubscription?.cancel();
     _turnTimer?.cancel();
+    _waitRoomTimer?.cancel();
     _pulseController.dispose();
     _diceAnimController.dispose();
     _toastController.dispose();
@@ -149,19 +205,41 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isScreenKeepOnActive) {
-      _enableWakeLock();
+    if (state == AppLifecycleState.resumed) {
+      if (!_gameEnded && _screenState == _FriendLudoState.gameActive) _enableWakeLock();
+      if (_waitRoomPausedAt != null && _screenState == _FriendLudoState.waitingRoom) {
+        final elapsed = DateTime.now().difference(_waitRoomPausedAt!).inSeconds;
+        _waitRoomPausedAt = null;
+        final remaining = (_waitRoomCountdown - elapsed).clamp(0, 60);
+        if (remaining <= 0) {
+          if (_isHost && (_currentGame?.status == 'waiting')) _fillBotsAndStart();
+        } else {
+          _startWaitRoomTimer(remaining);
+        }
+      } else {
+        _waitRoomPausedAt = null;
+      }
+      if (!_gameEnded && _screenState == _FriendLudoState.gameActive) {
+        final deadline = _currentGame?.turnDeadline;
+        if (deadline != null) {
+          _syncTimerToDeadline(deadline);
+        }
+      }
     } else if (state == AppLifecycleState.paused) {
       _disableWakeLock();
+      if (_screenState == _FriendLudoState.waitingRoom) {
+        _waitRoomPausedAt = DateTime.now();
+        _waitRoomTimer?.cancel();
+      }
+      if (_isMyTurn && !_gameEnded) {
+        _turnTimer?.cancel();
+      }
     }
   }
 
   Future<void> _enableWakeLock() async {
     try {
-      if (!await WakelockPlus.enabled) {
-        await WakelockPlus.enable();
-        if (mounted) setState(() => _isScreenKeepOnActive = true);
-      }
+      await WakelockPlus.enable();
     } catch (_) {}
   }
 
@@ -169,16 +247,72 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     try {
       if (await WakelockPlus.enabled) {
         await WakelockPlus.disable();
-        if (mounted) setState(() => _isScreenKeepOnActive = false);
       }
     } catch (_) {}
   }
 
   void _initializeGame() {
+    if (_activeGameId == null) return;
     _gameSubscription = _gameService
-        .getGameStream(widget.gameId)
+        .getGameStream(_activeGameId!)
         .listen(_handleGameUpdate, onError: (e) {
       if (kDebugMode) print('Ludo stream error: $e');
+    });
+    _setupBalanceListener();
+  }
+
+  void _startWaitingRoom(String gameId) {
+    _activeGameId = gameId;
+    setState(() {
+      _screenState = _FriendLudoState.waitingRoom;
+      _waitRoomCountdown = 60;
+    });
+
+    _waitRoomPausedAt = null;
+    _startWaitRoomTimer(_waitRoomCountdown);
+
+    _waitingSubscription = _gameService
+        .getGameStream(gameId)
+        .listen((game) {
+      if (!mounted || game == null) return;
+      setState(() => _currentGame = game);
+
+      if (game.status == 'active' && _screenState == _FriendLudoState.waitingRoom) {
+        _waitingSubscription?.cancel();
+        _waitingSubscription = null;
+        _setupPlayerColor(game);
+        _setupActivePlayers(game);
+        _gameStartTime = DateTime.now();
+        _enableWakeLock();
+        setState(() {
+          _gameState = game.gameState;
+          _currentTurn = game.currentTurn;
+          _dice1Value = game.dice1;
+          _dice2Value = game.dice2;
+          _screenState = _FriendLudoState.gameActive;
+        });
+        _initializeGame();
+      }
+    }, onError: (e) {
+      if (kDebugMode) print('Ludo waiting error: $e');
+    });
+  }
+
+  void _setupBalanceListener() {
+    if (_currentUser == null) return;
+    _balanceSubscription?.cancel();
+    _balanceSubscription = _firestore
+        .collection('users')
+        .doc(_currentUser!.uid)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists && mounted) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _userDiamonds = data['diamonds'] ?? 0;
+          _userCoins = data['coins'] ?? 0;
+        });
+      }
     });
   }
 
@@ -195,8 +329,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     final prevTurn = _currentTurn;
     final newTurn = game.currentTurn;
-    final turnChangedToMe = newTurn != prevTurn && newTurn == 'player${widget.playerNumber}';
-    final isMyTurnNow = newTurn == 'player${widget.playerNumber}';
+    final turnChangedToMe = newTurn != prevTurn && newTurn == 'player$_myPlayerNumber';
+    final isMyTurnNow = newTurn == 'player$_myPlayerNumber';
 
     setState(() {
       _gameState = game.gameState;
@@ -209,11 +343,28 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       }
     });
 
-    if (isMyTurnNow) _calculateMovablePieces();
+    if (isMyTurnNow && !_bonusSelectionActive) _calculateMovablePieces();
 
-    if (prevTurn != _currentTurn && _isMyTurn && !_gameEnded) {
-      _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
-      _startTurnTimer();
+    final prevDeadline = prevGame?.turnDeadline;
+    final newDeadline = game.turnDeadline;
+    final turnChanged = prevTurn != _currentTurn;
+    final deadlineChanged = newDeadline != null && newDeadline != prevDeadline;
+    if ((turnChanged || deadlineChanged) && !_gameEnded) {
+      if (turnChanged && _isMyTurn) _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
+      if (newDeadline != null) {
+        _syncTimerToDeadline(newDeadline);
+      } else if (turnChanged) {
+        _startTurnTimer();
+      }
+    }
+
+
+    if (!_gameEnded && _isHost && _botColors.isNotEmpty) {
+      final curColor = _colorForCurrentTurn();
+      if (_botColors.contains(curColor) && !_botTurnScheduled &&
+          _dice1Value == 0 && _dice2Value == 0) {
+        _scheduleMultiplayerBotMove(curColor);
+      }
     }
 
     if (!_gameEnded && game.isFinished) {
@@ -227,19 +378,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _handleAbandon(game);
     }
 
-    // Descontar cuota de entrada cuando la partida se activa (una sola vez por jugador)
-    if (!_hasDeductedEntryFee && game.isActive && _currentUser != null) {
-      _hasDeductedEntryFee = true;
-      final betAmt = game.betAmount ?? (game.currencyType == 'diamonds' ? 25 : 100);
-      if (betAmt > 0) {
-        if (game.currencyType == 'diamonds') {
-          _firestoreService.incrementUserDiamonds(_currentUser!.uid, -betAmt);
-        } else {
-          _firestoreService.incrementUserCoins(_currentUser!.uid, -betAmt);
-        }
-      }
-    }
-
     if (prevGame != null && !prevGame.rewardsDistributed && game.rewardsDistributed) {
       if (kDebugMode) print('💰 [Ludo] Recompensas distribuidas por Cloud Function');
       Future.delayed(const Duration(seconds: 1), () {
@@ -249,7 +387,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   void _setupPlayerColor(LudoGameMatch game) {
-    switch (widget.playerNumber) {
+    switch (_myPlayerNumber) {
       case 1: _myColor = game.player1Color; break;
       case 2: _myColor = game.player2Color ?? 'red'; break;
       case 3: _myColor = game.player3Color ?? 'blue'; break;
@@ -262,25 +400,91 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (game.player2Color != null) _activePlayers.add(game.player2Color!);
     if (game.player3Color != null) _activePlayers.add(game.player3Color!);
     if (game.player4Color != null) _activePlayers.add(game.player4Color!);
+
+    // Detectar slots de bot (guest IDs que comienzan con 'bot_')
+    _botColors.clear();
+    final slots = [
+      (game.guest2Id, game.player2Color),
+      (game.guest3Id, game.player3Color),
+      (game.guest4Id, game.player4Color),
+    ];
+    for (final (id, color) in slots) {
+      if ((id?.startsWith('bot_') ?? false) && color != null) {
+        _botColors.add(color);
+      }
+    }
   }
 
-  void _startTurnTimer() {
+  Future<void> _fillBotsAndStart() async {
+    if (_activeGameId == null || !mounted) return;
+    await _gameService.fillBotsAndStart(_activeGameId!);
+  }
+
+  void _startWaitRoomTimer(int fromSeconds) {
+    _waitRoomTimer?.cancel();
+    setState(() => _waitRoomCountdown = fromSeconds);
+    _waitRoomTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || _screenState != _FriendLudoState.waitingRoom) { t.cancel(); return; }
+      setState(() => _waitRoomCountdown--);
+      if (_waitRoomCountdown <= 0) {
+        t.cancel();
+        if (_isHost && (_currentGame?.status == 'waiting')) {
+          _fillBotsAndStart();
+        }
+      }
+    });
+  }
+
+  void _startTurnTimer([int? initialSeconds]) {
     _turnTimer?.cancel();
-    setState(() => _turnTimerSeconds = _turnTimeoutSeconds);
+    final secs = initialSeconds ?? _turnTimeoutSeconds;
+    setState(() => _turnTimerSeconds = secs);
     _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted || _gameEnded || !_isMyTurn) { t.cancel(); return; }
+      if (!mounted || _gameEnded) { t.cancel(); return; }
       setState(() => _turnTimerSeconds--);
       if (_turnTimerSeconds <= 0) {
         t.cancel();
-        _autoAction();
+        if (_isMyTurn) _autoAction();
       }
     });
+  }
+
+  void _syncTimerToDeadline(DateTime deadline) {
+    _turnTimer?.cancel();
+    final remaining = deadline.difference(DateTime.now()).inSeconds.clamp(0, _turnTimeoutSeconds);
+    if (remaining <= 0) {
+      setState(() => _turnTimerSeconds = 0);
+      if (_isMyTurn && !_gameEnded) _autoAction();
+      return;
+    }
+    setState(() => _turnTimerSeconds = remaining);
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || _gameEnded) { t.cancel(); return; }
+      final rem = deadline.difference(DateTime.now()).inSeconds.clamp(0, _turnTimeoutSeconds);
+      setState(() => _turnTimerSeconds = rem);
+      if (rem <= 0) {
+        t.cancel();
+        if (_isMyTurn && !_gameEnded) _autoAction();
+      }
+    });
+  }
+
+  Future<void> _writeTurnDeadline() async {
+    if (_activeGameId == null) return;
+    try {
+      await _firestore.collection('ludo_games').doc(_activeGameId!).update({
+        'turnDeadline': Timestamp.fromDate(
+          DateTime.now().add(const Duration(seconds: _turnTimeoutSeconds)),
+        ),
+      });
+    } catch (e) {
+      if (kDebugMode) print('Error writing turnDeadline: $e');
+    }
   }
 
   Future<void> _autoAction() async {
     if (!mounted || _gameEnded || !_isMyTurn) return;
 
-    // Si hay selección de bonus activa, auto-elegir la primera opción
     if (_bonusSelectionActive && _pendingBonusMoves.isNotEmpty) {
       final m = _pendingBonusMoves.first;
       _executeBonusMove(m['pieceId'] as int, m['bonusPos'] as int);
@@ -288,7 +492,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     if (_dice1Value == 0 && _dice2Value == 0) {
-      // Awaitar el lanzamiento y luego auto-mover sin esperar otro ciclo del timer
       await _rollDice();
       await Future.delayed(const Duration(milliseconds: 1000));
       if (!mounted || _gameEnded || !_isMyTurn) return;
@@ -305,17 +508,58 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Future<void> _rollDice() async {
-    if (!_isMyTurn || _gameEnded || _isRollingDice) return;
+    if (!_isMyTurn || _gameEnded || _isRollingDice || _bonusSelectionActive) return;
     if (_dice1Value != 0 || _dice2Value != 0) return;
 
-    setState(() { _isRollingDice = true; });
-    _diceAnimController.repeat();
-    await Future.delayed(const Duration(milliseconds: 600));
-    _diceAnimController.stop();
-    _diceAnimController.reset();
+    final myPieces = _gameState.getPiecesByColor(_myColor);
+    final allInHome = myPieces.every((p) => p.isHome);
+    int d1 = 0, d2 = 0;
 
-    final d1 = _random.nextInt(6) + 1;
-    final d2 = _random.nextInt(6) + 1;
+    do {
+      setState(() { _isRollingDice = true; });
+      _diceAnimController.repeat();
+      await Future.delayed(const Duration(milliseconds: 600));
+      _diceAnimController.stop();
+      _diceAnimController.reset();
+
+      d1 = _random.nextInt(6) + 1;
+      d2 = _random.nextInt(6) + 1;
+
+      final hasBots = _botColors.isNotEmpty;
+      if (hasBots && widget.matchType == 'Apuesta') {
+        if (_random.nextInt(3) != 0) {
+          if (d1 > 4) d1 = _random.nextInt(4) + 1;
+          if (d2 > 4) d2 = _random.nextInt(4) + 1;
+        }
+      } else {
+        final hasHomePieces = myPieces.any((p) => p.isHome);
+        final humanMissed = _botMissedFive[_myColor] ?? 0;
+        if (humanMissed >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
+          if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+        }
+        _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
+      }
+
+      if (allInHome && d1 == d2 && d1 != 5) {
+        _humanHomeDoubles++;
+        setState(() { _dice1Value = d1; _dice2Value = d2; _isRollingDice = false; });
+        if (_humanHomeDoubles >= 3) {
+          _humanHomeDoubles = 0;
+          _consecutiveDoubles = 0;
+          _showEventToast('¡Tres dobles en casa! Turno perdido.');
+          await Future.delayed(const Duration(milliseconds: 1500));
+          setState(() { _dice1Value = 0; _dice2Value = 0; });
+          await _advanceTurn();
+          return;
+        }
+        _showEventToast('¡Doble en casa! Vuelves a tirar.');
+        await Future.delayed(const Duration(milliseconds: 1200));
+        setState(() { _dice1Value = 0; _dice2Value = 0; });
+        continue;
+      }
+      _humanHomeDoubles = 0;
+      break;
+    } while (true);
 
     if (d1 == d2) {
       _consecutiveDoubles++;
@@ -332,6 +576,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       await _applyTripleDoublesPenalty();
       return;
     }
+
+    _bridgeBreakPieceIds = (d1 == d2) ? _getBarreraIndices(_myColor) : {};
 
     setState(() {
       _dice1Value = d1;
@@ -350,12 +596,13 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (!_gameEnded && mounted) await _advanceTurn();
     } else {
       _startTurnTimer();
+      unawaited(_writeTurnDeadline());
     }
   }
 
   Future<void> _syncDiceToFirestore(int d1, int d2, bool u1, bool u2) async {
     try {
-      await _firestore.collection('ludo_games').doc(widget.gameId).update({
+      await _firestore.collection('ludo_games').doc(_activeGameId!).update({
         'dice1': d1,
         'dice2': d2,
         'hasUsedDice1': u1,
@@ -374,25 +621,36 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       await _syncGameState(advanceTurn: true);
       return;
     }
-    final sp = _getStartPosition(_myColor);
-    LudoPiece? furthest;
-    int maxSteps = -1;
-    for (final p in active) {
-      final steps = p.position >= 52
-          ? 51 + (p.position - 51)
-          : _stepsFromStart(p.position, sp);
-      if (steps > maxSteps) { maxSteps = steps; furthest = p; }
+
+    LudoPiece? target;
+    if (_lastMovedPieceId != null && _lastMovedPieceId! < pieces.length) {
+      final last = pieces[_lastMovedPieceId!];
+      if (!last.isHome && !last.isFinished) {
+        target = last;
+      }
     }
-    if (furthest != null) {
-      furthest.position = -1;
+    if (target == null) {
+      final sp = _getStartPosition(_myColor);
+      int maxSteps = -1;
+      for (final p in active) {
+        final steps = p.position >= 52
+            ? 51 + (p.position - 51)
+            : _stepsFromStart(p.position, sp);
+        if (steps > maxSteps) { maxSteps = steps; target = p; }
+      }
+    }
+
+    if (target != null) {
+      target.position = -1;
       _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
     }
     await _syncGameState(advanceTurn: true);
   }
 
-  void _calculateMovablePieces() {
+  void _calculateMovablePieces([String? forColor]) {
+    final color = forColor ?? _myColor;
     _movablePieces.clear();
-    final pieces = _gameState.getPiecesByColor(_myColor);
+    final pieces = _gameState.getPiecesByColor(color);
 
     for (int i = 0; i < pieces.length; i++) {
       final piece = pieces[i];
@@ -400,47 +658,65 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
       if (piece.isHome) {
         if (!_hasUsedDice1 && _dice1Value == 5) {
-          final sp = _getStartPosition(_myColor);
-          if (_canLandOn(_myColor, sp, piece)) {
+          final sp = _getStartPosition(color);
+          if (_canLandOn(color, sp, piece)) {
             _movablePieces.add({'pieceId': i, 'diceValue': 5, 'diceNumber': 1, 'piece': piece});
           }
         }
         if (!_hasUsedDice2 && _dice2Value == 5 && (_dice1Value != _dice2Value || _hasUsedDice1)) {
-          final sp = _getStartPosition(_myColor);
-          if (_canLandOn(_myColor, sp, piece)) {
+          final sp = _getStartPosition(color);
+          if (_canLandOn(color, sp, piece)) {
             _movablePieces.add({'pieceId': i, 'diceValue': 5, 'diceNumber': 2, 'piece': piece});
           }
         }
       } else {
-        if (!_hasUsedDice1 && _canMovePieceWithValue(piece, _dice1Value)) {
+        if (!_hasUsedDice1 && _canMovePieceWithValue(piece, _dice1Value, color)) {
           _movablePieces.add({'pieceId': i, 'diceValue': _dice1Value, 'diceNumber': 1, 'piece': piece});
         }
         if (!_hasUsedDice2 && (_dice1Value != _dice2Value || _hasUsedDice1) &&
-            _canMovePieceWithValue(piece, _dice2Value)) {
+            _canMovePieceWithValue(piece, _dice2Value, color)) {
           _movablePieces.add({'pieceId': i, 'diceValue': _dice2Value, 'diceNumber': 2, 'piece': piece});
         }
       }
     }
 
-    // Regla: doble con barrera propia → el primer movimiento debe abrir la barrera
-    if (_dice1Value > 0 && _dice1Value == _dice2Value && !_hasUsedDice1 && !_hasUsedDice2) {
-      final barrIndices = _getBarreraIndices(_myColor);
+    final isDoubles = _dice1Value > 0 && _dice1Value == _dice2Value;
+
+    if (isDoubles && !_hasUsedDice1 && !_hasUsedDice2) {
+      final barrIndices = _getBarreraIndices(color);
       if (barrIndices.isNotEmpty) {
         final barrMoves = _movablePieces.where((m) => barrIndices.contains(m['pieceId'])).toList();
         if (barrMoves.isNotEmpty) _movablePieces = barrMoves;
       }
     }
+    if (isDoubles && _hasUsedDice1 && !_hasUsedDice2 && _bridgeBreakPieceIds.isNotEmpty) {
+      _movablePieces.removeWhere((m) {
+        final pid = m['pieceId'] as int;
+        if (!_bridgeBreakPieceIds.contains(pid)) return false;
+        final piece = pieces[pid];
+        final np = _calculateNewPosition(piece, _dice2Value, color);
+        if (np == null) return false;
+        for (int j = 0; j < pieces.length; j++) {
+          if (j == pid) continue;
+          if (!_bridgeBreakPieceIds.contains(j)) continue;
+          final ally = pieces[j];
+          if (!ally.isHome && !ally.isFinished && ally.position == np) return true;
+        }
+        return false;
+      });
+    }
 
     if (mounted) setState(() {});
   }
 
-  bool _canMovePieceWithValue(LudoPiece piece, int diceValue) {
+  bool _canMovePieceWithValue(LudoPiece piece, int diceValue, [String? color]) {
+    final c = color ?? _myColor;
     if (piece.isFinished) return false;
     if (piece.isHome) return diceValue == 5;
-    final np = _calculateNewPosition(piece, diceValue, _myColor);
+    final np = _calculateNewPosition(piece, diceValue, c);
     if (np == null) return false;
-    if (_hasBarrierInPath(piece, diceValue, _myColor)) return false;
-    return _canLandOn(_myColor, np, piece);
+    if (_hasBarrierInPath(piece, diceValue, c)) return false;
+    return _canLandOn(c, np, piece);
   }
 
   void _handleBoardTap(Offset local) {
@@ -452,16 +728,28 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final pieces = _gameState.getPiecesByColor(_myColor);
 
     if (_bonusSelectionActive) {
+      final bonusTapR = sq * 1.8;
+      int? closestId;
+      Map<String, dynamic>? closestBm;
+      double closestDist = double.infinity;
+
       for (int i = 0; i < pieces.length; i++) {
         final bm = _pendingBonusMoves.firstWhere(
           (m) => m['pieceId'] == i, orElse: () => {},
         );
         if (bm.isEmpty) continue;
         final pos = _getPieceScreenPosition(pieces[i], _myColor, sq);
-        if (pos != null && (local - pos).distance < tapR) {
-          _executeBonusMove(i, bm['bonusPos'] as int);
-          return;
+        if (pos == null) continue;
+        final dist = (local - pos).distance;
+        if (dist < bonusTapR && dist < closestDist) {
+          closestDist = dist;
+          closestId = i;
+          closestBm = bm;
         }
+      }
+
+      if (closestId != null && closestBm != null) {
+        _executeBonusMove(closestId, closestBm['bonusPos'] as int);
       }
       return;
     }
@@ -532,8 +820,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   void _executePieceMove(String color, int pieceId, int diceValue, int diceNumber) {
-    if (color != _myColor || _gameEnded) return;
-    _turnTimer?.cancel();
+    if ((color != _myColor && !_botColors.contains(color)) || _gameEnded) return;
+    if (color == _myColor) _turnTimer?.cancel();
 
     final pieces = _gameState.getPiecesByColor(color);
     if (pieceId >= pieces.length) return;
@@ -543,10 +831,17 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     bool captured = false;
     if (newPos < 52 && !_isSafeForColor(newPos, color)) {
+      final isBarrierBreak = piece.isHome && newPos == _getStartPosition(color);
       for (final ec in _activePlayers) {
         if (ec == color) continue;
-        for (final ep in _gameState.getPiecesByColor(ec)) {
-          if (!ep.isHome && !ep.isFinished && ep.position == newPos) {
+        final enemyPiecesHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
+            .toList();
+        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+          enemyPiecesHere.last.position = -1;
+          captured = true;
+        } else {
+          for (final ep in enemyPiecesHere) {
             ep.position = -1;
             captured = true;
           }
@@ -556,6 +851,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     piece.position = newPos;
     if (newPos == 57) piece.isFinished = true;
+    _lastMovedPieceId = pieceId;
 
     if (diceNumber == 1) {
       _hasUsedDice1 = true;
@@ -611,7 +907,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (p.isFinished || p.isHome) continue;
       final bp = _calculateCaptureBonusPosition(p, color);
       if (bp == null) continue;
-      if (bp < 52 && _isEnemyBarrierAt(bp, color)) continue;
       _pendingBonusMoves.add({'pieceId': i, 'piece': p, 'bonusPos': bp});
     }
 
@@ -624,14 +919,43 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       return;
     }
 
-    _bonusSelectionActive = true;
     _bonusHadDouble = hadDouble;
+
+    if (_botColors.contains(color)) {
+      final best = _pendingBonusMoves.reduce((a, b) {
+        final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition(color));
+        final stB = _stepsFromStart((b['piece'] as LudoPiece).position, _getStartPosition(color));
+        return stA >= stB ? a : b;
+      });
+      _showEventToast('¡Bot capturó! +20 casillas', color: Colors.green);
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        if (!mounted || _gameEnded) return;
+        _pendingBonusMoves.clear();
+        final pieces = _gameState.getPiecesByColor(color);
+        final pid = best['pieceId'] as int;
+        if (pid < pieces.length) {
+          pieces[pid].position = best['bonusPos'] as int;
+          if (best['bonusPos'] == 57) pieces[pid].isFinished = true;
+        }
+        setState(() {});
+        if (hadDouble) {
+          _syncGameState(advanceTurn: false);
+          _scheduleMultiplayerBotMove(color);
+        } else {
+          _syncGameState(advanceTurn: true);
+        }
+      });
+      return;
+    }
+
+    _bonusSelectionActive = true;
     _showEventToast('¡Capturaste! Elige una ficha para el bonus +20', color: Colors.green);
 
     _movablePieces = _pendingBonusMoves.map((m) => {
       ...m, 'diceValue': 20, 'diceNumber': 0,
     }).toList();
     setState(() {});
+    _startTurnTimer();
   }
 
   void _executeBonusMove(int pieceId, int bonusPos) {
@@ -679,9 +1003,12 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         updates['dice2'] = 0;
         updates['hasUsedDice1'] = false;
         updates['hasUsedDice2'] = false;
+        updates['turnDeadline'] = Timestamp.fromDate(
+          DateTime.now().add(const Duration(seconds: _turnTimeoutSeconds)),
+        );
       }
 
-      await _firestore.collection('ludo_games').doc(widget.gameId).update(updates);
+      await _firestore.collection('ludo_games').doc(_activeGameId!).update(updates);
     } catch (e) {
       if (kDebugMode) print('Error syncing game state: $e');
     }
@@ -725,7 +1052,18 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     for (int step = 1; step < diceValue; step++) {
       final ns = _stepsFromStart(piece.position, sp) + step;
       if (ns >= 51) break;
-      if (_isEnemyBarrierAt((sp + ns) % 52, color)) return true;
+      final pos = (sp + ns) % 52;
+      if (_isAnyBarrierAt(pos)) return true;
+    }
+    return false;
+  }
+
+  bool _isAnyBarrierAt(int pos) {
+    for (final c in _activePlayers) {
+      final count = _gameState.getPiecesByColor(c)
+          .where((p) => !p.isHome && !p.isFinished && p.position == pos)
+          .length;
+      if (count >= 2) return true;
     }
     return false;
   }
@@ -741,7 +1079,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return false;
   }
 
-  /// Devuelve los índices de fichas del color dado que forman una barrera propia.
   Set<int> _getBarreraIndices(String color) {
     final pieces = _gameState.getPiecesByColor(color);
     final inBarrera = <int>{};
@@ -767,33 +1104,33 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         .where((p) => p != moving && !p.isHome && !p.isFinished && p.position == newPos)
         .length;
     if (myCount >= 2) return false;
-    if (_isEnemyBarrierAt(newPos, color)) return false;
-    for (final oc in _activePlayers) {
-      if (oc == color) continue;
-      final ownerStart = _getStartPosition(oc);
-      if (newPos == ownerStart) {
-        final ownerCount = _gameState.getPiecesByColor(oc)
-            .where((p) => !p.isHome && !p.isFinished && p.position == ownerStart)
-            .length;
-        if (ownerCount > 0) return false;
-      }
+    if (moving.isHome && newPos == _getStartPosition(color) && _isEnemyBarrierAt(newPos, color)) {
+      return true;
     }
+    if (_isEnemyBarrierAt(newPos, color)) return false;
     return true;
   }
 
   int? _calculateCaptureBonusPosition(LudoPiece piece, String color) {
     if (piece.isFinished || piece.isHome) return null;
-    if (piece.position >= 52) {
-      final np = piece.position + 20;
-      return np > 57 ? 57 : np;
-    }
+    if (piece.position >= 52) return null;
     final sp = _getStartPosition(color);
-    final steps = _stepsFromStart(piece.position, sp) + 20;
-    if (steps >= 51) {
-      final into = steps - 51;
-      return into > 5 ? 57 : 52 + into;
+    final currentSteps = _stepsFromStart(piece.position, sp);
+    for (int bonus = 1; bonus <= 20; bonus++) {
+      final ns = currentSteps + bonus;
+      final int candidatePos;
+      if (ns >= 51) {
+        final into = ns - 51;
+        if (into > 5) return null;
+        candidatePos = 52 + into;
+      } else {
+        candidatePos = (sp + ns) % 52;
+      }
+      if (candidatePos < 52 && _isAnyBarrierAt(candidatePos)) return null;
+      if (candidatePos == 57 && bonus < 20) return null;
+      if (bonus == 20) return candidatePos;
     }
-    return (sp + steps) % 52;
+    return null;
   }
 
   bool _checkVictory(String color) =>
@@ -862,56 +1199,391 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return positions[id];
   }
 
+
+  void _scheduleMultiplayerBotMove(String botColor) {
+    if (_botTurnScheduled || _gameEnded || !mounted) return;
+    _botTurnScheduled = true;
+    final delay = 3200 + _random.nextInt(800);
+    Future.delayed(Duration(milliseconds: delay), () {
+      _botTurnScheduled = false;
+      if (!mounted || _gameEnded) return;
+      if (_colorForCurrentTurn() != botColor) return;
+      _executeBotRollAndMove(botColor);
+    });
+  }
+
+  Future<void> _executeBotRollAndMove(String botColor) async {
+    if (_gameEnded || !mounted) return;
+    if (_colorForCurrentTurn() != botColor) return;
+
+    final botPieces = _gameState.getPiecesByColor(botColor);
+    final allInHome = botPieces.every((p) => p.isHome);
+    int d1 = 0, d2 = 0;
+
+    final isBetMode = widget.matchType == 'Apuesta';
+    do {
+      _botTurnCounter++;
+      final isWeakTurn = isBetMode && (_botTurnCounter % 3 == 0);
+
+      if (isWeakTurn) {
+        d1 = _random.nextInt(2) + 1; // 1 or 2
+        d2 = _random.nextInt(2) + 1; // 1 or 2
+      } else {
+        d1 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble() : _rollBotDie();
+        d2 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble(exclude: d1) : _rollBotDie();
+
+        final hasHomePieces = botPieces.any((p) => p.isHome);
+        final missedCount = _botMissedFive[botColor] ?? 0;
+        if (missedCount >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
+          if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+        }
+        _botMissedFive[botColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? missedCount + 1 : 0;
+
+        final piecesInStretch = botPieces
+            .where((p) => p.position >= 52 && !p.isFinished)
+            .toList();
+        if (piecesInStretch.isNotEmpty && _random.nextDouble() < 0.80) {
+          final usefulValues = <int>{};
+          for (final p in piecesInStretch) {
+            final rem = 57 - p.position;
+            if (rem >= 1 && rem <= 6) usefulValues.add(rem);
+          }
+          if (usefulValues.isNotEmpty) {
+            final list = usefulValues.toList()..sort();
+            d1 = list[_random.nextInt(list.length)];
+            int d2c = list.length > 1
+                ? list[_random.nextInt(list.length)]
+                : (_random.nextInt(3) + 1); // 1-3 fallback
+            if (_consecutiveDoubles >= 2 && d2c == d1) {
+              d2c = d1 == 1 ? 2 : d1 - 1;
+            }
+            d2 = d2c;
+          }
+        }
+      }
+
+      if (allInHome && d1 == d2 && d1 != 5) {
+        _botHomeDoubles[botColor] = (_botHomeDoubles[botColor] ?? 0) + 1;
+        setState(() { _dice1Value = d1; _dice2Value = d2; });
+        await _syncDiceToFirestore(d1, d2, false, false);
+        if ((_botHomeDoubles[botColor] ?? 0) >= 3) {
+          _botHomeDoubles[botColor] = 0;
+          _consecutiveDoubles = 0;
+          _showEventToast('Bot: tres dobles en casa, pierde turno');
+          await Future.delayed(const Duration(milliseconds: 1500));
+          setState(() { _dice1Value = 0; _dice2Value = 0; });
+          await _advanceTurn();
+          return;
+        }
+        _showEventToast('Bot: doble en casa, vuelve a tirar');
+        await Future.delayed(const Duration(milliseconds: 1200));
+        setState(() { _dice1Value = 0; _dice2Value = 0; });
+        continue;
+      }
+      _botHomeDoubles[botColor] = 0;
+      break;
+    } while (true);
+
+    final hadDouble = d1 == d2;
+    if (hadDouble) {
+      _consecutiveDoubles++;
+    } else {
+      _consecutiveDoubles = 0;
+    }
+
+    setState(() {
+      _dice1Value = d1; _dice2Value = d2;
+      _hasUsedDice1 = false; _hasUsedDice2 = false;
+    });
+    await _syncDiceToFirestore(d1, d2, false, false);
+    await Future.delayed(Duration(milliseconds: 4200 + _random.nextInt(800)));
+    if (!mounted || _gameEnded) return;
+
+    await _doBotMoves(botColor, hadDouble);
+  }
+
+  int _scoreBotAction(LudoPiece piece, int np, String botColor) {
+    int s = 0;
+    if (np < 52 && !_isSafeForColor(np, botColor)) {
+      for (final ec in _activePlayers) {
+        if (ec == botColor) continue;
+        final enemies = _gameState.getPiecesByColor(ec)
+            .where((ep) => !ep.isHome && !ep.isFinished && ep.position == np).toList();
+        if (enemies.length == 1) {
+          s += 10000 + _stepsFromStart(enemies.first.position, _getStartPosition(ec)) * 20;
+        }
+      }
+    }
+    if (np == 57) {
+      s += 900;
+    } else if (np >= 52 && piece.position < 52){
+      s += 450;
+    }
+    else if (np >= 52) {
+      s += np * 20;
+    }
+    if (piece.isHome) s += 600;
+    if (!piece.isHome && piece.position < 52) {
+      s += _stepsFromStart(piece.position, _getStartPosition(botColor)) * 6;
+    }
+    if (np < 52 && _isSafeForColor(np, botColor)) s += 80;
+    if (np < 52) {
+      final allies = _gameState.getPiecesByColor(botColor)
+          .where((bp) => !bp.isFinished && !bp.isHome && bp.id != piece.id && bp.position == np)
+          .length;
+      if (allies == 1) s += 200;
+    }
+    return s;
+  }
+
+  Map<String, dynamic> _pickBestBotMove(String botColor) {
+    int bestScore = -1;
+    Map<String, dynamic>? best;
+    for (final move in _movablePieces) {
+      final piece = move['piece'] as LudoPiece;
+      final dv = move['diceValue'] as int;
+      final np = _calculateNewPosition(piece, dv, botColor);
+      if (np == null) continue;
+      int score = _scoreBotAction(piece, np, botColor);
+      if (np < 52 && !_isSafeForColor(np, botColor) && !piece.isHome) {
+        int threats = 0;
+        for (final ec in _activePlayers) {
+          if (ec == botColor) continue;
+          for (final ep in _gameState.getPiecesByColor(ec)) {
+            if (ep.isHome || ep.isFinished) continue;
+            for (int d = 1; d <= 6; d++) {
+              if (_calculateNewPosition(ep, d, ec) == np) { threats++; break; }
+            }
+          }
+        }
+        if (threats > 0) score -= 350 * threats;
+      }
+      if (score > bestScore) { bestScore = score; best = move; }
+    }
+    return best ?? _movablePieces.first;
+  }
+
+  Future<void> _doBotMoves(String botColor, bool hadDouble) async {
+    if (!mounted || _gameEnded) return;
+
+    _calculateMovablePieces(botColor);
+
+    if (_movablePieces.isEmpty) {
+      setState(() { _dice1Value = 0; _dice2Value = 0; _hasUsedDice1 = false; _hasUsedDice2 = false; });
+      await _syncGameState(advanceTurn: !hadDouble);
+      if (hadDouble) _scheduleMultiplayerBotMove(botColor);
+      return;
+    }
+
+    final move = _pickBestBotMove(botColor);
+    final pid = move['pieceId'] as int;
+    final dv  = move['diceValue'] as int;
+    final dn  = move['diceNumber'] as int;
+
+    final pieces = _gameState.getPiecesByColor(botColor);
+    if (pid >= pieces.length) { await _syncGameState(advanceTurn: true); return; }
+
+    final piece  = pieces[pid];
+    final newPos = _calculateNewPosition(piece, dv, botColor);
+    if (newPos == null) { await _syncGameState(advanceTurn: true); return; }
+
+    // Mover pieza
+    final wasHome = piece.isHome;
+    piece.position = newPos;
+    if (newPos == 57) piece.isFinished = true;
+    if (dn == 1) {
+      _hasUsedDice1 = true;
+    } else {
+      _hasUsedDice2 = true;
+    }
+
+    bool captured = false;
+    if (newPos < 52 && !_isSafeForColor(newPos, botColor)) {
+      final isBarrierBreak = wasHome && newPos == _getStartPosition(botColor);
+      for (final ec in _activePlayers) {
+        if (ec == botColor) continue;
+        final enemyHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPos).toList();
+        if (isBarrierBreak && enemyHere.length >= 2) {
+          enemyHere.last.position = -1; captured = true;
+        } else {
+          for (final ep in enemyHere) { ep.position = -1; captured = true; }
+        }
+      }
+    }
+    setState(() {});
+
+    if (_checkVictory(botColor)) {
+      await _syncGameState(advanceTurn: false);
+      _endGame(botColor);
+      return;
+    }
+
+    if (captured) {
+      _pendingBonusMoves.clear();
+      for (int i = 0; i < pieces.length; i++) {
+        final p = pieces[i];
+        final bp = _calculateCaptureBonusPosition(p, botColor);
+        if (bp != null) _pendingBonusMoves.add({'pieceId': i, 'piece': p, 'bonusPos': bp});
+      }
+      if (_pendingBonusMoves.isNotEmpty) {
+        final best = _pendingBonusMoves.reduce((a, b) {
+          final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition(botColor));
+          final stB = _stepsFromStart((b['piece'] as LudoPiece).position, _getStartPosition(botColor));
+          return stA >= stB ? a : b;
+        });
+        await Future.delayed(const Duration(milliseconds: 2900));
+        if (!mounted || _gameEnded) return;
+        final bpid = best['pieceId'] as int;
+        final bpos = best['bonusPos'] as int;
+        if (bpid < pieces.length) {
+          pieces[bpid].position = bpos;
+          if (bpos == 57) pieces[bpid].isFinished = true;
+        }
+        _pendingBonusMoves.clear();
+        setState(() {});
+      }
+      setState(() { _dice1Value = 0; _dice2Value = 0; _hasUsedDice1 = false; _hasUsedDice2 = false; });
+      await _syncGameState(advanceTurn: !hadDouble);
+      if (hadDouble) _scheduleMultiplayerBotMove(botColor);
+      return;
+    }
+
+    _calculateMovablePieces(botColor);
+    if (_movablePieces.isNotEmpty) {
+      await _syncGameState(advanceTurn: false);
+      await Future.delayed(const Duration(milliseconds: 2600));
+      if (!mounted || _gameEnded) return;
+      await _doBotMoves(botColor, hadDouble);
+      return;
+    }
+
+    setState(() { _dice1Value = 0; _dice2Value = 0; _hasUsedDice1 = false; _hasUsedDice2 = false; });
+    await _syncGameState(advanceTurn: !hadDouble);
+    if (hadDouble) _scheduleMultiplayerBotMove(botColor);
+  }
+
   void _endGame(String winnerColor) {
     if (_gameEnded) return;
     setState(() => _gameEnded = true);
     _turnTimer?.cancel();
 
-    _firestore.collection('ludo_games').doc(widget.gameId).update({
-      'status': 'finished',
-      'winnerId': _currentUser?.uid,
-      'result': 'win',
-      'finishedAt': FieldValue.serverTimestamp(),
-    });
-
     final isWin = winnerColor == _myColor;
-    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss).then((_) {
-      _reloadUserCurrency();
-    });
+    if (isWin && _currentUser != null && _activeGameId != null) {
+      _gameService.finishGame(gameId: _activeGameId!, winnerId: _currentUser!.uid);
+    }
+    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
     _showEndDialog(isWin ? '¡GANASTE! 🏆' : '${_getColorName(winnerColor)} ganó', _currentGame);
   }
 
   void _handleGameEnd(LudoGameMatch game) {
     final isWin = game.winnerId == _currentUser?.uid;
-    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss).then((_) {
-      _reloadUserCurrency();
-    });
+    _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
     _showEndDialog(isWin ? '¡GANASTE! 🏆' : 'Otro jugador ganó', game);
   }
 
   void _handleAbandon(LudoGameMatch game) {
-    final data = game.toFirestore();
-    final abandonedBy = data['abandonedBy'] as String?;
+    final abandonedBy = game.abandonedBy;
     if (abandonedBy != null && abandonedBy != _currentUser?.uid) {
-      _recordResult(GameResultModel.win).then((_) {
-        _reloadUserCurrency();
-      });
-      _showEndDialog('Un jugador abandonó. ¡Ganaste! 🎉', game);
+      _showCancelledByOtherDialog(game);
     } else {
       if (!_hasUserExited) {
-        _recordResult(GameResultModel.loss).then((_) {
-          _reloadUserCurrency();
-        });
+        _recordResult(GameResultModel.loss);
       }
       _showEndDialog('Partida abandonada.', game);
     }
   }
 
+  void _showCancelledByOtherDialog(LudoGameMatch game) {
+    if (!mounted) return;
+    final betAmount = game.betAmount;
+    final isBetGame = betAmount != null && betAmount > 0;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey.shade400, width: 2),
+            boxShadow: [BoxShadow(
+              color: Colors.grey.withValues(alpha: 0.25),
+              blurRadius: 24, spreadRadius: 4,
+            )],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('❌', style: TextStyle(fontSize: 64)),
+              const SizedBox(height: 12),
+              Text(
+                'PARTIDA CANCELADA',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Un jugador abandonó la partida.',
+                style: TextStyle(color: Colors.black87, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              if (isBetGame) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.diamond, color: Colors.blue, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Tu apuesta de $betAmount 💎 será devuelta',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Salir', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _reloadUserCurrency() async {
-    if (_currentUser == null) return;
-    try {
-      await _firestoreService.getUser(_currentUser!.uid);
-    } catch (_) {}
+    if (kDebugMode) print('💰 [Ludo] Balance actualizado por listener en tiempo real');
   }
 
   Future<void> _recordResult(GameResultModel result) async {
@@ -935,7 +1607,14 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final isWin = message.contains('GANASTE') || message.contains('Ganaste');
     final betAmount = game?.betAmount;
     final isBetGame = betAmount != null && betAmount > 0 && game?.currencyType == 'diamonds';
-    final winnerPrize = isBetGame ? (betAmount + (betAmount * 0.7).ceil()) : 0;
+    final int realPlayerCount = _activePlayers
+        .where((c) => !_botColors.contains(c))
+        .length
+        .clamp(1, 4);
+    final winnerPrize = !isBetGame
+        ? 0
+        : (betAmount * realPlayerCount * 0.90).floor();
+    final netGain = isBetGame ? winnerPrize - betAmount : 0;
 
     showDialog(
       context: context,
@@ -990,7 +1669,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                       const SizedBox(width: 8),
                       Text(
                         isWin
-                            ? '+$winnerPrize 💎 ganados'
+                            ? '+$netGain 💎 ganados'
                             : '-$betAmount 💎 perdidos',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -1084,7 +1763,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _gameEnded = true;
     _turnTimer?.cancel();
     final success = await _gameService.abandonGame(
-      gameId: widget.gameId,
+      gameId: _activeGameId!,
       playerId: _currentUser?.uid ?? '',
     );
     if (success) {
@@ -1147,8 +1826,592 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
   }
 
+  String _getCountIcon(int n) {
+    switch (n) {
+      case 2: return '👥';
+      case 3: return '👨‍👩‍👦';
+      default: return '👨‍👩‍👧‍👦';
+    }
+  }
+
+  Widget _buildSetupScaffold() {
+    final isBet = widget.matchType == 'Apuesta';
+    final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFEC7A34),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Parchís vs Amigo', style: TextStyle(color: Colors.white)),
+        elevation: 2,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEC7A34), Color(0xFFd4622a)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Center(child: Text('🎲', style: TextStyle(fontSize: 28))),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Parchís con amigos',
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        SizedBox(height: 4),
+                        Text('Invita a un amigo a jugar',
+                            style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 28),
+            const Text('¿Cuántos jugadores?',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            const Text('Elige el número de jugadores para la partida',
+                style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [2, 3, 4].map((n) {
+                final sel = _selectedPlayerCount == n;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedPlayerCount = n),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 80, height: 100,
+                      decoration: BoxDecoration(
+                        color: sel ? const Color(0xFFEC7A34) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: sel ? const Color(0xFFEC7A34) : Colors.grey.shade300,
+                            width: sel ? 2 : 1),
+                        boxShadow: sel
+                            ? [BoxShadow(color: const Color(0xFFEC7A34).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))]
+                            : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_getCountIcon(n), style: const TextStyle(fontSize: 28)),
+                          const SizedBox(height: 6),
+                          Text('$n jugadores',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+                                  color: sel ? Colors.white : Colors.black87),
+                              textAlign: TextAlign.center),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            if (isBet) ...[
+              const SizedBox(height: 24),
+              const Text('¿Cuánto quieres apostar?',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              const Text('Elige el monto de diamantes para esta partida',
+                  style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: _betOptions.map((amount) {
+                    final isSelected = _selectedBetAmount == amount;
+                    final canAfford = balance >= amount;
+                    return GestureDetector(
+                      onTap: canAfford ? () => setState(() => _selectedBetAmount = amount) : null,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.amber.shade600
+                              : (canAfford ? Colors.white : Colors.grey.shade200),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected ? Colors.amber.shade700 : Colors.grey.shade300,
+                            width: isSelected ? 2 : 1,
+                          ),
+                          boxShadow: isSelected
+                              ? [BoxShadow(color: Colors.amber.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2))]
+                              : [],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.diamond,
+                                color: isSelected ? Colors.white : (canAfford ? Colors.amber.shade600 : Colors.grey.shade400),
+                                size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              amount.toString(),
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : (canAfford ? Colors.black87 : Colors.grey.shade500),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(isBet ? Icons.diamond : Icons.monetization_on,
+                      color: isBet ? Colors.blue : Colors.amber, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Tu balance: ${isBet ? '${_userDiamonds ?? 0} diamantes' : '${_userCoins ?? 0} monedas'}',
+                    style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (isBet && _selectedBetAmount == null)
+                    ? null
+                    : () => _showFriendInviteDialog(),
+                icon: const Icon(Icons.person_add, size: 22),
+                label: const Text('Invitar amigo',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaitingRoomScaffold() {
+    final game = _currentGame;
+    final joined = game?.playerCount ?? 1;
+    final remaining = _selectedPlayerCount - joined;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFEC7A34),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Sala de espera', style: TextStyle(color: Colors.white)),
+        elevation: 2,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10)],
+                ),
+                child: Column(
+                  children: [
+                    const Text('🎲', style: TextStyle(fontSize: 48)),
+                    const SizedBox(height: 12),
+                    const Text('Sala de espera',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('$joined / $_selectedPlayerCount jugadores',
+                        style: const TextStyle(fontSize: 16, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _selectedPlayerCount > 0 ? joined / _selectedPlayerCount : 0,
+                        backgroundColor: Colors.grey.shade200,
+                        color: const Color(0xFFEC7A34), minHeight: 10,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (remaining > 0) ...[
+                      const SizedBox(width: 24, height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFEC7A34))),
+                      const SizedBox(height: 6),
+                      Text('Esperando $remaining ${remaining == 1 ? 'jugador más' : 'jugadores más'}...',
+                          style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Iniciando en $_waitRoomCountdown"',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: _waitRoomCountdown <= 10 ? FontWeight.bold : FontWeight.normal,
+                          color: _waitRoomCountdown <= 10 ? Colors.orange.shade700 : Colors.grey,
+                        ),
+                      ),
+                    ] else ...[
+                      const Icon(Icons.check_circle, color: Colors.green, size: 28),
+                      const Text('¡Todos listos! Iniciando...',
+                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              if (_activeGameId != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Código: ${_activeGameId!.substring(0, 8).toUpperCase()}',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.black45),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (remaining > 0)
+                ElevatedButton.icon(
+                  onPressed: () => _showFriendInviteDialog(),
+                  icon: const Icon(Icons.person_add, size: 18),
+                  label: const Text('Invitar otro amigo'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
+                  if (_activeGameId != null) {
+                    _firestore.collection('ludo_games').doc(_activeGameId).update({
+                      'status': 'cancelled',
+                      'finishedAt': FieldValue.serverTimestamp(),
+                    }).catchError((_) {});
+                  }
+                  _waitingSubscription?.cancel();
+                  if (mounted) Navigator.of(context).pop();
+                },
+                icon: const Icon(Icons.close),
+                label: const Text('Cancelar sala'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red, side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFriendInviteDialog() {
+    if (_currentUser == null) return;
+
+    final isBet = widget.matchType == 'Apuesta';
+    final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
+    final emailController = TextEditingController();
+    final betController = TextEditingController();
+    bool isLoading = false;
+    String? betError;
+
+    if (isBet && _selectedBetAmount != null) {
+      betController.text = '$_selectedBetAmount';
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          bool isValid = emailController.text.trim().isNotEmpty &&
+              (!isBet || (betController.text.isNotEmpty && betError == null));
+
+          void validateBet(String v) {
+            setDlg(() {
+              final n = int.tryParse(v);
+              if (v.isEmpty) {
+                betError = 'Ingresa un monto';
+              } else if (n == null || n < 1) {
+                betError = 'Monto inválido';
+              } else if (n > balance) {
+                betError = 'Saldo insuficiente (tienes $balance)';
+              } else {
+                betError = null;
+              }
+            });
+          }
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Invitar amigo',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: isLoading ? null : () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(isBet ? Icons.diamond : Icons.monetization_on,
+                              color: isBet ? Colors.blue : Colors.amber, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Tu saldo: $balance ${isBet ? 'diamantes' : 'monedas'}',
+                            style: TextStyle(color: Colors.green.shade800,
+                                fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEC7A34).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('🎲', style: TextStyle(fontSize: 18)),
+                          const SizedBox(width: 8),
+                          Text('$_selectedPlayerCount jugadores',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: emailController,
+                      enabled: !isLoading,
+                      keyboardType: TextInputType.emailAddress,
+                      onChanged: (_) => setDlg(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Email del amigo',
+                        hintText: 'ejemplo@email.com',
+                        prefixIcon: const Icon(Icons.email),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    if (isBet) ...[
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: betController,
+                        enabled: !isLoading,
+                        keyboardType: TextInputType.number,
+                        onChanged: validateBet,
+                        decoration: InputDecoration(
+                          labelText: 'Monto a apostar (diamantes)',
+                          prefixIcon: const Icon(Icons.diamond, color: Colors.amber),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          errorText: betError,
+                          helperText: 'Disponible: $balance diamantes',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [10, 25, 50, 100, 250].map((n) {
+                          final ok = n <= balance;
+                          return ActionChip(
+                            label: Text('$n'),
+                            onPressed: ok && !isLoading
+                                ? () {
+                                    betController.text = '$n';
+                                    validateBet('$n');
+                                  }
+                                : null,
+                            backgroundColor: ok ? Colors.amber.withValues(alpha: 0.15) : Colors.grey.shade200,
+                            labelStyle: TextStyle(
+                                color: ok ? Colors.amber.shade800 : Colors.grey,
+                                fontWeight: FontWeight.bold),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: (isLoading || !isValid)
+                            ? null
+                            : () async {
+                                setDlg(() => isLoading = true);
+                                Navigator.of(ctx).pop();
+                                await _createAndInvite(
+                                  email: emailController.text.trim(),
+                                  betAmount: isBet ? int.tryParse(betController.text.trim()) : null,
+                                );
+                              },
+                        icon: isLoading
+                            ? const SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.send),
+                        label: Text(isLoading ? 'Enviando...' : 'Enviar invitación',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _createAndInvite({required String email, int? betAmount}) async {
+    if (_currentUser == null || !mounted) return;
+
+    final isBet = widget.matchType == 'Apuesta';
+    final currencyType = isBet ? 'diamonds' : 'coins';
+    final effectiveBet = betAmount ?? _selectedBetAmount;
+
+    final bool isNewGame = _activeGameId == null;
+    String? gameId = _activeGameId;
+
+    if (isNewGame) {
+      gameId = await _gameService.createGame(
+        hostId: _currentUser!.uid,
+        hostName: _currentUser!.displayName ?? 'Jugador',
+        hostPhotoUrl: _currentUser!.photoURL,
+        currencyType: currencyType,
+        betAmount: effectiveBet,
+        numberOfPlayers: _selectedPlayerCount,
+        isOnlineMatchmaking: false,
+      );
+    }
+
+    if (gameId == null || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Error al crear la sala. Intenta de nuevo.'),
+            backgroundColor: Colors.red));
+      }
+      return;
+    }
+
+    final error = await GameInvitationService().createInvitation(
+      fromUserId: _currentUser!.uid,
+      fromUserName: _currentUser!.displayName ?? 'Jugador',
+      toUserEmail: email,
+      gameType: 'Parchís',
+      betAmount: effectiveBet,
+      currencyType: currencyType,
+      existingGameId: gameId,
+      numberOfPlayers: _selectedPlayerCount,
+    );
+
+    if (!mounted) return;
+
+    if (error != null) {
+      if (isNewGame) {
+        _firestore.collection('ludo_games').doc(gameId).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (isNewGame) {
+      if (isBet && betAmount != null) setState(() => _selectedBetAmount = betAmount);
+      _startWaitingRoom(gameId);
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('¡Invitación enviada! Esperando que tu amigo acepte...'),
+          backgroundColor: Colors.green));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_screenState == _FriendLudoState.setup) return _buildSetupScaffold();
+    if (_screenState == _FriendLudoState.waitingRoom) return _buildWaitingRoomScaffold();
+
     return PopScope(
       canPop: _gameEnded,
       onPopInvokedWithResult: (didPop, _) async {
@@ -1165,6 +2428,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           title: const Text('Parchís Online',
               style: TextStyle(color: Colors.white)),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+              onPressed: () => _chatKey.currentState?.toggleChat(),
+              tooltip: 'Chat',
+            ),
             if (!_gameEnded)
               IconButton(
                 icon: const Icon(Icons.flag, color: Colors.white),
@@ -1178,8 +2446,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         ),
         body: Stack(
           children: [
-            Column(
+            Stack(
               children: [
+                Column(
+                  children: [
                 LayoutBuilder(
                   builder: (ctx, constraints) {
                     final sz = constraints.maxWidth - 16;
@@ -1301,6 +2571,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                   ),
                 ),
               ),
+              ],
+            ),
+            if (_activeGameId != null)
+              GameChatWidget(
+                key: _chatKey,
+                gameId: _activeGameId!,
+                collectionName: 'ludo_games',
+                currentUserId: _currentUser?.uid ?? '',
+                currentUserName: _currentUser?.displayName ?? 'Jugador',
+              ),
           ],
         ),
       ),
@@ -1327,7 +2607,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final colorNames = <String, String>{};
     void addPlayer(int n, String? color, String? name) {
       if (color == null) return;
-      colorNames[color] = (n == widget.playerNumber) ? 'Tú' : (name ?? 'J$n').split(' ').first;
+      colorNames[color] = (n == _myPlayerNumber) ? 'Yo' : (name ?? 'J$n').split(' ').first;
     }
     addPlayer(1, _currentGame!.player1Color, _currentGame!.hostName);
     addPlayer(2, _currentGame!.player2Color, _currentGame!.guest2Name);
@@ -1339,7 +2619,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (name == null) return const SizedBox.shrink();
       final pc = _getPlayerColor(color);
       final isActive = color == activeColor;
-      final isMe = name == 'Tú';
+      final isMe = name == 'Yo';
+      final showTimer = isActive && _turnTimerSeconds > 0;
+      final timerLow = _turnTimerSeconds <= 10;
       return Positioned(
         top: top, bottom: bottom, left: left, right: right,
         child: Container(
@@ -1350,12 +2632,27 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
             border: isMe ? Border.all(color: Colors.white, width: 1.5) : null,
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4)],
           ),
-          child: Text(
-            name,
-            style: TextStyle(
-              color: Colors.white, fontSize: 11,
-              fontWeight: (isMe || isActive) ? FontWeight.bold : FontWeight.normal,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                style: TextStyle(
+                  color: Colors.white, fontSize: 11,
+                  fontWeight: (isMe || isActive) ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              if (showTimer) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '$_turnTimerSeconds"',
+                  style: TextStyle(
+                    color: timerLow ? Colors.orange.shade200 : Colors.white,
+                    fontSize: 11, fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       );
@@ -1372,75 +2669,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     );
   }
 
-  Widget _buildPlayersInfo() {
-    if (_currentGame == null) {
-      return const SizedBox(height: 50,
-        child: Center(child: CircularProgressIndicator(color: Color(0xFFEC7A34))));
-    }
-    final players = <Map<String, dynamic>>[];
-    void add(int n, String? id, String? name, String? photo, String color) {
-      if (id == null) return;
-      players.add({'n': n, 'id': id, 'name': name ?? 'Jugador', 'photo': photo, 'color': color});
-    }
-    add(1, _currentGame!.hostId, _currentGame!.hostName, _currentGame!.hostPhotoUrl, _currentGame!.player1Color);
-    if (_currentGame!.guest2Id != null) {
-      add(2, _currentGame!.guest2Id, _currentGame!.guest2Name, _currentGame!.guest2PhotoUrl, _currentGame!.player2Color ?? 'red');
-    }
-    if (_currentGame!.guest3Id != null) {
-      add(3, _currentGame!.guest3Id, _currentGame!.guest3Name, _currentGame!.guest3PhotoUrl, _currentGame!.player3Color ?? 'blue');
-    }
-    if (_currentGame!.guest4Id != null) {
-      add(4, _currentGame!.guest4Id, _currentGame!.guest4Name, _currentGame!.guest4PhotoUrl, _currentGame!.player4Color ?? 'green');
-    }
-
-    return Container(
-      height: 56,
-      color: Colors.white,
-      child: Row(
-        children: players.map((p) {
-          final isActive = _currentTurn == 'player${p['n']}';
-          final isMe = p['n'] == widget.playerNumber;
-          final col = _getPlayerColor(p['color'] as String);
-          return Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              decoration: BoxDecoration(
-                border: isActive
-                    ? Border(bottom: BorderSide(color: col, width: 3))
-                    : null,
-                color: isActive ? col.withValues(alpha: 0.08) : Colors.transparent,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Row(
-                children: [
-                  Container(
-                    width: 18, height: 18,
-                    decoration: BoxDecoration(color: col, shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: [BoxShadow(color: col.withValues(alpha: 0.4), blurRadius: 4)]),
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      isMe ? 'Tú' : (p['name'] as String).split(' ').first,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                        color: isActive ? col : Colors.grey.shade700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  // ── Chat placeholder — implementación completa próximamente ─────────────────
   Widget _buildChatWidget() {
     const quickEmojis = ['😂', '😤', '💀', '🫡', '🔥', '😈', '👑', '🤡'];
     return Container(
@@ -1502,7 +2730,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Widget _buildControls() {
-    final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice;
+    final canRoll = _isMyTurn && !_gameEnded && _dice1Value == 0 && _dice2Value == 0 && !_isRollingDice && !_bonusSelectionActive;
     final isOpponentTurn = !_isMyTurn && !_gameEnded;
     final currentColor = _currentGame != null ? _colorForCurrentTurn() : _myColor;
 
@@ -1524,7 +2752,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                         ? _buildSelectPieceHint()
                         : const SizedBox.shrink(),
           ),
-          if (_isMyTurn && !_gameEnded && _turnTimerSeconds > 0)
+          if (!_gameEnded && _turnTimerSeconds > 0)
             _buildTimer(),
         ],
       ),

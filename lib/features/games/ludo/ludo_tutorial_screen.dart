@@ -1,7 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../../generated/l10n.dart';
 import '../../../core/models/ludo_game_match.dart';
 import 'ludo_board_painter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -94,19 +93,18 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
       'steps': [
         {
           'title': 'Salir de Casa',
-          'description': 'Para sacar una ficha de casa necesitas sacar un 5 o un 6 en cualquiera de los dados.',
+          'description': 'Para sacar una ficha de casa necesitas sacar un 5 en cualquiera de los dados.',
           'action': 'observe',
           'setupPieces': true,
         },
         {
-          'title': '¡Sacaste un 6!',
-          'description': 'Perfecto, sacaste un 6. Ahora toca una de tus fichas AMARILLAS en la casa para sacarla.',
-          'action': 'selectPieceInHome',
-          'dice1': 6,
+          'title': '¡Sacaste un 5!',
+          'description': 'Perfecto, sacaste un 5. Con este dado puedes sacar una ficha AMARILLA de casa y colocarla en tu casilla de salida.',
+          'action': 'observe',
+          'showDice': true,
+          'dice1': 5,
           'dice2': 2,
-          'color': 'yellow',
-          'pieceId': 0,
-          'highlightPieces': [0],
+          'setupPieces': true,
         },
         {
           'title': '¡Excelente!',
@@ -115,11 +113,11 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
         },
         {
           'title': 'Turno Bonus',
-          'description': 'Como sacaste un 6, ¡obtienes un turno extra! Puedes lanzar los dados de nuevo.',
+          'description': 'Si sacas dobles o capturas una ficha enemiga, ¡obtienes un turno extra! Puedes lanzar los dados de nuevo.',
           'action': 'observe',
           'showDice': true,
-          'dice1': 6,
-          'dice2': 2,
+          'dice1': 5,
+          'dice2': 5,
         },
       ],
     },
@@ -130,21 +128,18 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
       'steps': [
         {
           'title': 'Mover por el Tablero',
-          'description': 'Las fichas avanzan por las casillas blancas siguiendo las flechas en sentido horario (como las agujas del reloj).',
+          'description': 'Las fichas avanzan por las casillas blancas siguiendo las flechas en sentido antihorario (en dirección contraria a las agujas del reloj).',
           'action': 'observe',
           'setupPieces': true,
         },
         {
           'title': 'Elige tu Movimiento',
-          'description': 'Sacaste 3 y 4. Toca tu ficha amarilla y elige con cuál dado quieres moverla.',
-          'action': 'movePiece',
+          'description': 'Si sacas 3 y 4, tienes dos opciones:\n• Mover una ficha 3 casillas y otra 4\n• O mover UNA sola ficha 7 casillas (3+4 sumados)\nSiempre decides qué ficha mover y qué dado usar.',
+          'action': 'observe',
+          'showDice': true,
           'dice1': 3,
           'dice2': 4,
-          'color': 'yellow',
-          'pieceId': 0,
-          'fromPosition': 0,
-          'toPosition': 3,
-          'highlightPieces': [0],
+          'setupPieces': true,
         },
         {
           'title': '¡Bien Hecho!',
@@ -191,16 +186,12 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
         },
         {
           'title': '¡A Capturar!',
-          'description': 'Sacaste 3. Mueve tu ficha amarilla para capturar la ficha verde.',
-          'action': 'movePiece',
+          'description': 'Si tu ficha cae exactamente en la casilla donde está un oponente, ¡lo capturas! Esa ficha regresa a su casa. En este ejemplo, la ficha amarilla (posición 10) podría capturar la ficha verde (posición 13) moviendo 3 casillas.',
+          'action': 'observe',
+          'showDice': true,
           'dice1': 3,
           'dice2': 1,
-          'color': 'yellow',
-          'pieceId': 0,
-          'fromPosition': 10,
-          'toPosition': 13,
-          'captureOpponent': true,
-          'highlightPieces': [0],
+          'setupCapture': true,
         },
         {
           'title': '¡Captura Exitosa!',
@@ -417,9 +408,6 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
 
   void _handleBoardTap(Offset localPosition) {
     if (!_waitingForAction || _selectedLesson == null || _boardSize == 0) return;
-
-    final steps = _lessons[_selectedLesson]!['steps'] as List;
-    final step = steps[_currentStep] as Map<String, dynamic>;
 
     final squareSize = _boardSize / 15;
 
@@ -753,13 +741,13 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    lesson['color'].withOpacity(0.3),
-                                    lesson['color'].withOpacity(0.1),
+                                    lesson['color'].withValues(alpha:0.3),
+                                    lesson['color'].withValues(alpha:0.1),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: lesson['color'].withOpacity(0.3),
+                                  color: lesson['color'].withValues(alpha:0.3),
                                   width: 2,
                                 ),
                               ),
@@ -845,7 +833,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [lessonData['color'], lessonData['color'].withOpacity(0.8)],
+              colors: [lessonData['color'], lessonData['color'].withValues(alpha:0.8)],
             ),
           ),
           padding: const EdgeInsets.all(16),
@@ -881,7 +869,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                         Container(
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
+                            color: Colors.white.withValues(alpha:0.3),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -906,7 +894,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha:0.1),
                       blurRadius: 8,
                       offset: Offset(0, 2),
                     ),
@@ -968,7 +956,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                       decoration: BoxDecoration(
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha:0.2),
                             blurRadius: 12,
                             offset: Offset(0, 4),
                           ),
@@ -1002,7 +990,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
             color: Colors.white,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha:0.1),
                 blurRadius: 8,
                 offset: Offset(0, -2),
               ),
@@ -1111,7 +1099,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha:0.6),
                           blurRadius: 12,
                           spreadRadius: 2,
                         ),
@@ -1139,7 +1127,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                     size: squareSize * 0.6,
                     shadows: [
                       Shadow(
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withValues(alpha:0.5),
                         blurRadius: 8,
                       ),
                     ],
@@ -1165,7 +1153,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
         border: Border.all(color: Colors.orange, width: 3),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.withOpacity(0.3),
+            color: Colors.orange.withValues(alpha:0.3),
             blurRadius: 8,
             offset: Offset(0, 4),
           ),
@@ -1201,7 +1189,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha:0.3),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(

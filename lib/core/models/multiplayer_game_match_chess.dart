@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tekoplay/core/models/user.dart';
+import '../service/domino_game_service.dart';
 import '../service/ludo_game_service.dart';
 import '../service/multiplayer_game_service.dart';
 import '../utils/game_result.dart';
@@ -421,10 +422,33 @@ class GameInvitationService {
         final currencyType = invitationData['currencyType'] as String? ?? 'coins';
         final isLudo = gameType.toLowerCase().contains('ludo') ||
             gameType.toLowerCase().contains('parch');
+        final isDomino = gameType.toLowerCase().contains('domin');
 
         String? gameId;
+        int playerNumber = 2;
 
-        if (isLudo) {
+        if (isDomino) {
+          final existingGameId = invitationData['existingGameId'] as String?;
+          if (existingGameId != null) {
+            final joined = await DominoGameService().joinGame(
+              gameId: existingGameId,
+              guestId: invitationData['toUserId'],
+              guestName: invitationData['toUserName'],
+            );
+            if (joined) {
+              gameId = existingGameId;
+              // Determine which player slot was assigned
+              final gameDoc = await _firestore.collection('domino_games').doc(existingGameId).get();
+              final d = gameDoc.data();
+              if (d != null) {
+                final uid = invitationData['toUserId'] as String;
+                if (d['guest2Id'] == uid) playerNumber = 3;
+                else if (d['guest3Id'] == uid) playerNumber = 4;
+                else playerNumber = 2;
+              }
+            }
+          }
+        } else if (isLudo) {
           final existingGameId = invitationData['existingGameId'] as String?;
           final numberOfPlayers = (invitationData['numberOfPlayers'] as int?) ?? 2;
           if (existingGameId != null) {
@@ -477,7 +501,8 @@ class GameInvitationService {
           'isHost': false,
           'gameType': gameType,
           'isLudo': isLudo,
-          'playerNumber': isLudo ? 2 : null,
+          'isDomino': isDomino,
+          'playerNumber': playerNumber,
           'matchType': currencyType,
         };
       } else {

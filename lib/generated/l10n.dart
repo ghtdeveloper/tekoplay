@@ -369,6 +369,11 @@ class S {
     return Intl.message('Difficult', name: 'difficult', desc: '', args: []);
   }
 
+  /// `Ultra difficult`
+  String get ultraDifficult {
+    return Intl.message('Ultra difficult', name: 'ultraDifficult', desc: '', args: []);
+  }
+
   /// `Start game`
   String get startGame {
     return Intl.message('Start game', name: 'startGame', desc: '', args: []);

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:transparent}
+canvas{display:block;touch-action:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── Sprite-sheet frame map [x,y,w,h] ─────────────────────────────────────
+const F={
+  '0-0':[630,586,99,188],'0-1':[769,586,99,188],'0-2':[980,0,99,188],
+  '0-3':[980,228,99,188],'0-4':[980,456,99,188],'0-5':[980,684,99,188],
+  '0-6':[980,912,99,188],'1-1':[1119,0,99,188],'1-2':[1119,228,99,188],
+  '1-3':[490,586,100,188],'1-4':[1119,456,99,188],'1-5':[1119,684,99,188],
+  '1-6':[1119,912,99,188],'2-2':[1119,1140,99,188],'2-3':[1258,0,99,188],
+  '2-4':[1258,228,99,188],'2-5':[1258,456,99,188],'2-6':[1258,684,99,188],
+  '3-3':[1258,912,99,188],'3-4':[1258,1140,99,188],'3-5':[1397,0,99,188],
+  '3-6':[1397,228,99,188],'4-4':[1397,456,99,188],'4-5':[1397,684,99,188],
+  '4-6':[1397,912,99,188],'5-5':[1397,1140,99,188],'5-6':[0,1412,99,188],
+  '6-6':[139,1412,99,188],'back':[980,1140,99,188]
+};
+const TW=99,TH=188;
+
+const cv=document.getElementById('c');
+const ctx=cv.getContext('2d');
+let chain=[],imgOk=false;
+
+// ── Endpoint hints ────────────────────────────────────────────────────────
+let _hints=false,_hintL=0,_hintR=0;
+let _hPos=null; // {lx,ly,rx,ry} screen coords updated each render
+const HR=26; // hint circle radius
+
+// ── Sprite image ─────────────────────────────────────────────────────────
+const img=new Image();
+img.onload=function(){imgOk=true;render();};
+img.onerror=function(){imgOk=false;render();};
+
+// ── Chunk-based image loading ────────────────────────────────────────────
+let _buf=null;
+window.setImgSrc=function(src){img.src=src;};
+window._imgStart=function(){_buf=[];};
+window._imgChunk=function(c){if(_buf)_buf.push(c);};
+window._imgEnd=function(){
+  if(!_buf)return;
+  const b64=_buf.join('');
+  _buf=null;
+  img.onload=function(){imgOk=true;render();};
+  img.onerror=function(){imgOk=false;render();};
+  try{
+    const bin=atob(b64);
+    const arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    img.src=URL.createObjectURL(new Blob([arr],{type:'image/png'}));
+  }catch(e){
+    img.src='data:image/png;base64,'+b64;
+  }
+};
+
+// ── Tile helpers ──────────────────────────────────────────────────────────
+function isDouble(t){return t.l===t.r;}
+function isHoriz(dir){return dir==='right'||dir==='left';}
+function cExt(t,dir){return TH;}
+function pExt(t,dir){return TW;}
+const _RA={right:-Math.PI/2, up:Math.PI, left:Math.PI/2, down:0};
+function tileAngle(t,dir){return _RA[dir];}
+
+// ── Layout: bidirectional snake, opening double = center anchor ───────────
+// Left chain: grows LEFT→UP→RIGHT→UP from left end of opening double.
+// Right chain: grows RIGHT→DOWN→LEFT→DOWN from right end of opening double.
+// No opening double: simple RIGHT→DOWN→LEFT→DOWN boustrophedon.
+const OVLP=5;
+const CORNER_OVLP=6;
+const DX={right:1,up:0,left:-1,down:0};
+const DY={right:0,up:-1,left:0,down:1};
+
+function layoutLinear(tiles,x0,y0,dirs,hcols){
+  const LIMS={};
+  for(const d of dirs) LIMS[d]=isHoriz(d)?hcols:1;
+  const pos=[];
+  let x=x0,y=y0,di=0,sc=0;
+  for(let i=0;i<tiles.length;i++){
+    const t=tiles[i];
+    const dir=dirs[di%4];
+    const dbl=isDouble(t);
+    // Doubles: always portrait (vertical)
+    const tileA=dbl?0:_RA[dir];
+    // Visual extent along chain: double portrait in horiz=TW, in vert=TH (same as normal)
+    const vExt=dbl?(isHoriz(dir)?TW:TH):TH;
+    pos.push({cx:x,cy:y,a:tileA,l:t.l,r:t.r,ce:vExt,dir:dir});
+    sc++;
+    if(i===tiles.length-1)break;
+    const nextDbl=isDouble(tiles[i+1]);
+    if(sc>=LIMS[dir]){
+      di=(di+1)%4;
+      const nd=dirs[di%4];
+      // Next tile goes in direction nd — compute its extent in that direction
+      const nExt=nextDbl?(isHoriz(nd)?TW:TH):TH;
+      // Half-extents: along chain (HA) and perpendicular (HP)
+      const cHA=vExt/2, cHP=(TW+TH-vExt)/2;
+      const nHA=nExt/2, nHP=(TW+TH-nExt)/2;
+      const ov=!isHoriz(dir);
+      let fwd,aln;
+      if(ov){
+        // vertical→horizontal: fwd = just clear, aln = overlap
+        fwd=Math.max(nHA-cHP,0);
+        aln=cHA+nHP-CORNER_OVLP;
+      }else{
+        // horizontal→vertical: fwd = overlap, aln = just clear
+        fwd=cHP+nHA-CORNER_OVLP;
+        aln=Math.max(cHA-nHP,0);
+      }
+      x+=DX[nd]*fwd+DX[dir]*aln;
+      y+=DY[nd]*fwd+DY[dir]*aln;
+      sc=0;
+    }else{
+      // Linear: next tile goes in same dir
+      const nExt=nextDbl?(isHoriz(dir)?TW:TH):TH;
+      x+=DX[dir]*(vExt/2+nExt/2-OVLP);
+      y+=DY[dir]*(vExt/2+nExt/2-OVLP);
+    }
+  }
+  return pos;
+}
+
+function layout(tiles){
+  if(!tiles.length)return[];
+  const oi=tiles.findIndex(t=>t.opening);
+  if(oi<0) return layoutLinear(tiles,0,0,['right','down','left','down'],4);
+
+  const pos=new Array(tiles.length).fill(null);
+  // Opening double sits at center, portrait (vertical)
+  pos[oi]={cx:0,cy:0,a:0,l:tiles[oi].l,r:tiles[oi].r,ce:TW,dir:'down'};
+
+  // Right chain: RIGHT→DOWN→LEFT→DOWN, 2 tiles per horizontal row
+  if(oi<tiles.length-1){
+    const firstR=tiles[oi+1];
+    const rExt=isDouble(firstR)?TW:TH;
+    const rOff=Math.round(TW/2+rExt/2-OVLP);
+    const rp=layoutLinear(tiles.slice(oi+1),rOff,0,['right','down','left','down'],2);
+    for(let i=0;i<rp.length;i++) pos[oi+1+i]=rp[i];
+  }
+  // Left chain: reversed, LEFT→UP→RIGHT→UP, 2 tiles per horizontal row
+  if(oi>0){
+    const lt=tiles.slice(0,oi).reverse();
+    const firstL=lt[0];
+    const lExt=isDouble(firstL)?TW:TH;
+    const lOff=Math.round(TW/2+lExt/2-OVLP);
+    const lp=layoutLinear(lt,-lOff,0,['left','up','right','up'],2);
+    for(let i=0;i<lp.length;i++){const p=lp[i];pos[oi-1-i]={...p,l:p.r,r:p.l};}
+  }
+  return pos;
+}
+
+// ── Background ────────────────────────────────────────────────────────────
+function drawWoodBg(W,H){
+  const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*0.7);
+  g.addColorStop(0,'#52B043');
+  g.addColorStop(0.6,'#429936');
+  g.addColorStop(1,'#347A2A');
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,W,H);
+}
+
+// ── Frame lookup ─────────────────────────────────────────────────────────
+function fr(l,r){const a=Math.min(l,r),b=Math.max(l,r);return F[a+'-'+b]||F.back;}
+
+// ── Sprite draw ───────────────────────────────────────────────────────────
+function drawS(frame,cx,cy,ang,s,flip){
+  const[fx,fy,fw,fh]=frame;
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(flip?ang+Math.PI:ang);
+  ctx.drawImage(img,fx,fy,fw,fh,-fw*s/2,-fh*s/2,fw*s,fh*s);
+  ctx.restore();
+}
+
+// ── Fallback pip draw ────────────────────────────────────────────────────
+const PIP={0:[],1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],
+  4:[[-1,-1],[1,-1],[-1,1],[1,1]],5:[[-1,-1],[1,-1],[0,0],[-1,1],[1,1]],
+  6:[[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]};
+function drawP(l,r,cx,cy,ang,s){
+  const dbl=l===r;
+  const w=TW*s,h=TH*s,pr=Math.max(2,TW*s*.07);
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);
+  ctx.fillStyle=dbl?'#FFFBEE':'#F5F5DC';
+  ctx.strokeStyle=dbl?'#2255AA':'#444';
+  ctx.lineWidth=Math.max(1,s*(dbl?2.5:1.5));
+  ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,2*s);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-w/2+4,0);ctx.lineTo(w/2-4,0);
+  ctx.strokeStyle='#888';ctx.lineWidth=Math.max(.5,s*.8);ctx.stroke();
+  ctx.fillStyle='#111';const cell=w*.28;
+  for(const[val,by]of[[l,-h/4],[r,h/4]])
+    for(const[px,py]of(PIP[val]||[])){
+      ctx.beginPath();ctx.arc(px*cell,py*cell+by,pr,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+}
+
+// ── Endpoint hint draw ────────────────────────────────────────────────────
+function drawHint(hx,hy,value,isLeft){
+  ctx.save();
+  // glow ring
+  ctx.beginPath();ctx.arc(hx,hy,HR+10,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,200,0,0.28)';ctx.fill();
+  // main circle
+  ctx.beginPath();ctx.arc(hx,hy,HR,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,210,0,0.95)';ctx.fill();
+  ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.stroke();
+  // arrow
+  ctx.fillStyle='#111';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 13px sans-serif';
+  ctx.fillText(isLeft?'←':'→',hx,hy-8);
+  // pip value
+  ctx.font='bold 14px sans-serif';
+  ctx.fillText(String(value),hx,hy+9);
+  ctx.restore();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function render(){
+  const W=window.innerWidth,H=window.innerHeight;
+  cv.width=W;cv.height=H;ctx.clearRect(0,0,W,H);
+  drawWoodBg(W,H);
+  if(!chain.length){_hPos=null;return;}
+  const pos=layout(chain);
+  if(!pos.length){_hPos=null;return;}
+
+  let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
+  for(const p of pos){
+    // drawA for bounding box: sprite frame is portrait (fw=TW=99, fh=TH=188),
+    // rendered with ang=p.a. The rotated extents are computed via standard formula.
+    const drawA=p.a;
+    const cosA=Math.abs(Math.cos(drawA)),sinA=Math.abs(Math.sin(drawA));
+    // hw = half-width in world X; hh = half-height in world Y
+    // sprite local: fw=TW along screen-X before rotation, fh=TH along screen-Y
+    const hw=(TW/2)*cosA+(TH/2)*sinA;
+    const hh=(TW/2)*sinA+(TH/2)*cosA;
+    mnX=Math.min(mnX,p.cx-hw); mxX=Math.max(mxX,p.cx+hw);
+    mnY=Math.min(mnY,p.cy-hh); mxY=Math.max(mxY,p.cy+hh);
+  }
+
+  // PAD large enough to fit hint circles on all sides
+  const PADX=HR+16,PADY=HR+16;
+  const s=Math.min((W-2*PADX)/(mxX-mnX),(H-2*PADY)/(mxY-mnY),0.44);
+  const ox=W/2-(mxX+mnX)/2*s;
+  const oy=H/2-(mxY+mnY)/2*s;
+
+  // Draw vertical connector tiles first, then horizontal row tiles on top,
+  // so row tiles cleanly cover the connector edges at corner junctions.
+  const isVert=p=>(p.dir==='up'||p.dir==='down');
+  for(const p of [...pos.filter(isVert),...pos.filter(p=>!isVert(p))]){
+    const dx=p.cx*s+ox,dy=p.cy*s+oy;
+    const ang=p.a;
+    if(imgOk) drawS(fr(p.l,p.r),dx,dy,ang,s,p.l>p.r);
+    else       drawP(p.l,p.r,dx,dy,ang,s);
+  }
+
+  // ── Draw opening tile badge ──────────────────────────────────────────
+  const oi=chain.findIndex(t=>t.opening===true);
+  if(oi>=0 && oi<pos.length){
+    const op=pos[oi];
+    const sx=op.cx*s+ox, sy=op.cy*s+oy;
+    // Y offset: half-height of the rotated tile
+    const cosA=Math.abs(Math.cos(op.a)), sinA=Math.abs(Math.sin(op.a));
+    const halfH=(TW/2*sinA+TH/2*cosA)*s;
+    const br=Math.max(7,10*s); // badge radius
+    const bx=sx, by=sy-halfH-br-2;
+    ctx.save();
+    // glow
+    ctx.shadowColor='rgba(255,200,0,0.8)';
+    ctx.shadowBlur=10;
+    // badge circle
+    ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);
+    ctx.fillStyle='#FFD700';ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle='rgba(180,110,0,0.9)';ctx.lineWidth=1.5;ctx.stroke();
+    // star text
+    ctx.fillStyle='#7A4500';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font=`bold ${Math.max(9,12*s)}px sans-serif`;
+    ctx.fillText('★',bx,by+0.5);
+    ctx.restore();
+  }
+
+  // ── Compute & report endpoints ────────────────────────────────────────
+  const DVX={right:1, up:0, left:-1, down:0};
+  const DVY={right:0, up:-1, left:0, down:1};
+  if(pos.length>0){
+    const lp=pos[0], rp=pos[pos.length-1];
+    const bidir=chain.some(t=>t.opening);
+    const lm=bidir?1:-1;
+    const ld=lp.ce/2*s+HR+8;
+    const lx=lp.cx*s+ox+lm*DVX[lp.dir]*ld;
+    const ly=lp.cy*s+oy+lm*DVY[lp.dir]*ld;
+    const rd=rp.ce/2*s+HR+8;
+    const rx=rp.cx*s+ox + DVX[rp.dir]*rd;
+    const ry=rp.cy*s+oy + DVY[rp.dir]*rd;
+    _hPos={lx,ly,rx,ry};
+    // Always report endpoints so Flutter can aim tile animations
+    try{FlutterChannel.postMessage('ep:'+JSON.stringify({lx,ly,rx,ry,W,H}));}catch(e){}
+
+    if(_hints){
+      drawHint(lx,ly,_hintL,true);
+      drawHint(rx,ry,_hintR,false);
+    }
+  } else {
+    _hPos=null;
+  }
+}
+
+// ── Canvas tap detection for hints ────────────────────────────────────────
+cv.addEventListener('pointerdown',function(e){
+  if(!_hints||!_hPos)return;
+  const rect=cv.getBoundingClientRect();
+  const px=e.clientX-rect.left;
+  const py=e.clientY-rect.top;
+  const hit=HR+12; // generous hit area
+  const {lx,ly,rx,ry}=_hPos;
+  if(Math.sqrt((px-lx)**2+(py-ly)**2)<hit){
+    try{FlutterChannel.postMessage('tapLeft');}catch(err){}
+    return;
+  }
+  if(Math.sqrt((px-rx)**2+(py-ry)**2)<hit){
+    try{FlutterChannel.postMessage('tapRight');}catch(err){}
+  }
+});
+
+// ── Public API ────────────────────────────────────────────────────────────
+window.updateBoard=function(data){
+  try{chain=typeof data==='string'?JSON.parse(data):data;}catch(e){chain=[];}
+  render();
+};
+window.clearBoard=function(){chain=[];_hPos=null;render();};
+window.showEndpointHints=function(lv,rv){_hints=true;_hintL=lv;_hintR=rv;render();};
+window.hideEndpointHints=function(){_hints=false;_hPos=null;render();};
+window.addEventListener('resize',render);
+
+setTimeout(function(){try{FlutterChannel.postMessage('ready');}catch(e){}},80);
+</script>
+</body>
+</html>

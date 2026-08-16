@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../generated/l10n.dart';
 
 class DiamondPurchaseDialog extends StatelessWidget {
-  final Function(int diamondAmount, int price)? onPurchase;
+  final Function(int diamondAmount, double price)? onPurchase;
 
   const DiamondPurchaseDialog({
     super.key,
@@ -92,16 +92,24 @@ class DiamondPurchaseDialog extends StatelessWidget {
                           children: [
                             _buildDiamondPackage(
                               context,
-                              diamonds: 49,
-                              price: 2,
+                              diamonds: 10,
+                              price: 2.50,
                               isPopular: false,
                             ),
                             SizedBox(height: 12),
 
                             _buildDiamondPackage(
                               context,
-                              diamonds: 102,
-                              price: 4,
+                              diamonds: 20,
+                              price: 5.00,
+                              isPopular: false,
+                            ),
+                            SizedBox(height: 12),
+
+                            _buildDiamondPackage(
+                              context,
+                              diamonds: 40,
+                              price: 10.00,
                               isPopular: true,
                               popularText: S.of(context).mostPopular,
                             ),
@@ -109,40 +117,32 @@ class DiamondPurchaseDialog extends StatelessWidget {
 
                             _buildDiamondPackage(
                               context,
-                              diamonds: 220,
-                              price: 8,
+                              diamonds: 100,
+                              price: 25.00,
                               isPopular: false,
                             ),
                             SizedBox(height: 12),
 
                             _buildDiamondPackage(
                               context,
-                              diamonds: 460,
-                              price: 16,
+                              diamonds: 200,
+                              price: 50.00,
                               isPopular: false,
                             ),
                             SizedBox(height: 12),
 
                             _buildDiamondPackage(
                               context,
-                              diamonds: 950,
-                              price: 32,
+                              diamonds: 400,
+                              price: 100.00,
                               isPopular: false,
                             ),
                             SizedBox(height: 12),
 
                             _buildDiamondPackage(
                               context,
-                              diamonds: 2000,
-                              price: 64,
-                              isPopular: false,
-                            ),
-                            SizedBox(height: 12),
-
-                            _buildDiamondPackage(
-                              context,
-                              diamonds: 10000,
-                              price: 315,
+                              diamonds: 1000,
+                              price: 250.00,
                               isPopular: false,
                               isBestValue: true,
                               bestValueText: S.of(context).bestValue,
@@ -151,8 +151,8 @@ class DiamondPurchaseDialog extends StatelessWidget {
 
                             _buildDiamondPackage(
                               context,
-                              diamonds: 100000,
-                              price: 3125,
+                              diamonds: 4000,
+                              price: 1000.00,
                               isPopular: false,
                               isMegaPack: true,
                               megaPackText: S.of(context).megaPack,
@@ -217,7 +217,7 @@ class DiamondPurchaseDialog extends StatelessWidget {
   Widget _buildDiamondPackage(
       BuildContext context, {
         required int diamonds,
-        required int price,
+        required double price,
         bool isPopular = false,
         bool isBestValue = false,
         bool isMegaPack = false,
@@ -419,20 +419,24 @@ class DiamondPurchaseDialog extends StatelessWidget {
     return diamonds.toString();
   }
 
-  String _formatPrice(int price) {
-    if (price >= 1000) {
-      return price.toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-            (Match m) => '${m[1]},',
-      );
-    }
-    return price.toString();
+  String _formatPrice(double price) {
+    final isWhole = price == price.truncateToDouble();
+    final formatted = isWhole
+        ? price.toInt().toString()
+        : price.toStringAsFixed(2);
+    // Add thousands separator
+    final parts = formatted.split('.');
+    parts[0] = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    return parts.join('.');
   }
 }
 
 void showDiamondPurchaseDialog(
     BuildContext context, {
-      Function(int diamondAmount, int price)? onPurchase,
+      Function(int diamondAmount, double price)? onPurchase,
     }) {
   showDialog(
     context: context,

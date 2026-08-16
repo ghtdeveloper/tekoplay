@@ -7,11 +7,10 @@ import 'dart:async';
 
 import '../../generated/l10n.dart';
 import '../adds/banner_ad_widget.dart';
-import '../adds/Interstitial_ad_helper.dart';
+import '../adds/interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
-import '../../core/service/app_update_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class MainScreen extends StatefulWidget {
@@ -24,6 +23,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   late AudioPlayer _audioPlayer;
   double _currentVolume = 0.5;
+  bool _isPausedForNavigation = false;
   User? _currentUser;
   bool _isEmailVerified = true;
   Timer? _emailVerificationTimer;
@@ -40,12 +40,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _startEmailVerificationCheck();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
     _enableWakeLock();
-    // Verificar actualizaciones al abrir la app (delay para no bloquear el render inicial)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) AppUpdateService.checkForUpdate(context);
-      });
-    });
   }
 
   @override
@@ -130,6 +124,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  Future<void> _resumeMusic() async {
+    await _loadAndApplyVolume();
+    await _audioPlayer.resume();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -138,8 +137,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
-        _loadAndApplyVolume();
-        _audioPlayer.resume();
+        if (!_isPausedForNavigation) {
+          _resumeMusic();
+        }
         _checkEmailVerification();
         break;
       case AppLifecycleState.paused:
@@ -238,7 +238,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.of(context).pop();
+                        _isPausedForNavigation = true;
                         await _audioPlayer.pause();
+                        if (!context.mounted) return;
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -248,8 +250,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                        await _loadAndApplyVolume();
-                        await _audioPlayer.resume();
+                        _isPausedForNavigation = false;
+                        await _resumeMusic();
                       },
                       icon: Icon(Icons.sports_esports),
                       label: Text(
@@ -274,7 +276,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.of(context).pop();
+                        _isPausedForNavigation = true;
                         await _audioPlayer.pause();
+                        if (!context.mounted) return;
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -284,8 +288,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                        await _loadAndApplyVolume();
-                        await _audioPlayer.resume();
+                        _isPausedForNavigation = false;
+                        await _resumeMusic();
                       },
                       icon: Icon(Icons.monetization_on),
                       label: Text(
@@ -1117,7 +1121,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () async {
+              _isPausedForNavigation = true;
               await _audioPlayer.pause();
+              if (!context.mounted) return;
               final _ = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -1129,8 +1135,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
               );
               _loadCurrentUser();
-              await _loadAndApplyVolume();
-              await _audioPlayer.resume();
+              _isPausedForNavigation = false;
+              await _resumeMusic();
             },
           ),
         ],
@@ -1293,14 +1299,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                 size: cardSize,
                                 isEnabled: true,
                               ),
-                              // Dominó - Deshabilitado
                               GameCard(
                                 imagePath: 'assets/images/domino.png',
                                 title: S.of(context).domino,
                                 onTap: () {
+                                  _showGameTypeDialog(context, S.of(context).domino);
                                 },
                                 size: cardSize,
-                                isEnabled: false,
+                                isEnabled: true,
                               ),
                             ],
                           ),

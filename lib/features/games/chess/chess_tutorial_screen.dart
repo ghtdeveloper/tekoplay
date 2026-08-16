@@ -413,6 +413,7 @@ class _ChessImmersiveTutorialScreenState
     _setupBoardForStep();
 
     await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
 
     setState(() {
       _waitingForMove = false;
@@ -424,6 +425,7 @@ class _ChessImmersiveTutorialScreenState
     );
 
     await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
 
     _setupBoardForStep();
 

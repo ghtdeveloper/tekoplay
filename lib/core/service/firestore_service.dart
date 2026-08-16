@@ -306,6 +306,17 @@ class FirestoreService {
     }
   }
 
+  Future<bool> incrementUserDiamondsEarned(String userId, int amount) async {
+    try {
+      await _firestore.collection(_usersCollection).doc(userId).update({
+        'diamondsEarned': FieldValue.increment(amount),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> updateGamePoints(
     String userId,
     GameTypeModel gameType,
@@ -636,7 +647,6 @@ class FirestoreService {
     }
   }
 
-  // Buscar usuario por nombre de usuario
   Future<List<UserModel>> searchUsersByUsername(String username) async {
     try {
       final usersQuery = await _firestore
@@ -655,10 +665,8 @@ class FirestoreService {
     }
   }
 
-  // Obtener estadísticas de jugador para multijugador
   Future<Map<String, dynamic>?> getPlayerMultiplayerStats(String userId) async {
     try {
-      // Obtener estadísticas de partidas multijugador
       final multiplayerMatchesQuery = await _firestore
           .collection(_gameMatchesCollection)
           .where('userId', isEqualTo: userId)
@@ -723,7 +731,6 @@ class FirestoreService {
     }
   }
 
-  // Guardar token de dispositivo para notificaciones
   Future<bool> saveDeviceToken(String userId, String token, String platform) async {
     try {
       await _firestore.collection('user_tokens').doc(userId).set({
@@ -743,7 +750,6 @@ class FirestoreService {
     }
   }
 
-  // Eliminar token de dispositivo (logout)
   Future<bool> removeDeviceToken(String userId) async {
     try {
       await _firestore.collection('user_tokens').doc(userId).update({
@@ -760,10 +766,8 @@ class FirestoreService {
     }
   }
 
-  // Obtener historial de invitaciones
   Future<List<Map<String, dynamic>>> getInvitationHistory(String userId) async {
     try {
-      // Invitaciones enviadas
       final sentQuery = await _firestore
           .collection('game_invitations')
           .where('fromUserId', isEqualTo: userId)
@@ -771,7 +775,6 @@ class FirestoreService {
           .limit(20)
           .get();
 
-      // Invitaciones recibidas
       final receivedQuery = await _firestore
           .collection('game_invitations')
           .where('toUserId', isEqualTo: userId)
@@ -792,7 +795,6 @@ class FirestoreService {
         }),
       ];
 
-      // Ordenar por fecha
       allInvitations.sort((a, b) {
         final aDate = (a['createdAt'] as Timestamp).toDate();
         final bDate = (b['createdAt'] as Timestamp).toDate();
@@ -808,7 +810,6 @@ class FirestoreService {
     }
   }
 
-  // Actualizar perfil de usuario
   Future<bool> updateUserProfile({
     required String userId,
     String? displayName,
@@ -842,13 +843,11 @@ class FirestoreService {
     }
   }
 
-  // Obtener ranking de jugadores multijugador
   Future<List<Map<String, dynamic>>> getMultiplayerLeaderboard({
     required GameTypeModel gameType,
     int limit = 20,
   }) async {
     try {
-      // Obtener usuarios ordenados por puntos del juego específico
       final snapshot = await _firestore
           .collection(_usersCollection)
           .orderBy('gameStats.${gameType.id}.points', descending: true)
@@ -862,7 +861,6 @@ class FirestoreService {
         final user = UserModel.fromFirestore(doc);
         final gameStats = user.getGameStats(gameType);
 
-        // Obtener estadísticas multijugador específicas
         final multiplayerStats = await getPlayerMultiplayerStats(user.id);
 
         leaderboard.add({
@@ -886,7 +884,6 @@ class FirestoreService {
     }
   }
 
-  // Reportar jugador
   Future<bool> reportPlayer({
     required String reporterId,
     required String reportedUserId,
@@ -914,19 +911,16 @@ class FirestoreService {
     }
   }
 
-  // Obtener estadísticas del servidor
   Future<Map<String, dynamic>?> getServerStats() async {
     try {
       final now = DateTime.now();
       final todayStart = DateTime(now.year, now.month, now.day);
 
-      // Partidas jugadas hoy
       final todayGamesQuery = await _firestore
           .collection('multiplayer_games')
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
           .get();
 
-      // Usuarios activos (que han jugado en los últimos 7 días)
       final weekAgo = now.subtract(Duration(days: 7));
       final activeUsersQuery = await _firestore
           .collection(_gameMatchesCollection)
@@ -937,7 +931,6 @@ class FirestoreService {
           .map((doc) => doc.data()['userId'] as String)
           .toSet();
 
-      // Partidas en progreso
       final activeGamesQuery = await _firestore
           .collection('multiplayer_games')
           .where('status', isEqualTo: 'active')
@@ -964,25 +957,21 @@ class FirestoreService {
     int rankingTolerance = 20,
   }) async {
     try {
-      // Crear query base
       Query query = _firestore
           .collection('multiplayer_games')
           .where('status', isEqualTo: 'waiting')
           .where('gameType', isEqualTo: gameType)
           .where('gameSettings.isOnlineMatchmaking', isEqualTo: true);
 
-      // Filtrar por tiempo si se especifica
       if (timeMinutes != null) {
         query = query.where('gameSettings.timeMinutes', isEqualTo: timeMinutes);
       }
 
-      // Ejecutar query
       final snapshot = await query
-          .orderBy('createdAt', descending: false) // Los más antiguos primero
+          .orderBy('createdAt', descending: false)
           .limit(10)
           .get();
 
-      // Filtrar manualmente por ranking (Firestore tiene limitaciones con múltiples where)
       final games = snapshot.docs
           .map((doc) => MultiplayerGameMatch.fromFirestore(doc))
           .where((game) {
@@ -1000,7 +989,6 @@ class FirestoreService {
     }
   }
 
-  /// Crea un juego online para matchmaking automático
   Future<String?> createOnlineMatchmakingGame({
     required String hostId,
     required String hostName,
@@ -1053,7 +1041,6 @@ class FirestoreService {
     }
   }
 
-  /// Une un jugador a un juego de matchmaking y determina quién juega con blancas
   Future<Map<String, dynamic>?> joinOnlineMatchmakingGame({
     required String gameId,
     required String guestId,
@@ -1074,14 +1061,11 @@ class FirestoreService {
         final gameData = gameDoc.data()!;
         final hostRanking = gameData['gameSettings']['hostRanking'] as int? ?? 1000;
 
-        // Determinar colores basado en ranking (mayor ranking = blancas)
         final bool hostPlaysWhite = hostRanking >= guestRanking;
 
-        // Configurar el FEN inicial según quién juega con blancas
         String initialFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         String currentTurn = hostPlaysWhite ? 'host' : 'guest';
 
-        // Actualizar el juego
         transaction.update(gameRef, {
           'guestId': guestId,
           'guestName': guestName,
@@ -1113,7 +1097,6 @@ class FirestoreService {
     }
   }
 
-  /// Cancela un juego de matchmaking que está esperando
   Future<bool> cancelOnlineMatchmakingGame(String gameId, String userId) async {
     try {
       final gameRef = _firestore.collection('multiplayer_games').doc(gameId);
@@ -1123,7 +1106,6 @@ class FirestoreService {
 
       final gameData = gameDoc.data()!;
 
-      // Solo el host puede cancelar un juego en espera
       if (gameData['hostId'] != userId || gameData['status'] != 'waiting') {
         return false;
       }
@@ -1142,27 +1124,23 @@ class FirestoreService {
     }
   }
 
-  /// Obtiene estadísticas de matchmaking
   Future<Map<String, dynamic>?> getMatchmakingStats() async {
     try {
       final now = DateTime.now();
       final last24Hours = now.subtract(Duration(hours: 24));
 
-      // Juegos creados en las últimas 24 horas
       final recentGamesQuery = await _firestore
           .collection('multiplayer_games')
           .where('gameSettings.isOnlineMatchmaking', isEqualTo: true)
           .where('createdAt', isGreaterThan: Timestamp.fromDate(last24Hours))
           .get();
 
-      // Juegos actualmente esperando
       final waitingGamesQuery = await _firestore
           .collection('multiplayer_games')
           .where('status', isEqualTo: 'waiting')
           .where('gameSettings.isOnlineMatchmaking', isEqualTo: true)
           .get();
 
-      // Juegos activos de matchmaking
       final activeGamesQuery = await _firestore
           .collection('multiplayer_games')
           .where('status', isEqualTo: 'active')
@@ -1183,7 +1161,6 @@ class FirestoreService {
     }
   }
 
-  /// Limpia juegos de matchmaking antiguos (más de 2 minutos esperando)
   Future<int> cleanupOldMatchmakingGames() async {
     try {
       final twoMinutesAgo = DateTime.now().subtract(Duration(minutes: 2));
@@ -1219,11 +1196,10 @@ class FirestoreService {
     }
   }
 
-  /// Obtiene el ranking de un usuario para un tipo de juego específico
   Future<int> getUserGameRanking(String userId, GameTypeModel gameType) async {
     try {
       final user = await getUser(userId);
-      if (user == null) return 1000; // Ranking por defecto
+      if (user == null) return 1000;
 
       final gameStats = user.getGameStats(gameType);
       return gameStats.points;
@@ -1231,11 +1207,10 @@ class FirestoreService {
       if (kDebugMode) {
         print('Error getting user game ranking: $e');
       }
-      return 1000; // Ranking por defecto en caso de error
+      return 1000;
     }
   }
 
-  /// Registra el resultado de un juego con tiempo para estadísticas
   Future<bool> recordTimedGameMatch({
     required String userId,
     required GameTypeModel gameType,

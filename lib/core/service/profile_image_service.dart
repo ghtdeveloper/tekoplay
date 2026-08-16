@@ -40,7 +40,7 @@ class ProfileImageService {
       return cameraGranted && (photosGranted || storageGranted);
 
     } catch (e) {
-      print('Error requesting permissions: $e');
+      if (kDebugMode) print('Error requesting permissions: $e');
       return false;
     }
   }
@@ -72,11 +72,11 @@ class ProfileImageService {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text('Permitir'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Color(0xFFEC7A34),
                 foregroundColor: Colors.white,
               ),
+              child: Text('Permitir'),
             ),
           ],
         );
@@ -122,6 +122,7 @@ class ProfileImageService {
       return true;
     }
 
+    if (!context.mounted) return false;
     bool userAccepted = await _showPermissionDialog(context);
     if (!userAccepted) {
       return false;
@@ -129,11 +130,11 @@ class ProfileImageService {
 
     bool granted = await _requestPermissions();
 
-    if (!granted) {
+    if (!granted && context.mounted) {
       bool cameraPermanentlyDenied = await Permission.camera.isPermanentlyDenied;
       bool photosPermanentlyDenied = await Permission.photos.isPermanentlyDenied;
 
-      if (cameraPermanentlyDenied || photosPermanentlyDenied) {
+      if ((cameraPermanentlyDenied || photosPermanentlyDenied) && context.mounted) {
         await _handlePermanentlyDenied(context);
       }
     }
@@ -197,17 +198,13 @@ class ProfileImageService {
       String userId,
       ImageSource source
       ) async {
-    // Verificar permisos con diálogo explicativo
     bool hasPermissions = await requestPermissionsWithDialog(context);
     if (!hasPermissions) {
       throw Exception('Permisos de cámara y galería requeridos');
     }
-
-    // Seleccionar imagen
     final XFile? imageFile = await _pickImage(source);
     if (imageFile == null) return null;
 
-    // Subir imagen
     return await uploadProfileImage(userId, imageFile);
   }
 }

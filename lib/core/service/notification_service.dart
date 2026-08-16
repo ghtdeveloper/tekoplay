@@ -1,6 +1,4 @@
 
-import 'dart:ffi';
-
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../features/games/chess/multiplayer_chess_screen.dart';
+import '../../features/games/domino/multiplayer_domino_screen.dart';
 import '../../features/games/ludo/multiplayer_ludo_screen.dart';
 import '../../generated/l10n.dart';
 
@@ -31,7 +30,7 @@ class NotificationService {
   }
 
   Future<void> _requestPermissions() async {
-    final settings = await _firebaseMessaging.requestPermission(
+    await _firebaseMessaging.requestPermission(
       alert: true,
       announcement: false,
       badge: true,
@@ -160,7 +159,6 @@ class NotificationService {
   }
 
   void _handleGameInvitationTap(Map<String, dynamic> data) {
-    final invitationId = data['invitationId'];
   }
 
   Future<void> sendNotificationToUser({
@@ -200,7 +198,6 @@ class NotificationService {
     }
   }
 
-  // Obtener notificaciones del usuario
   Stream<List<Map<String, dynamic>>> getUserNotifications(String userId) {
     return _firestore
         .collection('notifications')
@@ -281,6 +278,7 @@ class NotificationService {
         return;
       }
       final hasEnoughFunds = await _validateUserFundsForInvitation(context, currentUser.uid);
+      if (!context.mounted) return;
       if (!hasEnoughFunds) {
         Navigator.of(context).pop();
         return;
@@ -296,6 +294,17 @@ class NotificationService {
             context,
             MaterialPageRoute(
               builder: (context) => MultiplayerLudoScreen(
+                gameId: result['gameId'],
+                playerNumber: result['playerNumber'] ?? 2,
+                matchType: result['matchType'] ?? '',
+              ),
+            ),
+          );
+        } else if (result['isDomino'] == true) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MultiplayerDominoScreen(
                 gameId: result['gameId'],
                 playerNumber: result['playerNumber'] ?? 2,
                 matchType: result['matchType'] ?? '',
@@ -332,6 +341,7 @@ class NotificationService {
       final FirestoreService firestoreService = FirestoreService();
       final userDoc = await firestoreService.getUser(userId);
 
+      if (!context.mounted) return false;
       if (userDoc == null) {
         _showInsufficientFundsDialog(context, "Error al cargar datos del usuario", "", 0, 0, Icons.error);
         return false;
@@ -675,6 +685,7 @@ class NotificationsWidget extends StatelessWidget {
                         if (!isRead) {
                           await NotificationService().markAsRead(notification['id']);
                         }
+                        if (!context.mounted) return;
                         Navigator.of(context).pop();
                       },
                       child: Container(
