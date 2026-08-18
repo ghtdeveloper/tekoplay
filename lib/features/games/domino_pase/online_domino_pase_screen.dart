@@ -10,6 +10,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/domino_game_match.dart';
 import '../../../core/service/domino_pase_game_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/utils/game_result.dart';
+import '../../../core/utils/game_type.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
@@ -76,7 +78,6 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
   bool _isScreenKeepOnActive = false;
   int _unreadChatCount = 0;
 
-  // Rematch
   bool _rematchRequested = false;
   bool _waitingForRematch = false;
   DateTime? _gameStartedAt;
@@ -457,7 +458,6 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
         _stopTurnTimer();
         setState(() { _currentGame = game; _gameEnded = true; });
         _disableWakeLock();
-        // Distribuir recompensas
         if (game.isFinished) {
           _gameService.distributeRewards(gameId: gameId);
         }
@@ -813,7 +813,38 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
   void _showGameOverDialog(DominoGameMatch game) {
     if (!mounted) return;
+    _recordGameHistory(game);
     setState(() => _gameEnded = true);
+  }
+
+  Future<void> _recordGameHistory(DominoGameMatch game) async {
+    try {
+      final uid = _currentUser!.uid;
+      final iWon = game.winnerId == uid;
+      final result = iWon ? GameResultModel.win : GameResultModel.loss;
+      final dur = game.startedAt != null
+          ? DateTime.now().difference(game.startedAt!).inMinutes
+          : 1;
+      final opponentName = _myPlayerNumber == 1
+          ? (game.guestName ?? 'Oponente')
+          : game.hostName;
+      await _firestoreService.recordGameMatch(
+        userId: uid,
+        gameType: GameTypeModel.dominoPase,
+        result: result,
+        pointsEarned: iWon ? 20 : -5,
+        durationMinutes: dur > 0 ? dur : 1,
+        opponentName: opponentName,
+        additionalData: {
+          'matchType': widget.matchType,
+          'mode': 'online',
+          'betAmount': game.betAmount,
+          'currencyType': 'diamonds',
+        },
+      );
+    } catch (e) {
+      if (kDebugMode) print('Error recording domino pase history: $e');
+    }
   }
 
   Future<void> _requestRematch() async {
@@ -1365,7 +1396,6 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      // Pass balance
                       if (opp.passReceived > 0 || opp.passPaid > 0) ...[
                         const SizedBox(width: 4),
                         Container(

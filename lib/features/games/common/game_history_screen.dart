@@ -599,6 +599,13 @@ Future<void> _disableWakeLock() async {
           height: size,
           fit: BoxFit.contain,
         );
+      case GameTypeModel.dominoPase:
+        return Image.asset(
+          'assets/images/domino.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+        );
     }
   }
 }

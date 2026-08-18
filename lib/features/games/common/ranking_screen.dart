@@ -411,6 +411,13 @@ class _RankingScreenState extends State<RankingScreen>
           height: size,
           fit: BoxFit.contain,
         );
+      case GameTypeModel.dominoPase:
+        return Image.asset(
+          'assets/images/domino.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+        );
     }
   }
 }

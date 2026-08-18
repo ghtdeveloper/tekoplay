@@ -11,6 +11,8 @@ import '../../../core/models/domino_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/domino_pase_game_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/utils/game_result.dart';
+import '../../../core/utils/game_type.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
@@ -366,8 +368,7 @@ class _MultiplayerDominoPaseScreenState
     if (_activeGameId == null || _gameEnded) return;
     final game = _currentGame;
     if (game == null) return;
-    // Find the player whose turn it is
-    final turnStr = game.currentTurn; // e.g. 'player2'
+    final turnStr = game.currentTurn;
     final turnNum = int.tryParse(turnStr.replaceAll('player', '')) ?? 0;
     final opponentId = game.playerIdOf(turnNum);
     if (opponentId == null || opponentId == _currentUser?.uid) return;
@@ -668,7 +669,38 @@ class _MultiplayerDominoPaseScreenState
 
   void _showGameOverDialog(DominoGameMatch game) {
     if (!mounted) return;
+    _recordGameHistory(game);
     setState(() => _gameEnded = true);
+  }
+
+  Future<void> _recordGameHistory(DominoGameMatch game) async {
+    try {
+      final uid = _currentUser!.uid;
+      final iWon = game.winnerId == uid;
+      final result = iWon ? GameResultModel.win : GameResultModel.loss;
+      final dur = game.startedAt != null
+          ? DateTime.now().difference(game.startedAt!).inMinutes
+          : 1;
+      final opponentName = _myPlayerNumber == 1
+          ? (game.guestName ?? 'Oponente')
+          : game.hostName;
+      await _firestoreService.recordGameMatch(
+        userId: uid,
+        gameType: GameTypeModel.dominoPase,
+        result: result,
+        pointsEarned: iWon ? 20 : -5,
+        durationMinutes: dur > 0 ? dur : 1,
+        opponentName: opponentName,
+        additionalData: {
+          'matchType': widget.matchType,
+          'mode': 'multiplayer',
+          'betAmount': game.betAmount,
+          'currencyType': 'diamonds',
+        },
+      );
+    } catch (e) {
+      if (kDebugMode) print('Error recording domino pase history: $e');
+    }
   }
 
   Future<void> _requestRematch() async {
