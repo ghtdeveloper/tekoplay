@@ -164,7 +164,6 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "diamonds": MessageLookupByLibrary.simpleMessage("diamants"),
     "difficult": MessageLookupByLibrary.simpleMessage("Difficile"),
-    "ultraDifficult": MessageLookupByLibrary.simpleMessage("Ultra difficile"),
     "difficulty": MessageLookupByLibrary.simpleMessage("pot"),
     "domino": MessageLookupByLibrary.simpleMessage("Domino"),
     "dominoTutorial": MessageLookupByLibrary.simpleMessage(
@@ -653,6 +652,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle": MessageLookupByLibrary.simpleMessage(
       "Comment jouer au Ludo",
     ),
+    "ultraDifficult": MessageLookupByLibrary.simpleMessage("Ultra difficile"),
     "understood": MessageLookupByLibrary.simpleMessage("Compris"),
     "user": MessageLookupByLibrary.simpleMessage("Utilisateur"),
     "userDataLoadError": MessageLookupByLibrary.simpleMessage(

@@ -306,6 +306,45 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
+
+                  if (gameType == S.of(context).domino) ...[
+                    SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          _isPausedForNavigation = true;
+                          await _audioPlayer.pause();
+                          if (!context.mounted) return;
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => GameScreen(
+                                gameType: gameType,
+                                matchType: S.of(context).pase,
+                              ),
+                            ),
+                          );
+                          _isPausedForNavigation = false;
+                          await _resumeMusic();
+                        },
+                        icon: Icon(Icons.casino),
+                        label: Text(
+                          S.of(context).pase,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF9C27B0),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

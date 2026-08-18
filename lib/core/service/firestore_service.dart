@@ -150,7 +150,6 @@ class FirestoreService {
       if (kDebugMode) {
         print('Error generating random player name: $e');
       }
-      // Último recurso: usar timestamp completo
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       return 'Player$timestamp';
     }
@@ -626,7 +625,6 @@ class FirestoreService {
     }
   }
 
-  // Buscar usuario por email
   Future<UserModel?> findUserByEmail(String email) async {
     try {
       final usersQuery = await _firestore

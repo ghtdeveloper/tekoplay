@@ -36,6 +36,9 @@ import '../domino/domino_tutorial_screen.dart';
 import '../domino/domino_vs_cpu_screen.dart';
 import '../domino/multiplayer_domino_screen.dart';
 import '../domino/online_domino_screen.dart';
+import '../domino_pase/domino_pase_tutorial_screen.dart';
+import '../domino_pase/multiplayer_domino_pase_screen.dart';
+import '../domino_pase/online_domino_pase_screen.dart';
 import '../ludo/ludo_vs_cpu_screen.dart';
 import '../ludo/multiplayer_ludo_screen.dart';
 import '../ludo/online_ludo_screen.dart';
@@ -106,6 +109,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool get isDomino => gameType == _localizedDomino;
 
   bool get isLudo => gameType == _localizedLudo;
+
+  bool get isPase => matchType == S.of(context).pase;
 
   void _setupWalletInfoUser() {
     if (_currentUser == null) {
@@ -280,13 +285,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     if (_currentUser == null) return false;
 
     try {
+      final usesDiamonds = matchType == S.of(context).bet || isPase;
       final currentBalance =
-          matchType == S.of(context).bet
-              ? (_userDiamonds ?? 0)
-              : (_userCoins ?? 0);
+          usesDiamonds ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
 
       bool hasInsufficientFunds = false;
-      if (matchType == S.of(context).bet) {
+      if (usesDiamonds) {
         hasInsufficientFunds = currentBalance < 50;
       } else {
         hasInsufficientFunds = currentBalance < 100;
@@ -1270,7 +1274,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final shouldStack = constraints.maxWidth < 200 &&
-                            matchType == S.of(context).bet &&
+                            (matchType == S.of(context).bet || isPase) &&
                             (_withdrawableDiamonds ?? 0) > 0;
 
                         if (shouldStack) {
@@ -1291,7 +1295,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Flexible(child: _buildBalanceRow()),
-                              if (matchType == S.of(context).bet &&
+                              if ((matchType == S.of(context).bet || isPase) &&
                                   (_withdrawableDiamonds ?? 0) > 0) ...[
                                 SizedBox(width: 4),
                                 WithdrawalCounterWidget(
@@ -1350,20 +1354,22 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       if (!_isDisposed) _showFriendGameDialog(context);
                     },
                   ),
-                  GameModeButton(
-                    imagePath: 'assets/images/icon_lessons.png',
-                    label: S.of(context).tutorial,
-                    onPressed: () {
-                      if (!_isDisposed) _showTutorial(context);
-                    },
-                  ),
-                  GameModeButton(
-                    imagePath: 'assets/images/icon_play_vs_computer.png',
-                    label: S.of(context).vsCpu,
-                    onPressed: () {
-                      if (!_isDisposed) _showComputerGameDialog(context);
-                    },
-                  ),
+                  if (!isPase) ...[
+                    GameModeButton(
+                      imagePath: 'assets/images/icon_lessons.png',
+                      label: S.of(context).tutorial,
+                      onPressed: () {
+                        if (!_isDisposed) _showTutorial(context);
+                      },
+                    ),
+                    GameModeButton(
+                      imagePath: 'assets/images/icon_play_vs_computer.png',
+                      label: S.of(context).vsCpu,
+                      onPressed: () {
+                        if (!_isDisposed) _showComputerGameDialog(context);
+                      },
+                    ),
+                  ],
                   GameModeButton(
                     imagePath: 'assets/images/icon_play_online.png',
                     label: S.of(context).online,
@@ -1382,7 +1388,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildBalanceRow() {
-    final isBet = matchType == S.of(context).bet;
+    final isBet = matchType == S.of(context).bet || isPase;
     final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
 
     return Row(
@@ -1412,7 +1418,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               return Icon(Icons.monetization_on, color: Colors.blue, size: 24);
             },
           )
-        else if (matchType == S.of(context).bet)
+        else if (matchType == S.of(context).bet || isPase)
           Image.asset(
             'assets/images/diamond.png',
             height: 24,
@@ -1696,30 +1702,38 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                               playerNumber: result['playerNumber'] ?? 2,
                                                               matchType: result['matchType'] ?? widget.matchType,
                                                             )
-                                                          : result['isDomino'] == true
-                                                              ? MultiplayerDominoScreen(
+                                                          : result['isDominoPase'] == true
+                                                              ? MultiplayerDominoPaseScreen(
                                                                   gameId: result['gameId'],
                                                                   playerNumber: result['playerNumber'] ?? 2,
                                                                   matchType: result['matchType'] ?? widget.matchType,
                                                                 )
-                                                              : MultiplayerChessScreen(
-                                                                  gameId: result['gameId'],
-                                                                  isHost: false,
-                                                                  matchType: widget.matchType,
-                                                                ),
+                                                              : result['isDomino'] == true
+                                                                  ? MultiplayerDominoScreen(
+                                                                      gameId: result['gameId'],
+                                                                      playerNumber: result['playerNumber'] ?? 2,
+                                                                      matchType: result['matchType'] ?? widget.matchType,
+                                                                    )
+                                                                  : MultiplayerChessScreen(
+                                                                      gameId: result['gameId'],
+                                                                      isHost: false,
+                                                                      matchType: widget.matchType,
+                                                                    ),
                                                     ),
                                                   );
                                                 } else {
-                                                  final errorMsg = S.of(context).errorAcceptedInvitation;
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(errorMsg),
-                                                      backgroundColor:
-                                                          Colors.red,
-                                                    ),
-                                                  );
+                                                  Navigator.of(context).pop();
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(S.of(context).errorAcceptedInvitation),
+                                                        backgroundColor:
+                                                            Colors.red,
+                                                      ),
+                                                    );
+                                                  }
                                                 }
                                               },
                                               style: ElevatedButton.styleFrom(
@@ -1763,12 +1777,21 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
 
     if (isDomino) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MultiplayerDominoScreen(matchType: matchType),
-        ),
-      );
+      if (isPase) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MultiplayerDominoPaseScreen(matchType: matchType),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MultiplayerDominoScreen(matchType: matchType),
+          ),
+        );
+      }
       return;
     }
 
@@ -2099,6 +2122,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         context,
         MaterialPageRoute(builder: (context) => ChessImmersiveTutorialScreen()),
       );
+    } else if (isDomino && isPase) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DominoPaseTutorialScreen()),
+      );
     } else if (isDomino) {
       Navigator.push(
         context,
@@ -2106,8 +2134,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           builder: (context) => DominoImmersiveTutorialScreen(),
         ),
       );
-    }
-    else if (isLudo) {
+    } else if (isLudo) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -2703,12 +2730,21 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         ),
       );
     } else if (isDomino) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OnlineDominoScreen(matchType: matchType),
-        ),
-      );
+      if (isPase) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OnlineDominoPaseScreen(matchType: matchType),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OnlineDominoScreen(matchType: matchType),
+          ),
+        );
+      }
     }
   }
 

@@ -157,7 +157,6 @@ class MessageLookup extends MessageLookupByLibrary {
     "diamondStore": MessageLookupByLibrary.simpleMessage("Tienda de diamantes"),
     "diamonds": MessageLookupByLibrary.simpleMessage("diamantes"),
     "difficult": MessageLookupByLibrary.simpleMessage("Difícil"),
-    "ultraDifficult": MessageLookupByLibrary.simpleMessage("Ultra difícil"),
     "difficulty": MessageLookupByLibrary.simpleMessage("Dificultad"),
     "domino": MessageLookupByLibrary.simpleMessage("Dominó"),
     "dominoTutorial": MessageLookupByLibrary.simpleMessage(
@@ -458,6 +457,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "opponentTurn": MessageLookupByLibrary.simpleMessage("Turno del oponente"),
     "outOfTime": MessageLookupByLibrary.simpleMessage("Sin tiempo"),
     "parchisShort": MessageLookupByLibrary.simpleMessage("Parchís"),
+    "pase": MessageLookupByLibrary.simpleMessage("Pase"),
     "pass": MessageLookupByLibrary.simpleMessage("Pasar"),
     "passed": MessageLookupByLibrary.simpleMessage("Paso"),
     "password": MessageLookupByLibrary.simpleMessage("Contraseña"),
@@ -630,6 +630,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialShort": MessageLookupByLibrary.simpleMessage("Tutorial"),
     "tutorialTitle": MessageLookupByLibrary.simpleMessage("Cómo jugar Ludo"),
+    "ultraDifficult": MessageLookupByLibrary.simpleMessage("Ultra difícil"),
     "understood": MessageLookupByLibrary.simpleMessage("Entendido"),
     "user": MessageLookupByLibrary.simpleMessage("Usuario"),
     "userDataLoadError": MessageLookupByLibrary.simpleMessage(

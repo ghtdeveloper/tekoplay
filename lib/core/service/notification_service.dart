@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../features/games/chess/multiplayer_chess_screen.dart';
 import '../../features/games/domino/multiplayer_domino_screen.dart';
+import '../../features/games/domino_pase/multiplayer_domino_pase_screen.dart';
 import '../../features/games/ludo/multiplayer_ludo_screen.dart';
 import '../../generated/l10n.dart';
 
@@ -294,6 +295,17 @@ class NotificationService {
             context,
             MaterialPageRoute(
               builder: (context) => MultiplayerLudoScreen(
+                gameId: result['gameId'],
+                playerNumber: result['playerNumber'] ?? 2,
+                matchType: result['matchType'] ?? '',
+              ),
+            ),
+          );
+        } else if (result['isDominoPase'] == true) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MultiplayerDominoPaseScreen(
                 gameId: result['gameId'],
                 playerNumber: result['playerNumber'] ?? 2,
                 matchType: result['matchType'] ?? '',

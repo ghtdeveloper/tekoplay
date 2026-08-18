@@ -371,7 +371,12 @@ class S {
 
   /// `Ultra difficult`
   String get ultraDifficult {
-    return Intl.message('Ultra difficult', name: 'ultraDifficult', desc: '', args: []);
+    return Intl.message(
+      'Ultra difficult',
+      name: 'ultraDifficult',
+      desc: '',
+      args: [],
+    );
   }
 
   /// `Start game`
@@ -1127,6 +1132,11 @@ class S {
   /// `Bet`
   String get bet {
     return Intl.message('Bet', name: 'bet', desc: '', args: []);
+  }
+
+  /// `El Pase`
+  String get pase {
+    return Intl.message('El Pase', name: 'pase', desc: '', args: []);
   }
 
   /// `Ranking`
