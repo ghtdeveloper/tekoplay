@@ -195,6 +195,110 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _showDominoModeDialog(BuildContext context) {
+    if (_currentUser != null && !_isEmailVerified) {
+      _showEmailVerificationDialog(context);
+      return;
+    }
+    _interstitialHelper.showAdIfReady(onComplete: () {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: IconButton(
+                      icon: Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  Text(
+                    S.of(context).selectGameType,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _showGameTypeDialog(context, S.of(context).domino);
+                      },
+                      icon: Icon(Icons.sports_esports),
+                      label: Text(
+                        'Dominó Tradicional',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4CAF50),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 15),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        _isPausedForNavigation = true;
+                        await _audioPlayer.pause();
+                        if (!context.mounted) return;
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GameScreen(
+                              gameType: S.of(context).domino,
+                              matchType: S.of(context).pase,
+                            ),
+                          ),
+                        );
+                        _isPausedForNavigation = false;
+                        await _resumeMusic();
+                      },
+                      icon: Icon(Icons.casino),
+                      label: Text(
+                        'Dominó Pase',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF9C27B0),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+
   void _showGameTypeDialog(BuildContext context, String gameType) {
     if (_currentUser != null && !_isEmailVerified) {
       _showEmailVerificationDialog(context);
@@ -307,44 +411,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     ),
                   ),
 
-                  if (gameType == S.of(context).domino) ...[
-                    SizedBox(height: 15),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-                          _isPausedForNavigation = true;
-                          await _audioPlayer.pause();
-                          if (!context.mounted) return;
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => GameScreen(
-                                gameType: gameType,
-                                matchType: S.of(context).pase,
-                              ),
-                            ),
-                          );
-                          _isPausedForNavigation = false;
-                          await _resumeMusic();
-                        },
-                        icon: Icon(Icons.casino),
-                        label: Text(
-                          S.of(context).pase,
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF9C27B0),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -1342,7 +1408,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                                 imagePath: 'assets/images/domino.png',
                                 title: S.of(context).domino,
                                 onTap: () {
-                                  _showGameTypeDialog(context, S.of(context).domino);
+                                  _showDominoModeDialog(context);
                                 },
                                 size: cardSize,
                                 isEnabled: true,

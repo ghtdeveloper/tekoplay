@@ -79,6 +79,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
   // Rematch
   bool _rematchRequested = false;
   bool _waitingForRematch = false;
+  DateTime? _gameStartedAt;
 
   static const Color _accentColor = Color(0xFF9C27B0);
   static const Color _panelColor = Colors.white;
@@ -429,6 +430,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
       _needsSideChoice = false;
       _rematchRequested = false;
       _waitingForRematch = false;
+      _gameStartedAt = DateTime.now();
     });
 
     _gameSubscription?.cancel();
@@ -438,6 +440,14 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
       if (game == null || _gameEnded) {
         setState(() => _currentGame = game);
+        if (game != null && _gameEnded && !_waitingForRematch) {
+          final rematchGameId =
+              game.gameSettings?['rematchGameId'] as String?;
+          if (rematchGameId != null && _rematchRequested) {
+            setState(() => _waitingForRematch = true);
+            _openGame(rematchGameId, _myPlayerNumber);
+          }
+        }
         return;
       }
 
@@ -456,6 +466,10 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
       }
 
       if (serverPlayerNum == 0) {
+        final elapsed = _gameStartedAt != null
+            ? DateTime.now().difference(_gameStartedAt!).inSeconds
+            : 999;
+        if (elapsed < 5) return;
         setState(() { _gameEnded = true; });
         if (mounted) Navigator.of(context).pop();
         return;
@@ -802,13 +816,6 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
     setState(() => _gameEnded = true);
   }
 
-  bool _iAmAbandoner(DominoGameMatch game) {
-    if (_currentUser == null) return false;
-    final abandoned = List<String>.from(
-        game.gameSettings?['abandonedPlayers'] ?? []);
-    return abandoned.contains(_currentUser!.uid);
-  }
-
   Future<void> _requestRematch() async {
     if (_activeGameId == null || _rematchRequested) return;
     setState(() => _rematchRequested = true);
@@ -823,14 +830,15 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
       final newGame = await _gameService.createRematchGame(previousGame: _currentGame!);
       if (newGame != null && mounted) {
         final newGameId = newGame['gameId'] as String;
-        final myNum = _myPlayerNumber;
-        _openGame(newGameId, myNum);
+        await _firestore
+            .collection('domino_pase_games')
+            .doc(_activeGameId!)
+            .update({'gameSettings.rematchGameId': newGameId});
+        _openGame(newGameId, _myPlayerNumber);
       } else if (mounted) {
         _showSnack('No se pudo crear la revancha');
         setState(() => _waitingForRematch = false);
       }
-    } else if (mounted) {
-      _showSnack('Esperando a que los demás acepten la revancha...');
     }
   }
 
@@ -959,7 +967,6 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
       child: Column(
         children: [
           const SizedBox(height: 16),
-          // Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -998,7 +1005,6 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
           const SizedBox(height: 24),
 
-          // Player count (solo 3 o 4)
           const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
@@ -1315,7 +1321,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
           Positioned(
             left: 8,
             bottom: 100,
-            child: _buildMyPanel(isMyTurn, myReceived - myPaid),
+            child: _buildMyPanel(isMyTurn, myPaid),
           ),
           if (_flyingTileData != null) _buildPlayerFlyOverlay(),
           if (_gameEnded && _currentGame != null) _buildGameOverOverlay(_currentGame!),
@@ -1558,7 +1564,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
     );
   }
 
-  Widget _buildMyPanel(bool isActive, int passNet) {
+  Widget _buildMyPanel(bool isActive, int passCount) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
@@ -1576,11 +1582,11 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(_myName ?? 'Yo', style: const TextStyle(color: Colors.white70, fontSize: 9)),
-              if (passNet != 0)
+              if (passCount > 0)
                 Text(
-                  'Pases: ${passNet > 0 ? '+' : ''}$passNet',
+                  'Pases: $passCount',
                   style: TextStyle(
-                    color: passNet > 0 ? Colors.green[300] : Colors.red[300],
+                    color: Colors.orange[300],
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1653,6 +1659,20 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
     final playerExited = List<String>.from(game.gameSettings?['playerExited'] ?? []);
     final someoneLeft = playerExited.isNotEmpty;
 
+    final rematchAccepted = Map<String, dynamic>.from(
+        game.gameSettings?['rematchAccepted'] ?? {});
+    final myPlayerKey = 'player$_myPlayerNumber';
+    final iRequested = rematchAccepted[myPlayerKey] == true;
+    final opponentRematchNames = <String>[];
+    for (int p = 1; p <= nPlayers; p++) {
+      if (p == _myPlayerNumber) continue;
+      if (rematchAccepted['player$p'] == true) {
+        final name = game.playerNameOf(p);
+        opponentRematchNames.add(name);
+      }
+    }
+    final opponentWantsRematch = opponentRematchNames.isNotEmpty;
+
     return Positioned(
       left: 0, right: 0, bottom: 0,
       child: Container(
@@ -1704,29 +1724,53 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             const SizedBox(height: 16),
 
             if (!game.isAbandoned && !rematchFailed && !someoneLeft) ...[
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _waitingForRematch ? null : _requestRematch,
-                  icon: Icon(_rematchRequested ? Icons.hourglass_top : Icons.replay, size: 18),
-                  label: Text(
-                    _waitingForRematch
-                        ? 'Creando revancha...'
-                        : _rematchRequested
-                            ? 'Esperando a los demás...'
-                            : 'Revancha',
-                    style: const TextStyle(fontSize: 15),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accentColor,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+              if (opponentWantsRematch && !iRequested)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${opponentRematchNames.join(", ")} quiere revancha!',
+                    style: TextStyle(
+                        color: Colors.amber[300],
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
+              if ((!iWon && (_userDiamonds ?? 0) >= required) || opponentWantsRematch) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: (_waitingForRematch || iRequested) ? null : _requestRematch,
+                    icon: Icon(
+                        iRequested
+                            ? Icons.hourglass_top
+                            : opponentWantsRematch
+                                ? Icons.check
+                                : Icons.replay,
+                        size: 18),
+                    label: Text(
+                      _waitingForRematch
+                          ? 'Creando revancha...'
+                          : iRequested
+                              ? 'Esperando a los demás...'
+                              : opponentWantsRematch
+                                  ? 'Aceptar revancha'
+                                  : 'Revancha',
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: opponentWantsRematch && !iRequested
+                          ? Colors.green
+                          : _accentColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
             ],
 
             if (rematchFailed)
@@ -1735,6 +1779,18 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                 child: Text(
                   'Revancha cancelada: un jugador no tiene saldo suficiente',
                   style: TextStyle(color: Colors.orange, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+            if (!iWon && !game.isAbandoned && !rematchFailed &&
+                !someoneLeft && (_userDiamonds ?? 0) < required)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Saldo insuficiente para revancha (necesitas $required diamantes)',
+                  style:
+                      const TextStyle(color: Colors.orange, fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
               ),

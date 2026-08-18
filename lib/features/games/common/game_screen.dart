@@ -1334,7 +1334,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       ),
                     ),
                     SizedBox(height: 8),
-                    _buildMatchTypeIndicator(),
+                    if (!isPase) _buildMatchTypeIndicator(),
                     SizedBox(height: 8),
                     _buildUserNameSection(),
                   ],

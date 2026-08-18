@@ -572,9 +572,6 @@ class DominoPaseGameService {
         final rematch = Map<String, dynamic>.from(
             game.gameSettings?['rematchAccepted'] ?? {});
         rematch['player$playerNum'] = true;
-        transaction.update(gameRef, {
-          'gameSettings.rematchAccepted': rematch,
-        });
 
         final nPlayers = game.numberOfPlayers;
         bool allAccepted = true;
@@ -587,25 +584,37 @@ class DominoPaseGameService {
           }
         }
 
+        final activePlayerIds = <String>[];
+        final activeBalances = <String, int>{};
+        if (allAccepted) {
+          for (int p = 1; p <= nPlayers; p++) {
+            final pid = game.playerIdOf(p);
+            if (pid != null && !abandoned.contains(pid)) {
+              activePlayerIds.add(pid);
+            }
+          }
+
+          for (final pid in activePlayerIds) {
+            final userDoc = await transaction
+                .get(_firestore.collection('users').doc(pid));
+            final data = userDoc.data();
+            final balance = (data?['diamonds'] as num?)?.toInt() ?? 0;
+            activeBalances[pid] = balance;
+          }
+        }
+
+        // ── ALL WRITES AFTER READS ──
+        transaction.update(gameRef, {
+          'gameSettings.rematchAccepted': rematch,
+        });
+
         if (!allAccepted) return null;
 
         final betAmount = game.betAmount ?? 0;
         final required = requiredBalance(betAmount);
 
-        final activePlayerIds = <String>[];
-        for (int p = 1; p <= nPlayers; p++) {
-          final pid = game.playerIdOf(p);
-          if (pid != null && !abandoned.contains(pid)) {
-            activePlayerIds.add(pid);
-          }
-        }
-
         for (final pid in activePlayerIds) {
-          final userDoc = await transaction
-              .get(_firestore.collection('users').doc(pid));
-          final data = userDoc.data();
-          final balance = (data?['diamonds'] as num?)?.toInt() ?? 0;
-          if (balance < required) {
+          if ((activeBalances[pid] ?? 0) < required) {
             transaction.update(gameRef, {
               'gameSettings.rematchFailed': true,
               'gameSettings.rematchFailedPlayer': pid,
@@ -613,6 +622,7 @@ class DominoPaseGameService {
             return null;
           }
         }
+
         return 'CREATE_NEW';
       });
     } catch (e) {
