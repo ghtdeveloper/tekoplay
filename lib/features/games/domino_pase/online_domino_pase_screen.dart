@@ -17,6 +17,7 @@ import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import 'domino_pase_tutorial_screen.dart';
+import '../../../generated/l10n.dart';
 
 enum _PaseOnlineState { playerCountSelection, matchmaking, waitingRoom, gameActive }
 
@@ -227,7 +228,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
     final required = DominoPaseGameService.requiredBalance(_selectedBetAmount!);
     final balance = _userDiamonds ?? 0;
     if (balance < required) {
-      _showSnack('Necesitas al menos $required diamantes (apuesta + respaldo)');
+      _showSnack(S.of(context).insufficientDiamondsForRematch(required));
       return;
     }
 
@@ -248,7 +249,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
       if (_matchmakingSeconds >= 90 && !_navigated) {
         t.cancel();
-        _showSnack('No se encontraron jugadores. Intenta de nuevo.');
+        _showSnack(S.of(context).opponentNotFound);
         _cancelMatchmaking();
       }
     });
@@ -492,8 +493,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             Future.delayed(const Duration(milliseconds: 800), () {
               _autoPassPending = false;
               if (mounted && !_gameEnded) {
-                final pValue = game.gameSettings?['passValue'] ?? 1;
-                _showSnack('Sin opciones. Pase (+$pValue diamantes de cada oponente)');
+                _showSnack(S.of(context).passAutomatic);
                 _passTurn();
               }
             });
@@ -640,7 +640,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
     }
 
     if (!state.canPlay(tileId)) {
-      _showSnack('Esta ficha no conecta con los extremos');
+      _showSnack(S.of(context).tileDoesntConnect);
       return;
     }
 
@@ -696,7 +696,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
     if (!success && mounted) {
       setState(() => _currentGame = _lastServerGame ?? game);
-      _showSnack('No se pudo colocar la ficha');
+      _showSnack(S.of(context).couldNotPlayTile);
     }
   }
 
@@ -787,18 +787,19 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
   Future<void> _abandonGame() async {
     if (_gameEnded) { Navigator.of(context).pop(); return; }
+    final s = S.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('¿Abandonar partida?'),
-        content: const Text('Perderás tu apuesta y respaldo si abandonas. Los demás jugadores recuperarán sus diamantes.'),
+        title: Text(s.abandonGame),
+        content: Text(s.abandonWarningPase),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Abandonar', style: TextStyle(color: Colors.white)),
+            child: Text(s.abandonGame, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -867,7 +868,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             .update({'gameSettings.rematchGameId': newGameId});
         _openGame(newGameId, _myPlayerNumber);
       } else if (mounted) {
-        _showSnack('No se pudo crear la revancha');
+        _showSnack(S.of(context).cannotCreateRematch);
         setState(() => _waitingForRematch = false);
       }
     }
@@ -908,13 +909,13 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
         appBar: AppBar(
           backgroundColor: _accentColor,
           elevation: 2,
-          title: const Text('Domino El Pase', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(S.of(context).dominoPaseTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
             if (!inGame)
               IconButton(
                 icon: const Icon(Icons.help_outline, color: Colors.white),
-                tooltip: 'Cómo jugar',
+                tooltip: S.of(context).tutorial,
                 onPressed: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const DominoPaseTutorialScreen())),
               ),
@@ -948,7 +949,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             if (inGame && !_gameEnded)
               TextButton(
                 onPressed: _abandonGame,
-                child: Text('Salir', style: TextStyle(color: Colors.red[300])),
+                child: Text(S.of(context).exit, style: TextStyle(color: Colors.red[300])),
               ),
           ],
         ),
@@ -1017,9 +1018,9 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Domino El Pase', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(S.of(context).dominoPaseTitle, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      const Text('Solo diamantes - Listo para el reto?', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(S.of(context).diamondsOnlyChallenge, style: const TextStyle(color: Colors.white70, fontSize: 11)),
                     ],
                   ),
                 ),
@@ -1036,7 +1037,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
           const SizedBox(height: 24),
 
-          const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(S.of(context).howManyPlayers, style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1073,9 +1074,9 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
           const SizedBox(height: 24),
 
           // Bet selection
-          const Text('Selecciona tu apuesta', style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(S.of(context).selectYourBet, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text('Necesitas el doble de la apuesta (apuesta + respaldo)', style: TextStyle(color: Colors.grey, fontSize: 11)),
+          Text(S.of(context).needDoubleForBet, style: const TextStyle(color: Colors.grey, fontSize: 11)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -1128,11 +1129,11 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
               ),
               child: Column(
                 children: [
-                  _infoRow('Apuesta nominal', '$_selectedBetAmount diamantes'),
-                  _infoRow('Respaldo', '$_selectedBetAmount diamantes'),
-                  _infoRow('Total requerido', '$requiredBal diamantes'),
-                  _infoRow('Comision TekoPlay', '${DominoPaseGameService.commission(_selectedBetAmount!, _selectedPlayerCount)} diamantes'),
-                  _infoRow('Valor del pase', '${DominoPaseGameService.passValue(_selectedBetAmount!)} diamantes'),
+                  _infoRow(S.of(context).nominalBet, '$_selectedBetAmount ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).backupAmount, '$_selectedBetAmount ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).totalRequired, '$requiredBal ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).tekoplayCommission, '${DominoPaseGameService.commission(_selectedBetAmount!, _selectedPlayerCount)} ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).passValueLabel, '${DominoPaseGameService.passValue(_selectedBetAmount!)} ${S.of(context).diamonds}'),
                 ],
               ),
             ),
@@ -1145,7 +1146,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             child: ElevatedButton.icon(
               onPressed: _selectedBetAmount == null ? null : _startMatchmaking,
               icon: const Icon(Icons.search),
-              label: const Text('Buscar partida', style: TextStyle(fontSize: 16)),
+              label: Text(S.of(context).searchGame, style: const TextStyle(fontSize: 16)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentColor,
                 foregroundColor: Colors.white,
@@ -1190,8 +1191,8 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
               child: CircularProgressIndicator(strokeWidth: 6, color: Color(0xFF9C27B0)),
             ),
             const SizedBox(height: 32),
-            const Text('Buscando jugadores reales...',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+            Text(S.of(context).searchingRealPlayers,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
             const SizedBox(height: 8),
             Text(
               '$minutes:${seconds.toString().padLeft(2, '0')}',
@@ -1205,12 +1206,12 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             Text('$_selectedPlayerCount jugadores · $_selectedBetAmount diamantes',
                 style: const TextStyle(fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 8),
-            const Text('Solo jugadores reales - sin bots', style: TextStyle(fontSize: 11, color: Colors.purple)),
+            Text(S.of(context).realPlayersNoBots, style: const TextStyle(fontSize: 11, color: Colors.purple)),
             const SizedBox(height: 40),
             OutlinedButton.icon(
               onPressed: _cancelMatchmaking,
               icon: const Icon(Icons.close),
-              label: const Text('Cancelar'),
+              label: Text(S.of(context).cancel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
@@ -1244,8 +1245,8 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                 children: [
                   const Text('🁣', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 12),
-                  const Text('Sala El Pase',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(S.of(context).dominoPaseWaitingRoom,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('$joined / $_selectedPlayerCount jugadores',
                       style: const TextStyle(fontSize: 16, color: Color(0xFF9C27B0), fontWeight: FontWeight.bold)),
@@ -1269,11 +1270,11 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                     Text('Esperando $remaining ${remaining == 1 ? 'jugador más' : 'jugadores más'}...',
                         style: const TextStyle(color: Colors.black54, fontSize: 13)),
                     const SizedBox(height: 4),
-                    const Text('Solo jugadores reales', style: TextStyle(fontSize: 11, color: Colors.purple)),
+                    Text(S.of(context).realPlayersOnly, style: const TextStyle(fontSize: 11, color: Colors.purple)),
                   ] else ...[
                     const Icon(Icons.check_circle, color: Colors.green, size: 28),
-                    const Text('¡Todos listos! Iniciando...',
-                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    Text(S.of(context).allReadyStarting,
+                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                   ],
                 ],
               ),
@@ -1289,7 +1290,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                 if (mounted) Navigator.pop(context);
               },
               icon: const Icon(Icons.close),
-              label: const Text('Cancelar'),
+              label: Text(S.of(context).cancel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
@@ -1579,7 +1580,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
               child: ElevatedButton.icon(
                 onPressed: _passTurn,
                 icon: const Icon(Icons.skip_next, size: 13),
-                label: const Text('Pasar', style: TextStyle(fontSize: 11)),
+                label: Text(S.of(context).pass, style: const TextStyle(fontSize: 11)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange[700],
                   foregroundColor: Colors.white,
@@ -1660,7 +1661,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
   Widget _buildGameOverOverlay(DominoGameMatch game) {
     final bool iWon = game.winnerId == _currentUser!.uid;
-    final String title = iWon ? '¡Ganaste la mano!' : 'Perdiste la mano';
+    final String title = iWon ? S.of(context).youWonHand : S.of(context).youLostHand;
     final Color titleColor = iWon ? Colors.green : Colors.red[400]!;
     final betAmount = game.betAmount ?? 0;
     final required = DominoPaseGameService.requiredBalance(betAmount);
@@ -1721,7 +1722,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
             if (game.isAbandoned) ...[
               const SizedBox(height: 4),
-              const Text('Un jugador abandono la partida', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(S.of(context).playerAbandonedGame, style: const TextStyle(color: Colors.white54, fontSize: 12)),
             ],
 
             const SizedBox(height: 8),
@@ -1758,7 +1759,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    '${opponentRematchNames.join(", ")} quiere revancha!',
+                    '${opponentRematchNames.join(", ")} ${S.of(context).wantsRematch}',
                     style: TextStyle(
                         color: Colors.amber[300],
                         fontSize: 13,
@@ -1780,12 +1781,12 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                         size: 18),
                     label: Text(
                       _waitingForRematch
-                          ? 'Creando revancha...'
+                          ? S.of(context).creatingRematch
                           : iRequested
-                              ? 'Esperando a los demás...'
+                              ? S.of(context).waitingOthers
                               : opponentWantsRematch
-                                  ? 'Aceptar revancha'
-                                  : 'Revancha',
+                                  ? S.of(context).acceptRematch
+                                  : S.of(context).rematch,
                       style: const TextStyle(fontSize: 15),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -1804,11 +1805,11 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             ],
 
             if (rematchFailed)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Revancha cancelada: un jugador no tiene saldo suficiente',
-                  style: TextStyle(color: Colors.orange, fontSize: 12),
+                  S.of(context).rematchCancelled,
+                  style: const TextStyle(color: Colors.orange, fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -1818,7 +1819,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Saldo insuficiente para revancha (necesitas $required diamantes)',
+                  S.of(context).insufficientDiamondsForRematch(required),
                   style:
                       const TextStyle(color: Colors.orange, fontSize: 12),
                   textAlign: TextAlign.center,
@@ -1842,7 +1843,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text('Salir', style: TextStyle(fontSize: 15)),
+                child: Text(S.of(context).exit, style: const TextStyle(fontSize: 15)),
               ),
             ),
           ],

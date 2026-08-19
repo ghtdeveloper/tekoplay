@@ -16,6 +16,7 @@ import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../generated/l10n.dart';
 
 enum _DominoOnlineState { playerCountSelection, matchmaking, waitingRoom, gameActive }
 
@@ -746,7 +747,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             Future.delayed(const Duration(milliseconds: 800), () {
               _autoPassPending = false;
               if (mounted && !_gameEnded) {
-                _showSnack('Sin opciones, pasas automáticamente');
+                _showSnack(S.of(context).passAutomatic);
                 _passTurn();
               }
             });
@@ -790,7 +791,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           Future.delayed(const Duration(milliseconds: 800), () {
             _autoPassPending = false;
             if (mounted && !_gameEnded) {
-              _showSnack('Sin opciones, pasas automáticamente');
+              _showSnack(S.of(context).passAutomatic);
               _passTurn();
             }
           });
@@ -1166,7 +1167,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     }
 
     if (!state.canPlay(tileId)) {
-      _showSnack('Esta ficha no conecta con los extremos');
+      _showSnack(S.of(context).tileDoesntConnect);
       return;
     }
 
@@ -1222,7 +1223,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
     if (!success && mounted) {
       setState(() => _currentGame = _lastServerGame ?? game);
-      _showSnack('No se pudo colocar la ficha');
+      _showSnack(S.of(context).couldNotPlayTile);
     }
   }
 
@@ -1363,18 +1364,19 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   Future<void> _abandonGame() async {
     if (_gameEnded) { Navigator.of(context).pop(); return; }
     final isBet = widget.matchType == 'Apuesta';
+    final s = S.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('¿Abandonar partida?'),
-        content: Text(isBet ? 'Perderás la apuesta si abandonas.' : 'Se cerrará la partida en curso.'),
+        title: Text(s.abandonGame),
+        content: Text(isBet ? s.abandonWarningBet : s.abandonWarningFun),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Abandonar', style: TextStyle(color: Colors.white)),
+            child: Text(s.abandonGame, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1470,7 +1472,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         appBar: AppBar(
           backgroundColor: _accentOrange,
           elevation: 2,
-          title: const Text('Dominó Online', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(S.of(context).domino, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actionsPadding: EdgeInsets.zero,
           actions: [
@@ -1507,7 +1509,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             if (inGame)
               TextButton(
                 onPressed: _abandonGame,
-                child: Text('Salir', style: TextStyle(color: Colors.red[300])),
+                child: Text(S.of(context).exit, style: TextStyle(color: Colors.red[300])),
               ),
           ],
         ),
@@ -1602,9 +1604,9 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Dominó Online', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(S.of(context).domino, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Text(isBet ? 'Modo Apuesta' : 'Modo Diversión', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      Text(isBet ? S.of(context).betMode : S.of(context).funMode, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -1619,7 +1621,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             ),
           ),
           const SizedBox(height: 24),
-          const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(S.of(context).howManyPlayers, style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           const Text('Elige el número de jugadores para la partida', style: TextStyle(color: Colors.grey, fontSize: 13), textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -1655,7 +1657,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           ),
           const SizedBox(height: 24),
           if (isBet) ...[
-            const Text('Selecciona tu apuesta', style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(S.of(context).selectYourBet, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10,
@@ -1696,7 +1698,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             child: ElevatedButton.icon(
               onPressed: (isBet && _selectedBetAmount == null) ? null : _startMatchmaking,
               icon: const Icon(Icons.search),
-              label: const Text('Buscar partida', style: TextStyle(fontSize: 16)),
+              label: Text(S.of(context).searchGame, style: const TextStyle(fontSize: 16)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentOrange,
                 foregroundColor: Colors.white,
@@ -1726,8 +1728,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               child: CircularProgressIndicator(strokeWidth: 6, color: Color(0xFFEC7A34)),
             ),
             const SizedBox(height: 32),
-            const Text('Buscando partida...',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+            Text(S.of(context).searchingRealPlayers,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
             const SizedBox(height: 8),
             Text(
               '$remaining"',
@@ -1753,7 +1755,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             OutlinedButton.icon(
               onPressed: () => _cancelMatchmaking(),
               icon: const Icon(Icons.close),
-              label: const Text('Cancelar búsqueda'),
+              label: Text(S.of(context).cancel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
@@ -1787,8 +1789,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                 children: [
                   const Text('🁣', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 12),
-                  const Text('Sala de espera',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(S.of(context).waitingRoom,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('$joined / $_selectedPlayerCount jugadores',
                       style: const TextStyle(fontSize: 16, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
@@ -1821,8 +1823,8 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                     ),
                   ] else ...[
                     const Icon(Icons.check_circle, color: Colors.green, size: 28),
-                    const Text('¡Todos listos! Iniciando...',
-                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    Text(S.of(context).allReadyStarting,
+                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                   ],
                 ],
               ),
@@ -1838,7 +1840,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                 if (mounted) Navigator.pop(context);
               },
               icon: const Icon(Icons.close),
-              label: const Text('Cancelar'),
+              label: Text(S.of(context).cancel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
@@ -1967,7 +1969,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     final roundWinnerNum = _roundWinnerNum;
     final wasBlocked = _roundWasBlocked;
 
-    final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
+    final String title = iWon ? S.of(context).roundWon : wasBlocked ? S.of(context).roundBlocked : S.of(context).roundLost;
     final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
 
     final opponentTiles = <({String name, List<({int left, int right})> tiles, int pips})>[];
@@ -2078,7 +2080,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 9),
                 ),
-                child: Text('Siguiente ronda ($_roundEndCountdown)', style: const TextStyle(fontSize: 13)),
+                child: Text('${S.of(context).nextRound} ($_roundEndCountdown)', style: const TextStyle(fontSize: 13)),
               ),
             ),
           ],
@@ -2090,7 +2092,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
   Widget _buildGameOverOverlay(DominoGameMatch game) {
     final bool iWon = game.winnerId == _currentUser!.uid;
     final Color titleColor = iWon ? _accentOrange : Colors.red[400]!;
-    final String title = iWon ? '🏆 ¡Ganaste!' : '😞 Perdiste';
+    final String title = iWon ? '🏆 ${S.of(context).youWon}' : '😞 ${S.of(context).youLost}';
     final scores = game.getPlayerScores();
     final scoreLines = StringBuffer();
     for (int p = 1; p <= game.numberOfPlayers; p++) {
@@ -2149,7 +2151,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text('Salir', style: TextStyle(fontSize: 15)),
+                child: Text(S.of(context).exit, style: const TextStyle(fontSize: 15)),
               ),
             ),
           ],
@@ -2342,7 +2344,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
             const SizedBox(width: 4),
             SizedBox(
               width: 90,
-              child: _onlineActionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passTurn),
+              child: _onlineActionBtn(S.of(context).pass, Icons.skip_next, Colors.orange[700]!, _passTurn),
             ),
           ],
         ],

@@ -1316,7 +1316,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _currentUser?.displayName ?? 'Usuario',
+                  _currentUser?.displayName ?? S.of(context).user,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

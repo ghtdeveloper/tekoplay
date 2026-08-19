@@ -159,7 +159,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         _withdrawableDiamonds! <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No tienes diamantes disponibles para retirar'),
+          content: Text(S.of(context).noWithdrawableDiamonds),
           backgroundColor: Colors.orange,
         ),
       );
@@ -182,7 +182,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Solicitud de retiro procesada: $amount diamantes'),
+          content: Text(S.of(context).withdrawalProcessed(amount)),
           backgroundColor: Colors.green,
         ),
       );
@@ -1230,7 +1230,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               CircularProgressIndicator(color: Colors.white),
               SizedBox(height: 16),
               Text(
-                'Cargando...',
+                S.of(context).loadingDots,
                 style: TextStyle(color: Colors.white, fontSize: 16),
               ),
             ],
@@ -1935,8 +1935,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               validateBetAmount(value);
                             },
                             decoration: InputDecoration(
-                              labelText: 'Monto a apostar (diamantes)',
-                              hintText: 'Ingresa el monto',
+                              labelText: S.of(context).betAmountDiamonds,
+                              hintText: S.of(context).enterAmount,
                               prefixIcon: Icon(
                                 Icons.diamond,
                                 color: Colors.amber,
@@ -1946,7 +1946,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               ),
                               errorText: betAmountError,
                               helperText:
-                                  'Disponible: ${_userDiamonds ?? 0} diamantes',
+                                  S.of(context).availableDiamondsCount(_userDiamonds ?? 0),
                               helperStyle: TextStyle(fontSize: 11),
                             ),
                           ),
@@ -2020,9 +2020,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                           ScaffoldMessenger.of(
                                             context,
                                           ).showSnackBar(
-                                            const SnackBar(
+                                            SnackBar(
                                               content: Text(
-                                                'Monto de apuesta inválido',
+                                                S.of(context).invalidBetAmount,
                                               ),
                                               backgroundColor: Colors.red,
                                             ),
@@ -2039,7 +2039,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                 fromUserId: _currentUser!.uid,
                                                 fromUserName:
                                                     _currentUser!.displayName ??
-                                                    'Usuario',
+                                                    S.of(context).user,
                                                 toUserEmail:
                                                     emailController.text.trim(),
                                                 gameType: gameType,
@@ -2173,7 +2173,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        final isBet = widget.matchType == 'Apuesta';
+        final isBet = widget.matchType == S.of(context).bet;
         // En modo apuesta solo existe dificultad máxima para que la CPU gane
         String selectedDifficulty = isBet ? S.of(context).ultraDifficult : S.of(context).normal;
         int selectedCpuCount = 1;
@@ -2246,9 +2246,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                     children: [
                                       const Icon(Icons.people, color: Color(0xFFEC7A34), size: 18),
                                       const SizedBox(width: 8),
-                                      const Text(
-                                        'Cantidad de oponentes CPU',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                      Text(
+                                        S.of(context).cpuOpponentCount,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
                                       ),
                                     ],
                                   ),
@@ -2289,7 +2289,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                     ),
                                                   ),
                                                   Text(
-                                                    n == 1 ? '(1 vs 1)' : n == 2 ? '(3 jugadores)' : '(4 jugadores)',
+                                                    n == 1 ? '(1 vs 1)' : n == 2 ? S.of(context).players3total : S.of(context).players4total,
                                                     style: TextStyle(
                                                       fontSize: 9,
                                                       color: isSelected ? Colors.white70 : Colors.grey.shade500,
@@ -2325,9 +2325,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                       children: [
                                         const Icon(Icons.speed, color: Color(0xFFEC7A34), size: 18),
                                         const SizedBox(width: 8),
-                                        const Text(
-                                          'Dificultad',
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                        Text(
+                                          S.of(context).difficulty,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
                                         ),
                                       ],
                                     ),
@@ -2369,12 +2369,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Dificultad: Máxima',
-                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red),
+                                          Text(
+                                            S.of(context).difficultyMax,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red),
                                           ),
                                           Text(
-                                            'En modo apuesta la CPU juega al máximo nivel.',
+                                            S.of(context).difficultyMaxNote,
                                             style: TextStyle(fontSize: 11, color: Colors.red.shade700),
                                           ),
                                         ],
@@ -2401,10 +2401,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                   Expanded(
                                     child: Text(
                                       selectedCpuCount == 1
-                                          ? 'Jugarás 1 vs 1 contra la CPU en posiciones opuestas'
+                                          ? S.of(context).cpuVs1Description
                                           : selectedCpuCount == 2
-                                              ? 'Jugarás contra 2 CPUs (3 jugadores en total)'
-                                              : 'Jugarás contra 3 CPUs (4 jugadores en total)',
+                                              ? S.of(context).cpuVs2Description
+                                              : S.of(context).cpuVs3Description,
                                       style: TextStyle(fontSize: 12, color: Colors.green.shade800),
                                     ),
                                   ),
@@ -2582,7 +2582,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        final isBet = widget.matchType == 'Apuesta';
+        final isBet = widget.matchType == S.of(context).bet;
         String selectedDifficulty = isBet ? S.of(context).ultraDifficult : S.of(context).normal;
 
         return StatefulBuilder(

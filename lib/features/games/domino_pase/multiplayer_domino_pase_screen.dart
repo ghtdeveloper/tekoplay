@@ -18,6 +18,7 @@ import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import 'domino_pase_tutorial_screen.dart';
+import '../../../generated/l10n.dart';
 
 enum _FriendPaseState { setup, waitingRoom, gameActive }
 
@@ -303,9 +304,7 @@ class _MultiplayerDominoPaseScreenState
             Future.delayed(const Duration(milliseconds: 800), () {
               _autoPassPending = false;
               if (mounted && !_gameEnded) {
-                final pValue = game.gameSettings?['passValue'] ?? 1;
-                _showSnack(
-                    'Sin opciones. Pase (+$pValue diamantes de cada oponente)');
+                _showSnack(S.of(context).passAutomatic);
                 _passTurn();
               }
             });
@@ -457,7 +456,7 @@ class _MultiplayerDominoPaseScreenState
     }
 
     if (!state.canPlay(tileId)) {
-      _showSnack('Esta ficha no conecta con los extremos');
+      _showSnack(S.of(context).tileDoesntConnect);
       return;
     }
 
@@ -520,7 +519,7 @@ class _MultiplayerDominoPaseScreenState
 
     if (!success && mounted) {
       setState(() => _currentGame = _lastServerGame ?? game);
-      _showSnack('No se pudo colocar la ficha');
+      _showSnack(S.of(context).couldNotPlayTile);
     }
   }
 
@@ -638,22 +637,22 @@ class _MultiplayerDominoPaseScreenState
       Navigator.of(context).pop();
       return;
     }
+    final s = S.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('¿Abandonar partida?'),
-        content: const Text(
-            'Perderás tu apuesta y respaldo si abandonas. Los demás jugadores recuperarán sus diamantes.'),
+        title: Text(s.abandonGame),
+        content: Text(s.abandonWarningPase),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar')),
+              child: Text(s.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Abandonar',
-                style: TextStyle(color: Colors.white)),
+            child: Text(s.abandonGame,
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -724,7 +723,7 @@ class _MultiplayerDominoPaseScreenState
             .update({'gameSettings.rematchGameId': newGameId});
         _startGame(newGameId, _myPlayerNumber);
       } else if (mounted) {
-        _showSnack('No se pudo crear la revancha');
+        _showSnack(S.of(context).cannotCreateRematch);
         setState(() => _waitingForRematch = false);
       }
     }
@@ -787,7 +786,7 @@ class _MultiplayerDominoPaseScreenState
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        spotsNeeded > 1 ? 'Invitar amigos' : 'Invitar amigo',
+                        spotsNeeded > 1 ? S.of(ctx).inviteFriends : S.of(ctx).inviteFriend,
                         style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold),
                       ),
@@ -801,8 +800,8 @@ class _MultiplayerDominoPaseScreenState
                   const SizedBox(height: 4),
                   Text(
                     spotsNeeded > 1
-                        ? 'Ingresa el correo de cada invitado'
-                        : 'Ingresa el correo de tu amigo',
+                        ? S.of(ctx).enterGuestEmails
+                        : S.of(ctx).enterFriendEmail,
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                   const SizedBox(height: 16),
@@ -818,8 +817,8 @@ class _MultiplayerDominoPaseScreenState
                               onChanged: (_) => setDlg(() {}),
                               decoration: InputDecoration(
                                 labelText: spotsNeeded > 1
-                                    ? 'Correo del invitado ${i + 1}'
-                                    : 'Correo del amigo',
+                                    ? '${S.of(ctx).guestEmailLabel} ${i + 1}'
+                                    : S.of(ctx).friendEmailLabel,
                                 hintText: 'ejemplo@email.com',
                                 prefixIcon: const Icon(Icons.email_outlined),
                                 border: OutlineInputBorder(
@@ -853,10 +852,10 @@ class _MultiplayerDominoPaseScreenState
                           : const Icon(Icons.send),
                       label: Text(
                         isLoading
-                            ? 'Enviando...'
+                            ? S.of(ctx).sending
                             : emails.length > 1
-                                ? 'Enviar ${emails.length} invitaciones'
-                                : 'Enviar invitación',
+                                ? S.of(ctx).sendInvitations
+                                : S.of(ctx).sendInvitation,
                         style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
@@ -889,8 +888,7 @@ class _MultiplayerDominoPaseScreenState
     final balance = _userDiamonds ?? 0;
 
     if (effectiveBet != null && balance < required) {
-      _showSnack(
-          'Necesitas al menos $required diamantes (apuesta + respaldo)');
+      _showSnack(S.of(context).insufficientDiamondsForRematch(required));
       return;
     }
 
@@ -911,8 +909,8 @@ class _MultiplayerDominoPaseScreenState
 
     if (gameId == null || !mounted) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Error al crear la sala. Intenta de nuevo.'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(S.of(context).errorCreatingRoom),
             backgroundColor: Colors.red));
       }
       return;
@@ -953,7 +951,7 @@ class _MultiplayerDominoPaseScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Algunos correos no se pudieron enviar:\n${errors.join('\n')}'),
+              '${S.of(context).someEmailsFailed}\n${errors.join('\n')}'),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 4),
         ),
@@ -965,9 +963,7 @@ class _MultiplayerDominoPaseScreenState
     final sent = emails.length - errors.length;
     if (mounted && sent > 0) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(sent == 1
-              ? '¡Invitación enviada! Esperando que tu amigo acepte...'
-              : '¡$sent invitaciones enviadas! Esperando que tus amigos acepten...'),
+          content: Text(S.of(context).invitationSentWaiting),
           backgroundColor: Colors.green));
     }
   }
@@ -991,7 +987,7 @@ class _MultiplayerDominoPaseScreenState
       setState(() => _waitingSeconds++);
       if (_waitingSeconds >= 300) {
         t.cancel();
-        _showSnack('Tiempo de espera agotado.');
+        _showSnack(S.of(context).timeExpiredWaiting);
         _firestore.collection('domino_pase_games').doc(gameId).update({
           'status': 'cancelled',
           'finishedAt': FieldValue.serverTimestamp(),
@@ -1027,15 +1023,15 @@ class _MultiplayerDominoPaseScreenState
         appBar: AppBar(
           backgroundColor: _accentColor,
           elevation: 2,
-          title: const Text('El Pase - Amigos',
-              style: TextStyle(
+          title: Text(S.of(context).dominoPaseFriends,
+              style: const TextStyle(
                   color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
             if (!inGame)
               IconButton(
                 icon: const Icon(Icons.help_outline, color: Colors.white),
-                tooltip: 'Cómo jugar',
+                tooltip: S.of(context).tutorial,
                 onPressed: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const DominoPaseTutorialScreen())),
               ),
@@ -1078,8 +1074,7 @@ class _MultiplayerDominoPaseScreenState
             if (inGame && !_gameEnded)
               TextButton(
                 onPressed: _abandonGame,
-                child:
-                    Text('Salir', style: TextStyle(color: Colors.red[300])),
+                child: Text(S.of(context).exit, style: TextStyle(color: Colors.red[300])),
               ),
           ],
         ),
@@ -1158,15 +1153,15 @@ class _MultiplayerDominoPaseScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('El Pase - Amigos',
-                          style: TextStyle(
+                      Text(S.of(context).dominoPaseFriends,
+                          style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
                               fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      const Text(
-                          'Solo diamantes - Listo para el reto?',
-                          style: TextStyle(
+                      Text(
+                          S.of(context).diamondsOnlyChallenge,
+                          style: const TextStyle(
                               color: Colors.white70, fontSize: 11)),
                     ],
                   ),
@@ -1189,8 +1184,8 @@ class _MultiplayerDominoPaseScreenState
 
           const SizedBox(height: 24),
 
-          const Text('¿Cuántos jugadores?',
-              style: TextStyle(
+          Text(S.of(context).howManyPlayers,
+              style: const TextStyle(
                   color: Colors.black87,
                   fontSize: 18,
                   fontWeight: FontWeight.bold)),
@@ -1253,15 +1248,15 @@ class _MultiplayerDominoPaseScreenState
 
           const SizedBox(height: 24),
 
-          const Text('Selecciona tu apuesta',
-              style: TextStyle(
+          Text(S.of(context).selectYourBet,
+              style: const TextStyle(
                   color: Colors.black87,
                   fontSize: 16,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text(
-              'Necesitas el doble de la apuesta (apuesta + respaldo)',
-              style: TextStyle(color: Colors.grey, fontSize: 11)),
+          Text(
+              S.of(context).needDoubleForBet,
+              style: const TextStyle(color: Colors.grey, fontSize: 11)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -1342,16 +1337,16 @@ class _MultiplayerDominoPaseScreenState
               ),
               child: Column(
                 children: [
-                  _infoRow('Apuesta nominal',
-                      '$_selectedBetAmount diamantes'),
-                  _infoRow('Respaldo',
-                      '$_selectedBetAmount diamantes'),
-                  _infoRow('Total requerido',
-                      '$requiredBal diamantes'),
-                  _infoRow('Comision TekoPlay',
-                      '${DominoPaseGameService.commission(_selectedBetAmount!, _selectedPlayerCount)} diamantes'),
-                  _infoRow('Valor del pase',
-                      '${DominoPaseGameService.passValue(_selectedBetAmount!)} diamantes'),
+                  _infoRow(S.of(context).nominalBet,
+                      '$_selectedBetAmount ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).backupAmount,
+                      '$_selectedBetAmount ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).totalRequired,
+                      '$requiredBal ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).tekoplayCommission,
+                      '${DominoPaseGameService.commission(_selectedBetAmount!, _selectedPlayerCount)} ${S.of(context).diamonds}'),
+                  _infoRow(S.of(context).passValueLabel,
+                      '${DominoPaseGameService.passValue(_selectedBetAmount!)} ${S.of(context).diamonds}'),
                 ],
               ),
             ),
@@ -1366,8 +1361,8 @@ class _MultiplayerDominoPaseScreenState
             icon: const Icon(Icons.person_add, size: 22),
             label: Text(
               _selectedPlayerCount > 2
-                  ? 'Invitar amigos'
-                  : 'Invitar amigo',
+                  ? S.of(context).inviteFriends
+                  : S.of(context).inviteFriend,
               style: const TextStyle(
                   fontSize: 16, fontWeight: FontWeight.bold),
             ),
@@ -1434,8 +1429,8 @@ class _MultiplayerDominoPaseScreenState
                 children: [
                   const Text('🁣', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 12),
-                  const Text('Sala El Pase - Amigos',
-                      style: TextStyle(
+                  Text(S.of(context).dominoPaseWaitingRoomFriends,
+                      style: const TextStyle(
                           fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('$joined / $_selectedPlayerCount jugadores',
@@ -1458,7 +1453,7 @@ class _MultiplayerDominoPaseScreenState
                     ElevatedButton.icon(
                       onPressed: _showFriendInviteDialog,
                       icon: const Icon(Icons.person_add, size: 18),
-                      label: const Text('Invitar otro amigo'),
+                      label: Text(S.of(context).inviteAnotherFriend),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _accentColor,
                         foregroundColor: Colors.white,
@@ -1494,14 +1489,14 @@ class _MultiplayerDominoPaseScreenState
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text('Solo jugadores reales',
-                        style: TextStyle(
+                    Text(S.of(context).realPlayersOnly,
+                        style: const TextStyle(
                             fontSize: 11, color: Colors.purple)),
                   ] else ...[
                     const Icon(Icons.check_circle,
                         color: Colors.green, size: 28),
-                    const Text('¡Todos listos! Iniciando...',
-                        style: TextStyle(
+                    Text(S.of(context).allReadyStarting,
+                        style: const TextStyle(
                             color: Colors.green,
                             fontWeight: FontWeight.bold)),
                   ],
@@ -1521,7 +1516,7 @@ class _MultiplayerDominoPaseScreenState
                 if (mounted) Navigator.pop(context);
               },
               icon: const Icon(Icons.close),
-              label: const Text('Cancelar'),
+              label: Text(S.of(context).cancel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
@@ -1896,7 +1891,7 @@ class _MultiplayerDominoPaseScreenState
               child: ElevatedButton.icon(
                 onPressed: _passTurn,
                 icon: const Icon(Icons.skip_next, size: 13),
-                label: const Text('Pasar',
+                label: Text(S.of(context).pass,
                     style: TextStyle(fontSize: 11)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange[700],
@@ -1990,7 +1985,7 @@ class _MultiplayerDominoPaseScreenState
   Widget _buildGameOverOverlay(DominoGameMatch game) {
     final bool iWon = game.winnerId == _currentUser!.uid;
     final String title =
-        iWon ? '¡Ganaste la mano!' : 'Perdiste la mano';
+        iWon ? S.of(context).youWonHand : S.of(context).youLostHand;
     final Color titleColor =
         iWon ? Colors.green : Colors.red[400]!;
     final betAmount = game.betAmount ?? 0;
@@ -2082,8 +2077,8 @@ class _MultiplayerDominoPaseScreenState
 
             if (game.isAbandoned) ...[
               const SizedBox(height: 4),
-              const Text('Un jugador abandono la partida',
-                  style: TextStyle(
+              Text(S.of(context).playerAbandonedGame,
+                  style: const TextStyle(
                       color: Colors.white54, fontSize: 12)),
             ],
 
@@ -2128,7 +2123,7 @@ class _MultiplayerDominoPaseScreenState
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    '${opponentRematchNames.join(", ")} quiere revancha!',
+                    '${opponentRematchNames.join(", ")} ${S.of(context).wantsRematch}',
                     style: TextStyle(
                         color: Colors.amber[300],
                         fontSize: 13,
@@ -2151,12 +2146,12 @@ class _MultiplayerDominoPaseScreenState
                         size: 18),
                     label: Text(
                       _waitingForRematch
-                          ? 'Creando revancha...'
+                          ? S.of(context).creatingRematch
                           : iRequested
-                              ? 'Esperando a los demás...'
+                              ? S.of(context).waitingOthers
                               : opponentWantsRematch
-                                  ? 'Aceptar revancha'
-                                  : 'Revancha',
+                                  ? S.of(context).acceptRematch
+                                  : S.of(context).rematch,
                       style: const TextStyle(fontSize: 15),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -2177,10 +2172,10 @@ class _MultiplayerDominoPaseScreenState
             ],
 
             if (rematchFailed)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Revancha cancelada: un jugador no tiene saldo suficiente',
+                  S.of(context).rematchCancelled,
                   style:
                       TextStyle(color: Colors.orange, fontSize: 12),
                   textAlign: TextAlign.center,
@@ -2192,7 +2187,7 @@ class _MultiplayerDominoPaseScreenState
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Saldo insuficiente para revancha (necesitas $required diamantes)',
+                  S.of(context).insufficientDiamondsForRematch(required),
                   style:
                       const TextStyle(color: Colors.orange, fontSize: 12),
                   textAlign: TextAlign.center,
@@ -2218,8 +2213,8 @@ class _MultiplayerDominoPaseScreenState
                   padding:
                       const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text('Salir',
-                    style: TextStyle(fontSize: 15)),
+                child: Text(S.of(context).exit,
+                    style: const TextStyle(fontSize: 15)),
               ),
             ),
           ],

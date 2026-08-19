@@ -13,6 +13,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/interstitial_ad_helper.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../../../generated/l10n.dart';
 
 enum _GamePhase { playerTurn, cpuTurn }
 enum _RoundResult { playerWon, cpuWon, blocked }
@@ -483,7 +484,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Dominó vs CPU',
+                  S.of(ctx).dominoVsCpu,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -525,7 +526,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                   ),
-                  child: const Text('¡Jugar!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: Text(S.of(ctx).play, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -578,7 +579,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       if (_ctrl.chain.isEmpty && _ctrl.openingDoubleValue != -1) {
         _showSnack('Debes abrir con el doble ${_ctrl.openingDoubleValue}-${_ctrl.openingDoubleValue}', success: false);
       } else {
-        _showSnack('Esta ficha no conecta con los extremos disponibles', success: false);
+        _showSnack(S.of(context).tileDoesntConnect, success: false);
       }
       return;
     }
@@ -709,7 +710,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         return;
       }
       if (_ctrl.boneyard.isEmpty) {
-        _showSnack('Sin opciones disponibles, pasas tu turno');
+        _showSnack(S.of(context).passAutomatic);
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) _passPlayerTurn();
         });
@@ -724,7 +725,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     if (!_ctrl.canPlayerPlayAny() && _ctrl.boneyard.isEmpty) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && !_gamePaused) {
-          _showSnack('Sin opciones, pasas automáticamente');
+          _showSnack(S.of(context).passAutomatic);
           _passPlayerTurn();
         }
       });
@@ -943,9 +944,9 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text(
-          '¿Abandonar partida?',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        title: Text(
+          S.of(ctx).abandonGame,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -968,7 +969,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Continuar'),
+            child: Text(S.of(ctx).cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -977,9 +978,9 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text('Abandonar'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(S.of(ctx).abandonGame),
             ),
           ),
         ],
@@ -1028,7 +1029,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
             children: [
               const Icon(Icons.sports_esports, color: Colors.white70, size: 20),
               const SizedBox(width: 8),
-              const Text('Dominó', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              Text(S.of(context).domino, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1048,7 +1049,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
             if (_gameStarted && !isBetMode)
               TextButton(
                 onPressed: _showStartDialog,
-                child: const Text('Nueva', style: TextStyle(color: Colors.white70)),
+                child: Text(S.of(context).newGame, style: const TextStyle(color: Colors.white70)),
               ),
           ],
         ),
@@ -1126,7 +1127,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
     final bool playerWon = result == _RoundResult.playerWon;
     final bool blocked = result == _RoundResult.blocked;
     final Color titleColor = playerWon ? _accentOrange : blocked ? Colors.amber[600]! : Colors.red[400]!;
-    final String title = playerWon ? 'Ronda ganada' : blocked ? 'Bloqueado' : 'Ronda perdida';
+    final String title = playerWon ? S.of(context).roundWon : blocked ? S.of(context).roundBlocked : S.of(context).roundLost;
 
     return Positioned(
       left: 0,
@@ -1200,7 +1201,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 9),
                 ),
-                child: const Text('Siguiente ronda', style: TextStyle(fontSize: 13)),
+                child: Text(S.of(context).nextRound, style: const TextStyle(fontSize: 13)),
               ),
             ),
           ],
@@ -1212,7 +1213,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
   Widget _buildGameOverOverlay() {
     final bool playerWon = _ctrl.playerScore > _ctrl.cpuScore;
     final Color titleColor = playerWon ? _accentOrange : Colors.red[400]!;
-    final String title = playerWon ? '🏆 ¡Ganaste!' : '😞 Juego terminado';
+    final String title = playerWon ? '🏆 ${S.of(context).youWon}' : '😞 ${S.of(context).endOfGame}';
 
     return Positioned(
       left: 0,
@@ -1260,7 +1261,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                       Navigator.pop(context);
                     },
                     style: TextButton.styleFrom(foregroundColor: Colors.white54),
-                    child: const Text('Salir'),
+                    child: Text(S.of(context).exit),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1284,7 +1285,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: const Text('Nueva partida', style: TextStyle(fontSize: 15)),
+                    child: Text(S.of(context).newGame, style: const TextStyle(fontSize: 15)),
                   ),
                 ),
               ],
@@ -1373,7 +1374,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
             const SizedBox(width: 4),
             SizedBox(
               width: 80,
-              child: _actionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
+              child: _actionBtn(S.of(context).pass, Icons.skip_next, Colors.orange[700]!, _passPlayerTurn),
             ),
           ],
         ],

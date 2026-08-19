@@ -599,7 +599,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     _enableWakeLock();
     _showRivalFoundBanner();
-    _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
+    _showTurnBannerAnim(S.of(context).yourTurn, _getPlayerColor(_myColor));
     _startTurnTimer();
   }
 
@@ -699,13 +699,13 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         if (_humanHomeDoubles >= 3) {
           _humanHomeDoubles = 0;
           _consecutiveDoubles = 0;
-          _showEventToast('¡Tres dobles en casa! Turno perdido.');
+          _showEventToast(S.of(context).threeDoublesHome);
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; });
           _nextTurn();
           return;
         }
-        _showEventToast('¡Doble en casa! Vuelves a tirar.');
+        _showEventToast(S.of(context).doubleHome);
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() { _dice1Value = 0; _dice2Value = 0; });
         continue;
@@ -722,7 +722,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     if (_consecutiveDoubles >= 3) {
       setState(() { _isRollingDice = false; _consecutiveDoubles = 0; });
-      _showEventToast('¡Tres dobles! Turno perdido.');
+      _showEventToast(S.of(context).tripleDouble);
       _applyTripleDoublesPenalty(_myColor);
       await Future.delayed(const Duration(milliseconds: 1500));
       _nextTurn();
@@ -739,7 +739,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     _calculateMovablePieces();
     if (_movablePieces.isEmpty) {
-      _showEventToast('Sin movimientos válidos. Turno perdido.');
+      _showEventToast(S.of(context).noValidMoves);
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) _nextTurn();
     } else {
@@ -809,8 +809,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('¿Qué dado usar?',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(S.of(ctx).whichDiceToUse,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               ...opts.map((opt) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -1024,7 +1024,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     setState(() => _currentPlayer = next);
 
     if (next == _myColor) {
-      _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
+      _showTurnBannerAnim(S.of(context).yourTurn, _getPlayerColor(_myColor));
       _startTurnTimer();
     } else {
       _showTurnBannerAnim(
@@ -1061,7 +1061,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     if (target != null) {
       target.position = -1;
-      _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
+      _showEventToast(S.of(context).tripleDouble, color: Colors.red.shade700);
     }
     setState(() {});
   }
@@ -1630,7 +1630,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
     final winnerEmoji = _botEmojis[winnerColor] ?? _opponentEmoji;
     final winnerName  = _botNames[winnerColor]  ?? _opponentName;
-    _showGameEndDialog(isWin ? '¡GANASTE! 🏆' : '$winnerEmoji $winnerName ganó');
+    _showGameEndDialog(isWin, '$winnerEmoji $winnerName');
   }
 
   Future<void> _recordResult(GameResultModel result) async {
@@ -1649,9 +1649,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     } catch (_) {}
   }
 
-  void _showGameEndDialog(String message) {
+  void _showGameEndDialog(bool isWin, String opponentLabel) {
     if (!mounted) return;
-    final isWin = message.contains('GANASTE');
     final isBet = _isBetMode;
     final betAmt = isBet ? (_selectedBetAmount ?? 25) : 100;
     final hasBots = _botColors.isNotEmpty;
@@ -1683,14 +1682,14 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               Text(isWin ? '🏆' : '😔', style: const TextStyle(fontSize: 64)),
               const SizedBox(height: 12),
               Text(
-                isWin ? '¡VICTORIA!' : 'FIN DEL JUEGO',
+                isWin ? S.of(ctx).victory : S.of(ctx).endOfGame,
                 style: TextStyle(
                   color: isWin ? Colors.amber.shade700 : const Color(0xFFEC7A34),
                   fontWeight: FontWeight.w900, fontSize: 26, letterSpacing: 3,
                 ),
               ),
               const SizedBox(height: 8),
-              Text(message,
+              Text(opponentLabel,
                   style: const TextStyle(color: Colors.black87, fontSize: 16),
                   textAlign: TextAlign.center),
               if (isWin && isBet) ...[
@@ -1731,7 +1730,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Salir'),
+                      child: Text(S.of(ctx).exit),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1746,7 +1745,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Jugar de nuevo', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(S.of(ctx).playAgain, style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -1791,7 +1790,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _humanHomeDoubles = 0;
       _botHomeDoubles.clear();
     });
-    _showTurnBannerAnim('¡TU TURNO!', _getPlayerColor(_myColor));
+    _showTurnBannerAnim(S.of(context).yourTurn, _getPlayerColor(_myColor));
     _startTurnTimer();
   }
 
@@ -1841,7 +1840,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       appBar: AppBar(
         backgroundColor: const Color(0xFFEC7A34),
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Parchís Online', style: TextStyle(color: Colors.white)),
+        title: Text(S.of(context).parchisOnline, style: const TextStyle(color: Colors.white)),
         elevation: 2,
         actions: [
           if (_screenState == _LudoOnlineState.gameActive && !_gameEnded && _activeGameId != null)
@@ -1857,28 +1856,28 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: const Text('¿Abandonar?'),
-                    content: const Column(
+                    title: Text(S.of(ctx).abandonGame),
+                    content: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.warning, color: Colors.orange, size: 48),
-                        SizedBox(height: 16),
+                        const Icon(Icons.warning, color: Colors.orange, size: 48),
+                        const SizedBox(height: 16),
                         Text(
-                          '¿Seguro que quieres abandonar la partida?\n\nSi abandonas, se contará como una derrota y perderás lo apostado.',
+                          S.of(ctx).abandonWarningBet,
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16),
+                          style: const TextStyle(fontSize: 16),
                         ),
                       ],
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Continuar jugando', style: TextStyle(color: Colors.green)),
+                        child: Text(S.of(ctx).cancel, style: const TextStyle(color: Colors.green)),
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
                         style: TextButton.styleFrom(foregroundColor: Colors.red),
-                        child: const Text('Abandonar'),
+                        child: Text(S.of(ctx).abandonGame),
                       ),
                     ],
                   ),
@@ -2260,8 +2259,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
-        const Text('¿Cuánto quieres apostar?',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Text(S.of(context).howMuchBet,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         const Text('Elige el monto de diamantes para esta partida',
             style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
@@ -2355,15 +2354,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                   child: const Center(child: Text('🎲', style: TextStyle(fontSize: 32))),
                 ),
                 const SizedBox(width: 16),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Parchís Online',
-                          style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 4),
-                      Text('Busca oponentes en línea',
-                          style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      Text(S.of(context).parchisOnline,
+                          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(S.of(context).searchingRealPlayers,
+                          style: const TextStyle(color: Colors.white70, fontSize: 14)),
                     ],
                   ),
                 ),
@@ -2372,8 +2371,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           ),
 
           const SizedBox(height: 28),
-          const Text('¿Cuántos jugadores?',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(S.of(context).howManyPlayers,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           const Text('Elige el número de jugadores para la partida',
               style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
@@ -2454,8 +2453,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                   ? null
                   : _startMatchmaking,
               icon: const Icon(Icons.search, size: 22),
-              label: const Text('Buscar partida',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              label: Text(S.of(context).searchGame,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEC7A34), foregroundColor: Colors.white,
                 disabledBackgroundColor: Colors.grey.shade300,
@@ -2473,8 +2472,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             child: OutlinedButton.icon(
               onPressed: () => _showInviteFriendDialog(context),
               icon: const Icon(Icons.person_add, size: 20),
-              label: const Text('Invitar amigo',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              label: Text(S.of(context).inviteFriend,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFFEC7A34),
                 side: const BorderSide(color: Color(0xFFEC7A34), width: 2),
@@ -2532,8 +2531,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             const SizedBox(width: 80, height: 80,
               child: CircularProgressIndicator(strokeWidth: 6, color: Color(0xFFEC7A34))),
             const SizedBox(height: 32),
-            const Text('Buscando partida...',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(S.of(context).searchingRealPlayers,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Text(
               '${(60 - _matchmakingSeconds).clamp(0, 60)}"',
@@ -2559,7 +2558,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             OutlinedButton.icon(
               onPressed: _cancelMatchmaking,
               icon: const Icon(Icons.close),
-              label: const Text('Cancelar búsqueda'),
+              label: Text(S.of(context).cancelSearch),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red, side: const BorderSide(color: Colors.red),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -2593,8 +2592,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                 children: [
                   const Text('🎲', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 12),
-                  const Text('Sala de espera',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(S.of(context).waitingRoom,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('$joined / $_selectedPlayerCount jugadores',
                       style: const TextStyle(fontSize: 16, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
@@ -2627,8 +2626,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                     ),
                   ] else ...[
                     const Icon(Icons.check_circle, color: Colors.green, size: 28),
-                    const Text('¡Todos listos! Iniciando...',
-                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    Text(S.of(context).allReadyStarting,
+                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                   ],
                 ],
               ),
@@ -2646,7 +2645,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               ElevatedButton.icon(
                 onPressed: () => _showInviteFriendDialog(context),
                 icon: const Icon(Icons.person_add, size: 18),
-                label: const Text('Invitar amigo'),
+                label: Text(S.of(context).inviteFriend),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEC7A34),
                   foregroundColor: Colors.white,
@@ -2659,7 +2658,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             OutlinedButton.icon(
               onPressed: _cancelMatchmaking,
               icon: const Icon(Icons.close),
-              label: const Text('Abandonar sala'),
+              label: Text(S.of(context).cancel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red, side: const BorderSide(color: Colors.red),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -2782,8 +2781,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Invitar amigo',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(S.of(ctx).inviteFriend,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed: isLoading ? null : () => Navigator.of(ctx).pop(),
@@ -2842,7 +2841,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                       keyboardType: TextInputType.emailAddress,
                       onChanged: (_) => setDlg(() {}),
                       decoration: InputDecoration(
-                        labelText: 'Email del amigo',
+                        labelText: S.of(ctx).friendEmailLabel,
                         hintText: 'ejemplo@email.com',
                         prefixIcon: const Icon(Icons.email),
                         border: OutlineInputBorder(
@@ -2912,7 +2911,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white))
                             : const Icon(Icons.send),
-                        label: Text(isLoading ? 'Enviando...' : 'Enviar invitación',
+                        label: Text(isLoading ? S.of(ctx).sending : S.of(ctx).sendInvitation,
                             style: const TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
@@ -3007,8 +3006,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('¡Invitación enviada! Esperando que tu amigo acepte...'),
+      SnackBar(
+          content: Text(S.of(context).invitationSentWaiting),
           backgroundColor: Colors.green),
     );
   }

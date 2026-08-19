@@ -127,7 +127,6 @@ class GameChatWidgetState extends State<GameChatWidget>
     });
   }
 
-  // ---- Chat panel ----
 
   void toggleChat() {
     setState(() {

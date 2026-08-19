@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tekoplay/core/service/firestore_service.dart';
 import '../../../core/service/profile_image_service.dart';
+import '../../../generated/l10n.dart';
 
 
 class ProfileImageEditor extends StatefulWidget {
@@ -30,7 +31,7 @@ class _ProfileImageEditorState extends State<ProfileImageEditor> {
     if (!widget.isEmailLogin) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Solo disponible para cuentas con email'),
+          content: Text(S.of(context).onlyEmailAccounts),
           backgroundColor: Colors.orange,
         ),
       );
@@ -41,13 +42,13 @@ class _ProfileImageEditorState extends State<ProfileImageEditor> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Seleccionar imagen'),
+          title: Text(S.of(context).selectImage),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
                 leading: Icon(Icons.camera_alt, color: Color(0xFFEC7A34)),
-                title: Text('Cámara'),
+                title: Text(S.of(context).camera),
                 onTap: () {
                   Navigator.of(context).pop();
                   _updateProfileImage(ImageSource.camera);
@@ -55,7 +56,7 @@ class _ProfileImageEditorState extends State<ProfileImageEditor> {
               ),
               ListTile(
                 leading: Icon(Icons.photo_library, color: Color(0xFFEC7A34)),
-                title: Text('Galería'),
+                title: Text(S.of(context).gallery),
                 onTap: () {
                   Navigator.of(context).pop();
                   _updateProfileImage(ImageSource.gallery);
@@ -64,7 +65,7 @@ class _ProfileImageEditorState extends State<ProfileImageEditor> {
               if (widget.currentImageUrl != null && widget.currentImageUrl!.isNotEmpty)
                 ListTile(
                   leading: Icon(Icons.delete, color: Colors.red),
-                  title: Text('Eliminar foto'),
+                  title: Text(S.of(context).deletePhoto),
                   onTap: () {
                     Navigator.of(context).pop();
                     _removeProfileImage();
@@ -95,7 +96,7 @@ class _ProfileImageEditorState extends State<ProfileImageEditor> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Foto de perfil actualizada'),
+                content: Text(S.of(context).profilePhotoUpdated),
                 backgroundColor: Colors.green,
               ),
             );
@@ -138,7 +139,7 @@ class _ProfileImageEditorState extends State<ProfileImageEditor> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Foto de perfil eliminada'),
+              content: Text(S.of(context).profilePhotoDeleted),
               backgroundColor: Colors.green,
             ),
           );

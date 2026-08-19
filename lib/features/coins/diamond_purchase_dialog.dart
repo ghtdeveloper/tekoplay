@@ -19,7 +19,7 @@ class DiamondPurchaseDialog extends StatelessWidget {
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.9, // Aumentado a 90%
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
           maxWidth: MediaQuery.of(context).size.width * 0.95,
         ),
         decoration: BoxDecoration(
@@ -43,10 +43,7 @@ class DiamondPurchaseDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header fijo
             _buildHeader(context),
-
-            // Contenido scrolleable
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -58,7 +55,6 @@ class DiamondPurchaseDialog extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    // Título fijo
                     Padding(
                       padding: EdgeInsets.only(top: 20, left: 20, right: 20),
                       child: Column(
@@ -82,8 +78,6 @@ class DiamondPurchaseDialog extends StatelessWidget {
                         ],
                       ),
                     ),
-
-                    // Lista scrolleable de paquetes
                     Expanded(
                       child: SingleChildScrollView(
                         padding: EdgeInsets.all(20),
@@ -157,8 +151,6 @@ class DiamondPurchaseDialog extends StatelessWidget {
                               isMegaPack: true,
                               megaPackText: S.of(context).megaPack,
                             ),
-
-                            // Padding extra al final para mejor UX
                             SizedBox(height: 20),
                           ],
                         ),
@@ -267,7 +259,6 @@ class DiamondPurchaseDialog extends StatelessWidget {
             padding: EdgeInsets.all(16),
             child: Row(
               children: [
-                // Diamond icon
                 Container(
                   width: isMegaPack ? 45 : 40,
                   height: isMegaPack ? 45 : 40,
@@ -297,13 +288,10 @@ class DiamondPurchaseDialog extends StatelessWidget {
                 ),
 
                 SizedBox(width: 16),
-
-                // Diamond amount and price in vertical layout
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Diamond amount
                       Text(
                         _formatDiamonds(diamonds),
                         style: TextStyle(
@@ -315,7 +303,6 @@ class DiamondPurchaseDialog extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: 2),
-                      // Price in USD
                       Text(
                         '\$${_formatPrice(price)} USD',
                         style: TextStyle(
@@ -327,8 +314,6 @@ class DiamondPurchaseDialog extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // Buy button
                 ElevatedButton(
                   onPressed: () {
                     if (onPurchase != null) {

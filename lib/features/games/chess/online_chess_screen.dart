@@ -758,7 +758,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               final success = await MultiplayerGameService().joinGameOnline(
                 game.id,
                 currentUser!.uid,
-                currentUser!.displayName ?? 'Usuario',
+                currentUser!.displayName ?? S.of(context).user,
                 currentUser!.photoURL,
               );
 
@@ -1124,7 +1124,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         final success = await MultiplayerGameService().joinGame(
           game.id,
           currentUser!.uid,
-          currentUser!.displayName ?? 'Usuario',
+          currentUser!.displayName ?? S.of(context).user,
           currentUser!.photoURL,
         );
 
@@ -1134,7 +1134,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             .createOnlineGame(
               currencyType: _getCurrencyName(),
               hostId: currentUser!.uid,
-              hostName: currentUser!.displayName ?? 'Usuario',
+              hostName: currentUser!.displayName ?? S.of(context).user,
               hostPhotoUrl: currentUser!.photoURL,
               gameType: 'Ajedrez',
               timeMinutes: _selectedTimeMinutes,
@@ -1335,7 +1335,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     final success = await MultiplayerGameService().joinGameOnline(
       game.id,
       currentUser!.uid,
-      currentUser!.displayName ?? 'Usuario',
+      currentUser!.displayName ?? S.of(context).user,
       currentUser!.photoURL,
     );
 
@@ -1364,7 +1364,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             'betNegotiation': {
               'status': 'counter_offer',
               'counterOfferBy': currentUser!.uid,
-              'counterOfferName': currentUser!.displayName ?? 'Usuario',
+              'counterOfferName': currentUser!.displayName ?? S.of(context).user,
               'originalAmount': game.betAmount,
               'counterAmount': newAmount,
               'timestamp': FieldValue.serverTimestamp(),
@@ -1407,13 +1407,12 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       await FirebaseFirestore.instance.collection('notifications').add({
         'userId': hostId,
         'type': 'bet_counter_offer',
-        'title': 'Contraoferta de apuesta',
-        'message':
-            '${currentUser!.displayName ?? 'Un jugador'} ha hecho una contraoferta de $counterAmount diamantes (original: $originalAmount)',
+        'title': S.of(context).counterOfferTitle,
+        'message': S.of(context).counterOfferMsg(currentUser!.displayName ?? S.of(context).user, counterAmount, originalAmount),
         'data': {
           'gameId': _pendingGameId,
           'counterOfferBy': currentUser!.uid,
-          'counterOfferName': currentUser!.displayName ?? 'Usuario',
+          'counterOfferName': currentUser!.displayName ?? S.of(context).user,
           'counterAmount': counterAmount,
           'originalAmount': originalAmount,
         },
@@ -1672,7 +1671,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                   Navigator.of(context).pop();
                   setState(() => _gameState = OnlineGameState.timeSelection);
                 },
-                child: Text('Cancelar'),
+                child: Text(S.of(context).cancel),
               ),
             ],
           ),
@@ -1696,7 +1695,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             'betNegotiation': {
               'status': 'new_counter_offer',
               'counterOfferBy': currentUser!.uid,
-              'counterOfferName': currentUser!.displayName ?? 'Usuario',
+              'counterOfferName': currentUser!.displayName ?? S.of(context).user,
               'counterAmount': newAmount,
               'timestamp': FieldValue.serverTimestamp(),
             },
@@ -3126,9 +3125,9 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                           color: Colors.red[700],
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
-                          '♚ ¡JAQUE!',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        child: Text(
+                          S.of(context).checkOnline,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                       ),
                       const SizedBox(width: 10),

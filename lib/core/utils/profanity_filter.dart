@@ -1,6 +1,5 @@
 class ProfanityFilter {
   static final Set<String> _badWords = {
-    // Spanish profanity
     'puta', 'puto', 'mierda', 'coño', 'verga', 'pendejo', 'pendeja',
     'cabron', 'cabrón', 'cabrones', 'chingar', 'chingada', 'chingado',
     'joder', 'jodido', 'jodida', 'culo', 'culos', 'marica', 'maricon',
@@ -13,7 +12,6 @@ class ProfanityFilter {
     'mamon', 'baboso', 'babosa', 'huevon', 'huevón', 'guevon',
     'güevon', 'boludo', 'boluda', 'pelotudo', 'pelotuda', 'forro',
     'garca', 'trolo', 'trola', 'pajero', 'pajera',
-    // English profanity
     'fuck', 'shit', 'bitch', 'asshole', 'dick', 'cock', 'pussy',
     'bastard', 'damn', 'cunt', 'whore', 'slut', 'nigger', 'faggot',
     'retard', 'motherfucker',

@@ -162,8 +162,8 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _initialMoveTimer?.cancel();
 
     String message = isInitialTimeout
-        ? 'Tiempo agotado: No realizaste tu primer movimiento en 14 segundos'
-        : 'Tiempo agotado: No completaste tu movimiento en 1 minuto';
+        ? S.of(context).timeExpiredFirstMove
+        : S.of(context).timeExpiredMove;
 
     _abandonGameDueToTimeout();
 
@@ -197,7 +197,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
             Icon(Icons.timer_off, color: Colors.red, size: 28),
             SizedBox(width: 12),
             Text(
-              'Tiempo Agotado',
+              S.of(context).timeExpiredTitle,
               style: TextStyle(
                 color: Colors.red,
                 fontWeight: FontWeight.bold,
@@ -229,7 +229,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'Has perdido la partida por tiempo',
+                    S.of(context).timeLostMatch,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
@@ -495,7 +495,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Cuotas cobradas. ¡El juego está listo!',
+                    S.of(context).betCollectedReady,
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1553,7 +1553,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                       Icon(_getCurrencyIcon(), color: Colors.amber, size: 24),
                       SizedBox(width: 8),
                       Text(
-                        'Apuesta: $_selectedBetAmount ${_getCurrencyName()}',
+                        S.of(context).betDisplay(_selectedBetAmount ?? 0, _getCurrencyName()),
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,

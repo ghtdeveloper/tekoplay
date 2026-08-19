@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../generated/l10n.dart';
 
 class DominoPaseTutorialScreen extends StatefulWidget {
   const DominoPaseTutorialScreen({super.key});
@@ -16,49 +17,36 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
   static const Color _purpleDark = Color(0xFF6A0080);
   static const Color _bg = Color(0xFF0D0A1E);
 
-  static const List<_TutorialPage> _pages = [
+  List<_TutorialPage> _buildPages(S s) => [
     _TutorialPage(
       emoji: '🁣',
-      title: '¿Qué es El Pase?',
-      body:
-          'El Pase es una modalidad especial de dominó para 3 o 4 jugadores.\n\n'
-          'Se juega una sola mano por partida, solo con diamantes',
+      title: s.paseWhatIsIt,
+      body: s.paseWhatBody,
       highlight: null,
     ),
     _TutorialPage(
       emoji: '🀱',
-      title: 'Cómo jugar',
-      body:
-          'Al inicio cada jugador recibe 7 fichas. El jugador con el doble más alto comienza.\n\n'
-          'Coloca fichas conectando los números coincidentes en los extremos de la cadena.',
+      title: s.paseHowToPlay,
+      body: s.paseHowToPlayBody,
       highlight: null,
     ),
     _TutorialPage(
       emoji: '💸',
-      title: '¡El Pase!',
-      body:
-          'Si no puedes jugar ninguna ficha, debes pasar turno. '
-          'Cuando pasas, cada uno de tus rivales te paga una cantidad en diamantes.\n\n'
-          'También se puede pasar si hay un bloqueo total (nadie puede jugar).',
-      highlight: '¡Pasar puede ser rentable!',
+      title: s.paseThePase,
+      body: s.paseThePaseBody,
+      highlight: s.paseThePaseHighlight,
     ),
     _TutorialPage(
       emoji: '🏆',
-      title: '¿Cómo se gana?',
-      body:
-          'Gana quien coloque todas sus fichas primero.\n\n'
-          'Si el juego se bloquea (nadie puede jugar), gana el jugador con menos puntos '
-          'acumulados en sus fichas restantes.',
+      title: s.paseHowToWin,
+      body: s.paseHowToWinBody,
       highlight: null,
     ),
     _TutorialPage(
       emoji: '💎',
-      title: 'La Apuesta',
-      body:
-          'Para entrar necesitas el doble de tu apuesta como saldo mínimo.\n\n'
-          'El ganador se lleva el pozo menos una comisión del 10%.\n\n'
-          'Los pagos de "pase" se suman o restan al premio final de cada jugador.',
-      highlight: 'Solo diamantes — sin monedas',
+      title: s.paseBetTitle,
+      body: s.paseBetBody,
+      highlight: s.paseBetHighlight,
     ),
   ];
 
@@ -68,8 +56,10 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
     super.dispose();
   }
 
+  static const int _pageCount = 5;
+
   void _next() {
-    if (_page < _pages.length - 1) {
+    if (_page < _pageCount - 1) {
       _pageCtrl.nextPage(
           duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
     } else {
@@ -79,6 +69,8 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
+    final pages = _buildPages(s);
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -88,9 +80,9 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
           icon: const Icon(Icons.close, color: Colors.white54),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Cómo jugar — El Pase',
-          style: TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w500),
+        title: Text(
+          s.paseTutorialTitle,
+          style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w500),
         ),
         centerTitle: true,
       ),
@@ -101,11 +93,11 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
               child: PageView.builder(
                 controller: _pageCtrl,
                 onPageChanged: (i) => setState(() => _page = i),
-                itemCount: _pages.length,
-                itemBuilder: (_, i) => _buildPage(_pages[i]),
+                itemCount: pages.length,
+                itemBuilder: (_, i) => _buildPage(pages[i]),
               ),
             ),
-            _buildBottomBar(),
+            _buildBottomBar(s, pages.length),
           ],
         ),
       ),
@@ -200,15 +192,15 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
     );
   }
 
-  Widget _buildBottomBar() {
-    final isLast = _page == _pages.length - 1;
+  Widget _buildBottomBar(S s, int pageCount) {
+    final isLast = _page == pageCount - 1;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(_pages.length, (i) {
+            children: List.generate(pageCount, (i) {
               final active = i == _page;
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
@@ -235,7 +227,7 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
                 elevation: 0,
               ),
               child: Text(
-                isLast ? '¡Entendido!' : 'Siguiente',
+                isLast ? s.understood : s.next,
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),

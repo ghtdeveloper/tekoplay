@@ -17,6 +17,7 @@ import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../generated/l10n.dart';
 
 enum _FriendDominoState { setup, waitingRoom, gameActive }
 
@@ -348,7 +349,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
             Future.delayed(const Duration(milliseconds: 800), () {
               _autoPassPending = false;
               if (mounted && !_gameEnded) {
-                _showSnack('Sin opciones, pasas automáticamente');
+                _showSnack(S.of(context).passAutomatic);
                 _passTurn();
               }
             });
@@ -390,7 +391,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
           Future.delayed(const Duration(milliseconds: 800), () {
             _autoPassPending = false;
             if (mounted && !_gameEnded) {
-              _showSnack('Sin opciones, pasas automáticamente');
+              _showSnack(S.of(context).passAutomatic);
               _passTurn();
             }
           });
@@ -738,7 +739,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     }
 
     if (!state.canPlay(tileId)) {
-      _showSnack('Esta ficha no conecta con los extremos');
+      _showSnack(S.of(context).tileDoesntConnect);
       return;
     }
 
@@ -794,7 +795,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
 
     if (!ok && mounted) {
       setState(() => _currentGame = _lastServerGame ?? game);
-      _showSnack('No se pudo jugar la ficha');
+      _showSnack(S.of(context).couldNotPlayTile);
     }
   }
 
@@ -932,18 +933,19 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
   Future<void> _abandonGame() async {
     if (_gameEnded) { Navigator.of(context).pop(); return; }
     final isBet = widget.matchType == 'Apuesta';
+    final s = S.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('¿Abandonar partida?'),
-        content: Text(isBet ? 'Perderás la apuesta si abandonas.' : 'Se cerrará la partida en curso.'),
+        title: Text(s.abandonGame),
+        content: Text(isBet ? s.abandonWarningBet : s.abandonWarningFun),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Abandonar', style: TextStyle(color: Colors.white)),
+            child: Text(s.abandonGame, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1041,7 +1043,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
         appBar: AppBar(
           backgroundColor: _accentOrange,
           elevation: 0,
-          title: const Text('Dominó - Amigos', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(S.of(context).dominoFriends, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
             if (inGame)
@@ -1076,7 +1078,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
             if (inGame)
               TextButton(
                 onPressed: _abandonGame,
-                child: Text('Salir', style: TextStyle(color: Colors.red[300])),
+                child: Text(S.of(context).exit, style: TextStyle(color: Colors.red[300])),
               ),
           ],
         ),
@@ -1166,7 +1168,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                 const Text('Jugar con Amigos', style: TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(
-                  widget.matchType == 'Apuesta' ? 'Modo Apuesta' : 'Modo Diversión',
+                  widget.matchType == 'Apuesta' ? S.of(context).betMode : S.of(context).funMode,
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
@@ -1182,7 +1184,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
             ),
           ),
           const SizedBox(height: 20),
-          const Text('¿Cuántos jugadores?', style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(S.of(context).howManyPlayers, style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1216,7 +1218,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
           ),
           const SizedBox(height: 20),
           if (isBet) ...[
-            const Text('Monto de apuesta', style: TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold)),
+            Text(S.of(context).betAmountLabel, style: const TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -1262,7 +1264,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
             onPressed: (isBet && _selectedBetAmount == null) ? null : _showFriendInviteDialog,
             icon: const Icon(Icons.person_add, size: 22),
             label: Text(
-              _selectedPlayerCount > 2 ? 'Invitar amigos' : 'Invitar amigo',
+              _selectedPlayerCount > 2 ? S.of(context).inviteFriends : S.of(context).inviteFriend,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             style: ElevatedButton.styleFrom(
@@ -1312,7 +1314,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        spotsNeeded > 1 ? 'Invitar amigos' : 'Invitar amigo',
+                        spotsNeeded > 1 ? S.of(ctx).inviteFriends : S.of(ctx).inviteFriend,
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       IconButton(
@@ -1324,8 +1326,8 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                   const SizedBox(height: 4),
                   Text(
                     spotsNeeded > 1
-                        ? 'Ingresa el correo de cada invitado'
-                        : 'Ingresa el correo de tu amigo',
+                        ? S.of(ctx).enterGuestEmails
+                        : S.of(ctx).enterFriendEmail,
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                   const SizedBox(height: 16),
@@ -1339,8 +1341,8 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                       onChanged: (_) => setDlg(() {}),
                       decoration: InputDecoration(
                         labelText: spotsNeeded > 1
-                            ? 'Correo del invitado ${i + 1}'
-                            : 'Correo del amigo',
+                            ? '${S.of(ctx).guestEmailLabel} ${i + 1}'
+                            : S.of(ctx).friendEmailLabel,
                         hintText: 'ejemplo@email.com',
                         prefixIcon: const Icon(Icons.email_outlined),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1369,10 +1371,10 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                           : const Icon(Icons.send),
                       label: Text(
                         isLoading
-                            ? 'Enviando...'
+                            ? S.of(ctx).sending
                             : emails.length > 1
-                                ? 'Enviar ${emails.length} invitaciones'
-                                : 'Enviar invitación',
+                                ? S.of(ctx).sendInvitations
+                                : S.of(ctx).sendInvitation,
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -1417,8 +1419,8 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
 
     if (gameId == null || !mounted) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Error al crear la sala. Intenta de nuevo.'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(S.of(context).errorCreatingRoom),
             backgroundColor: Colors.red));
       }
       return;
@@ -1456,7 +1458,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Algunos correos no se pudieron enviar:\n${errors.join('\n')}'),
+          content: Text('${S.of(context).someEmailsFailed}\n${errors.join('\n')}'),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 4),
         ),
@@ -1468,9 +1470,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     final sent = emails.length - errors.length;
     if (mounted && sent > 0) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(sent == 1
-              ? '¡Invitación enviada! Esperando que tu amigo acepte...'
-              : '¡$sent invitaciones enviadas! Esperando que tus amigos acepten...'),
+          content: Text(S.of(context).invitationSentWaiting),
           backgroundColor: Colors.green));
     }
   }
@@ -1529,8 +1529,8 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                 children: [
                   const Text('🁣', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 12),
-                  const Text('Sala de espera',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(S.of(context).waitingRoom,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('$joined / $_selectedPlayerCount jugadores',
                       style: const TextStyle(fontSize: 16, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
@@ -1549,7 +1549,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                     ElevatedButton.icon(
                       onPressed: _showFriendInviteDialog,
                       icon: const Icon(Icons.person_add, size: 18),
-                      label: const Text('Invitar otro amigo'),
+                      label: Text(S.of(context).inviteAnotherFriend),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _accentOrange,
                         foregroundColor: Colors.white,
@@ -1575,8 +1575,8 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                     ),
                   ] else ...[
                     const Icon(Icons.check_circle, color: Colors.green, size: 28),
-                    const Text('¡Todos listos! Iniciando...',
-                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    Text(S.of(context).allReadyStarting,
+                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                   ],
                 ],
               ),
@@ -1592,7 +1592,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                 if (mounted) Navigator.pop(context);
               },
               icon: const Icon(Icons.close),
-              label: const Text('Cancelar'),
+              label: Text(S.of(context).cancel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
@@ -1721,7 +1721,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     final roundWinnerNum = _roundWinnerNum;
     final wasBlocked = _roundWasBlocked;
 
-    final String title = iWon ? 'Ronda ganada' : wasBlocked ? 'Bloqueado' : 'Ronda perdida';
+    final String title = iWon ? S.of(context).roundWon : wasBlocked ? S.of(context).roundBlocked : S.of(context).roundLost;
     final Color titleColor = iWon ? _accentOrange : wasBlocked ? Colors.amber[600]! : Colors.red[400]!;
 
     final opponentTiles = <({String name, List<({int left, int right})> tiles, int pips})>[];
@@ -1831,7 +1831,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 9),
                 ),
-                child: Text('Siguiente ronda ($_roundEndCountdown)', style: const TextStyle(fontSize: 13)),
+                child: Text('${S.of(context).nextRound} ($_roundEndCountdown)', style: const TextStyle(fontSize: 13)),
               ),
             ),
           ],
@@ -1843,7 +1843,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
   Widget _buildGameOverOverlay(DominoGameMatch game) {
     final bool iWon = game.winnerId == _currentUser!.uid;
     final Color titleColor = iWon ? _accentOrange : Colors.red[400]!;
-    final String title = iWon ? '🏆 ¡Ganaste!' : '😞 Perdiste';
+    final String title = iWon ? '🏆 ${S.of(context).youWon}' : '😞 ${S.of(context).youLost}';
     final scores = game.getPlayerScores();
     final scoreLines = StringBuffer();
     for (int p = 1; p <= game.numberOfPlayers; p++) {
@@ -1902,7 +1902,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text('Salir', style: TextStyle(fontSize: 15)),
+                child: Text(S.of(context).exit, style: const TextStyle(fontSize: 15)),
               ),
             ),
           ],
@@ -2095,7 +2095,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
             const SizedBox(width: 4),
             SizedBox(
               width: 90,
-              child: _mpActionBtn('Pasar', Icons.skip_next, Colors.orange[700]!, _passTurn),
+              child: _mpActionBtn(S.of(context).pass, Icons.skip_next, Colors.orange[700]!, _passTurn),
             ),
           ],
         ],

@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/models/ludo_game_match.dart';
+import '../../../generated/l10n.dart';
 import 'ludo_board_painter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -568,7 +569,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
           children: [
             Text('🎉', style: TextStyle(fontSize: 32)),
             SizedBox(width: 12),
-            Expanded(child: Text('¡Felicidades!')),
+            Expanded(child: Text(S.of(context).congratulations)),
           ],
         ),
         content: Column(
@@ -702,8 +703,8 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                         ),
                       ),
                       Text(
-                        'Tutorial Interactivo de Parchís',
-                        style: TextStyle(
+                        S.of(context).tutorialTitle,
+                        style: const TextStyle(
                           fontSize: 16,
                           color: Colors.white70,
                         ),
@@ -1014,7 +1015,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                     child: ElevatedButton.icon(
                       onPressed: _currentStep > 0 ? _previousStep : null,
                       icon: const Icon(Icons.arrow_back, size: 20),
-                      label: const Text('Anterior'),
+                      label: Text(S.of(context).back),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.grey[300],
                         foregroundColor: Colors.black87,
@@ -1050,7 +1051,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
                     child: ElevatedButton.icon(
                       onPressed: !_waitingForAction ? _nextStep : null,
                       icon: const Icon(Icons.arrow_forward, size: 20),
-                      label: Text(_currentStep == total - 1 ? 'Finalizar' : 'Siguiente'),
+                      label: Text(_currentStep == total - 1 ? S.of(context).finish : S.of(context).next),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: lessonData['color'],
                         foregroundColor: Colors.white,
@@ -1176,7 +1177,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
         elevation: 0,
         title: Text(
           _showLessonSelector
-              ? 'Tutorial de Parchís'
+              ? S.of(context).tutorialTitle
               : _lessons[_selectedLesson]?['name'] ?? '',
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),

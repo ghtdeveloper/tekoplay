@@ -298,8 +298,8 @@ class _RankingScreenState extends State<RankingScreen>
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      'Tú',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
+                      S.of(context).you,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ),
               ],

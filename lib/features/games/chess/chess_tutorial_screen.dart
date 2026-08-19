@@ -25,15 +25,15 @@ class _ChessImmersiveTutorialScreenState
   bool _isScreenKeepOnActive = false;
 
 
-  final Map<String, Map<String, dynamic>> _piecesTutorials = {
+  Map<String, Map<String, dynamic>> _buildTutorials(S s) => {
     'pawn': {
-      'name': 'Peón',
+      'name': s.chessPiecePawn,
       'icon': '♟',
       'color': Colors.brown,
       'steps': [
         {
-          'title': 'Movimiento Básico del Peón',
-          'description': 'Los peones avanzan una casilla hacia adelante.',
+          'title': s.pawnStep1Title,
+          'description': s.pawnStep1Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
           'from': 'e2',
@@ -41,8 +41,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['e2', 'e3'],
         },
         {
-          'title': 'Avance de Dos Casillas',
-          'description': 'En su primer movimiento, un peón puede avanzar dos casillas.',
+          'title': s.pawnStep2Title,
+          'description': s.pawnStep2Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1',
           'from': 'd2',
@@ -50,8 +50,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['d2', 'd3', 'd4'],
         },
         {
-          'title': 'Captura Diagonal',
-          'description': 'El peón captura piezas enemigas moviéndose en diagonal.',
+          'title': s.pawnStep3Title,
+          'description': s.pawnStep3Desc,
           'initialFen': 'rnbqkbnr/pp2pppp/8/2p5/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
           'targetFen': 'rnbqkbnr/pp2pppp/8/2P5/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 2',
           'from': 'd4',
@@ -61,13 +61,13 @@ class _ChessImmersiveTutorialScreenState
       ],
     },
     'knight': {
-      'name': 'Caballo',
+      'name': s.chessPieceKnight,
       'icon': '♞',
       'color': Colors.indigo,
       'steps': [
         {
-          'title': 'Movimiento en L',
-          'description': 'El caballo se mueve en forma de L.',
+          'title': s.knightStep1Title,
+          'description': s.knightStep1Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1',
           'from': 'g1',
@@ -75,8 +75,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['g1', 'f3'],
         },
         {
-          'title': 'El Caballo Salta',
-          'description': 'El caballo puede saltar sobre otras piezas.',
+          'title': s.knightStep2Title,
+          'description': s.knightStep2Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1',
           'from': 'b1',
@@ -86,13 +86,13 @@ class _ChessImmersiveTutorialScreenState
       ],
     },
     'bishop': {
-      'name': 'Alfil',
+      'name': s.chessPieceBishop,
       'icon': '♝',
       'color': Colors.purple,
       'steps': [
         {
-          'title': 'Primer Movimiento',
-          'description': 'Mueve el peón para empezar a abrir líneas.',
+          'title': s.bishopStep1Title,
+          'description': s.bishopStep1Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
           'from': 'd2',
@@ -100,8 +100,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['d2', 'd3'],
         },
         {
-          'title': 'Movimiento Diagonal del Alfil',
-          'description': 'Ahora el alfil puede moverse en diagonal.',
+          'title': s.bishopStep2Title,
+          'description': s.bishopStep2Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/5B2/3P4/PPP1PPPP/RN1QKBNR b KQkq - 1 1',
           'from': 'c1',
@@ -111,13 +111,13 @@ class _ChessImmersiveTutorialScreenState
       ],
     },
     'rook': {
-      'name': 'Torre',
+      'name': s.chessPieceRook,
       'icon': '♜',
       'color': Colors.red,
       'steps': [
         {
-          'title': 'Movimiento Vertical',
-          'description': 'La torre se mueve en línea recta.',
+          'title': s.rookStep1Title,
+          'description': s.rookStep1Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/P7/R7/1PPPPPPP/1NBQKBNR b KQkq - 1 1',
           'from': 'a1',
@@ -125,8 +125,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['a1', 'a3'],
         },
         {
-          'title': 'Movimiento Horizontal',
-          'description': 'La torre también puede moverse horizontalmente en línea recta.',
+          'title': s.rookStep2Title,
+          'description': s.rookStep2Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/P7/R7/1PPPPPPP/1NBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/P7/4R3/1PPPPPPP/1NBQKBNR b KQkq - 1 1',
           'from': 'a3',
@@ -136,13 +136,13 @@ class _ChessImmersiveTutorialScreenState
       ],
     },
     'queen': {
-      'name': 'Dama',
+      'name': s.chessPieceQueen,
       'icon': '♛',
       'color': Colors.pink,
       'steps': [
         {
-          'title': 'Liberar el Camino',
-          'description': 'Primero mueve el peón para abrir la diagonal de la dama.',
+          'title': s.queenStep1Title,
+          'description': s.queenStep1Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
           'from': 'e2',
@@ -150,8 +150,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['e2', 'e3'],
         },
         {
-          'title': 'Poder de la Dama - Movimiento Diagonal',
-          'description': 'Ahora la dama puede moverse libremente en diagonal.',
+          'title': s.queenStep2Title,
+          'description': s.queenStep2Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/7Q/8/4P3/PPPP1PPP/RNB1KBNR b KQkq - 1 1',
           'from': 'd1',
@@ -159,8 +159,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['d1', 'e2', 'f3', 'g4', 'h5'],
         },
         {
-          'title': 'Movimiento Horizontal de la Dama',
-          'description': 'La dama se mueve como una torre en líneas rectas.',
+          'title': s.queenStep3Title,
+          'description': s.queenStep3Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/7Q/8/4P3/PPPP1PPP/RNB1KBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppppppp/8/3Q4/8/4P3/PPPP1PPP/RNB1KBNR b KQkq - 1 1',
           'from': 'h5',
@@ -168,8 +168,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['h5', 'g5', 'f5', 'e5', 'd5'],
         },
         {
-          'title': 'Captura con la Dama',
-          'description': 'La dama puede capturar piezas enemigas.',
+          'title': s.queenStep4Title,
+          'description': s.queenStep4Desc,
           'initialFen': 'rnbqkbnr/pppppppp/8/3Q4/8/4P3/PPPP1PPP/RNB1KBNR w KQkq - 0 1',
           'targetFen': 'rnbqkbnr/pppQpppp/8/8/8/4P3/PPPP1PPP/RNB1KBNR b KQkq - 0 1',
           'from': 'd5',
@@ -179,13 +179,13 @@ class _ChessImmersiveTutorialScreenState
       ],
     },
     'king': {
-      'name': 'Rey',
+      'name': s.chessPieceKing,
       'icon': '♚',
       'color': Colors.amber,
       'steps': [
         {
-          'title': 'El Rey en el Centro',
-          'description': 'El rey puede moverse una casilla en cualquier dirección. Muévelo horizontalmente.',
+          'title': s.kingStep1Title,
+          'description': s.kingStep1Desc,
           'initialFen': '8/8/8/8/3K4/8/8/8 w - - 0 1',
           'targetFen': '8/8/8/8/4K3/8/8/8 b - - 1 1',
           'from': 'd4',
@@ -193,8 +193,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['c3', 'c4', 'c5', 'd3', 'd5', 'e3', 'e4', 'e5'],
         },
         {
-          'title': 'Movimiento Vertical',
-          'description': 'Ahora mueve el rey verticalmente hacia arriba.',
+          'title': s.kingStep2Title,
+          'description': s.kingStep2Desc,
           'initialFen': '8/8/8/8/4K3/8/8/8 w - - 0 1',
           'targetFen': '8/8/8/4K3/8/8/8/8 b - - 1 1',
           'from': 'e4',
@@ -202,8 +202,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['d3', 'd4', 'd5', 'e3', 'e5', 'f3', 'f4', 'f5'],
         },
         {
-          'title': 'Movimiento Diagonal',
-          'description': 'El rey también puede moverse en diagonal. Muévelo diagonalmente.',
+          'title': s.kingStep3Title,
+          'description': s.kingStep3Desc,
           'initialFen': '8/8/8/4K3/8/8/8/8 w - - 0 1',
           'targetFen': '8/8/3K4/8/8/8/8/8 b - - 1 1',
           'from': 'e5',
@@ -211,8 +211,8 @@ class _ChessImmersiveTutorialScreenState
           'highlights': ['d4', 'd5', 'd6', 'e4', 'e6', 'f4', 'f5', 'f6'],
         },
         {
-          'title': 'Todas las Direcciones',
-          'description': 'El rey es versátil: horizontal, vertical y diagonal. ¡Muévelo como quieras!',
+          'title': s.kingStep4Title,
+          'description': s.kingStep4Desc,
           'initialFen': '8/8/3K4/8/8/8/8/8 w - - 0 1',
           'targetFen': '8/8/8/2K5/8/8/8/8 b - - 1 1',
           'from': 'd6',
@@ -310,7 +310,7 @@ class _ChessImmersiveTutorialScreenState
   void _setupBoardForStep() {
     if (_selectedPiece == null) return;
 
-    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+    final steps = _buildTutorials(S.of(context))[_selectedPiece]!['steps'] as List;
     if (_currentStep >= steps.length) return;
 
     final step = steps[_currentStep];
@@ -331,7 +331,7 @@ class _ChessImmersiveTutorialScreenState
 
     if (currentFen == _previousFen) return;
 
-    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+    final steps = _buildTutorials(S.of(context))[_selectedPiece]!['steps'] as List;
     final step = steps[_currentStep];
     final targetFen = step['targetFen'] as String;
 
@@ -358,7 +358,7 @@ class _ChessImmersiveTutorialScreenState
   void _nextStep() {
     if (_selectedPiece == null) return;
 
-    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+    final steps = _buildTutorials(S.of(context))[_selectedPiece]!['steps'] as List;
 
     if (_currentStep < steps.length - 1) {
       setState(() {
@@ -378,7 +378,7 @@ class _ChessImmersiveTutorialScreenState
       builder: (context) => AlertDialog(
         title:  Text(S.of(context).congratulationsShort),
         content: Text(
-          '${S.of(context).tutorialCompleted} ${_piecesTutorials[_selectedPiece]!['name']}!',
+          '${S.of(context).tutorialCompleted} ${_buildTutorials(S.of(context))[_selectedPiece]!['name']}!',
         ),
         actions: [
           TextButton(
@@ -407,7 +407,7 @@ class _ChessImmersiveTutorialScreenState
   void _demoMove() async {
     if (_selectedPiece == null) return;
 
-    final steps = _piecesTutorials[_selectedPiece]!['steps'] as List;
+    final steps = _buildTutorials(S.of(context))[_selectedPiece]!['steps'] as List;
     final step = steps[_currentStep];
 
     _setupBoardForStep();
@@ -469,10 +469,10 @@ class _ChessImmersiveTutorialScreenState
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
-              itemCount: _piecesTutorials.length,
+              itemCount: _buildTutorials(S.of(context)).length,
               itemBuilder: (context, index) {
-                final pieceKey = _piecesTutorials.keys.elementAt(index);
-                final piece = _piecesTutorials[pieceKey]!;
+                final pieceKey = _buildTutorials(S.of(context)).keys.elementAt(index);
+                final piece = _buildTutorials(S.of(context))[pieceKey]!;
 
                 return Card(
                   elevation: 4,
@@ -530,7 +530,7 @@ class _ChessImmersiveTutorialScreenState
   Widget _buildTutorial() {
     if (_selectedPiece == null) return const SizedBox();
 
-    final pieceData = _piecesTutorials[_selectedPiece]!;
+    final pieceData = _buildTutorials(S.of(context))[_selectedPiece]!;
     final steps = pieceData['steps'] as List;
     final step = steps[_currentStep];
     final total = steps.length;
@@ -562,7 +562,7 @@ class _ChessImmersiveTutorialScreenState
                           ),
                         ),
                         Text(
-                          '${S.of(context).exercise} ${_currentStep + 1} de $total',
+                          S.of(context).exerciseOf(_currentStep + 1, total),
                           style: const TextStyle(
                             fontSize: 14,
                             color: Colors.white70,
@@ -690,7 +690,7 @@ class _ChessImmersiveTutorialScreenState
               ElevatedButton.icon(
                 onPressed: _demoMove,
                 icon: const Icon(Icons.play_arrow, size: 20),
-                label: const Text('Demo'),
+                label: Text(S.of(context).demo),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green.withValues(alpha: 0.1),
                   foregroundColor: Colors.white,
@@ -755,7 +755,7 @@ class _ChessImmersiveTutorialScreenState
         title: Text(
           _showPieceSelector
               ? S.of(context).tutorialChessTitle
-              : '${S.of(context).tutorialShort}: ${_piecesTutorials[_selectedPiece]?['name'] ?? ''}',
+              : '${S.of(context).tutorialShort}: ${_buildTutorials(S.of(context))[_selectedPiece]?['name'] ?? ''}',
           style: const TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -774,7 +774,7 @@ class _ChessImmersiveTutorialScreenState
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${_currentStep + 1}/${(_piecesTutorials[_selectedPiece]!['steps'] as List).length}',
+                    '${_currentStep + 1}/${(_buildTutorials(S.of(context))[_selectedPiece]!['steps'] as List).length}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

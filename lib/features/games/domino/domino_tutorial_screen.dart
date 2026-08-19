@@ -272,7 +272,7 @@ class _DominoImmersiveTutorialScreenState
     final placed = _ctrl.playTile(_selectedTile!, isLeft: isLeft);
     if (placed) {
       setState(() => _selectedTile = null);
-      _showMsg('¡Muy bien!', success: true);
+      _showMsg(S.of(context).wellDone, success: true);
       Future.delayed(const Duration(milliseconds: 700), _goNext);
     } else {
       _showMsg('No se puede colocar ahí');
@@ -332,8 +332,8 @@ class _DominoImmersiveTutorialScreenState
             TextButton.icon(
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.arrow_back, color: Colors.white38),
-              label: const Text('Volver',
-                  style: TextStyle(color: Colors.white54)),
+              label: Text(S.of(context).back,
+                  style: const TextStyle(color: Colors.white54)),
             ),
           ]),
         ),
@@ -915,10 +915,10 @@ class _DominoImmersiveTutorialScreenState
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(
                 isLast
-                    ? 'Finalizar'
+                    ? S.of(context).finish
                     : isPlay
                         ? 'Saltar'
-                        : 'Siguiente',
+                        : S.of(context).next,
                 style: const TextStyle(fontSize: 12),
               ),
               const SizedBox(width: 4),

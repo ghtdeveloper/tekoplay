@@ -8,6 +8,7 @@ import '../../../core/models/ludo_game_match.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../generated/l10n.dart';
 import 'ludo_board_painter.dart';
 
 class LudoVsCpuScreen extends StatefulWidget {
@@ -270,13 +271,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         if (_humanHomeDoubles >= 3) {
           _humanHomeDoubles = 0;
           _consecutiveDoubles = 0;
-          _showEventToast('¡Tres dobles en casa! Turno perdido.');
+          _showEventToast(S.of(context).threeDoublesHome);
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
           _nextTurn();
           return;
         }
-        _showEventToast('¡Doble en casa! Vuelves a tirar.');
+        _showEventToast(S.of(context).doubleHome);
         await Future.delayed(const Duration(milliseconds: 1000));
         setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
         continue;
@@ -342,13 +343,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         if (_humanHomeDoubles >= 3) {
           _humanHomeDoubles = 0;
           _consecutiveDoubles = 0;
-          _showEventToast('¡Tres dobles en casa! Turno perdido.');
+          _showEventToast(S.of(context).threeDoublesHome);
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
           _nextTurn();
           return;
         }
-        _showEventToast('¡Doble en casa! Vuelves a tirar.');
+        _showEventToast(S.of(context).doubleHome);
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
         continue;
@@ -382,7 +383,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     _calculateMovablePieces();
 
     if (_movablePieces.isEmpty) {
-      _showEventToast('Sin movimientos válidos. Turno perdido.');
+      _showEventToast(S.of(context).noValidMoves);
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) _nextTurn();
     } else {
@@ -414,7 +415,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   void _showTurnBanner(String color) {
     final isHuman = color == 'yellow';
     setState(() {
-      _turnOverlayText = isHuman ? '¡TU TURNO!' : '${_getColorName(color).toUpperCase()} (CPU)';
+      _turnOverlayText = isHuman ? S.of(context).yourTurn : '${_getColorName(color).toUpperCase()} (CPU)';
       _turnOverlayColor = _getPlayerColor(color);
       _showTurnOverlay = true;
     });
@@ -1539,7 +1540,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     if (target != null) {
       setState(() => target!.position = -1);
-      _showEventToast('¡Triple doble! Ficha enviada a casa 😱', color: Colors.red.shade700);
+      _showEventToast(S.of(context).tripleDouble, color: Colors.red.shade700);
     }
   }
 
@@ -1622,7 +1623,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     final result = winnerColor == 'yellow' ? GameResultModel.win : GameResultModel.loss;
     _recordGameResult(result);
-    _showGameEndDialog(winnerColor == 'yellow' ? '¡Ganaste! 🎉' : '${_getColorName(winnerColor)} ganó 🤖');
+    _showGameEndDialog(winnerColor == 'yellow', winnerColor);
   }
 
   String _getColorName(String color) {
@@ -1682,8 +1683,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     }
   }
 
-  void _showGameEndDialog(String message) {
-    final isWin = message.contains('Ganaste');
+  void _showGameEndDialog(bool isWin, String winnerColor) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1707,14 +1707,18 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
               Text(isWin ? '🏆' : '😔', style: const TextStyle(fontSize: 64)),
               const SizedBox(height: 12),
               Text(
-                isWin ? '¡VICTORIA!' : 'FIN DEL JUEGO',
+                isWin ? S.of(context).victory : S.of(context).endOfGame,
                 style: TextStyle(
                   color: isWin ? Colors.amber.shade700 : const Color(0xFFEC7A34),
                   fontWeight: FontWeight.w900, fontSize: 26, letterSpacing: 3,
                 ),
               ),
               const SizedBox(height: 8),
-              Text(message, style: const TextStyle(color: Colors.black87, fontSize: 16), textAlign: TextAlign.center),
+              Text(
+                isWin ? S.of(context).youWon : '${_getColorName(winnerColor)} ${S.of(context).endOfGame}',
+                style: const TextStyle(color: Colors.black87, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 28),
               Row(
                 children: [
@@ -1727,7 +1731,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Salir'),
+                      child: Text(S.of(context).exit),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1756,7 +1760,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         elevation: 4,
                       ),
-                      child: const Text('Jugar de nuevo', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(S.of(context).playAgain, style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -1783,20 +1787,18 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('¿Abandonar partida?'),
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            const SizedBox(width: 8),
+            Text(S.of(ctx).abandonGame),
           ],
         ),
-        content: const Text(
-          'Estás en modo apuesta. Si abandonas, perderás la apuesta automáticamente y la CPU ganará.',
-        ),
+        content: Text(S.of(ctx).abandonWarningBet),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Seguir jugando'),
+            child: Text(S.of(ctx).cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -1811,7 +1813,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('Abandonar (perder)'),
+            child: Text(S.of(ctx).abandonGame),
           ),
         ],
       ),
@@ -1833,7 +1835,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           isBetMode
-              ? 'Parchís vs CPU — Modo Apuesta 🏆'
+              ? '${S.of(context).parchisVsFriend} — ${S.of(context).betMode}'
               : 'Parchís vs ${widget.cpuCount} CPU${widget.cpuCount > 1 ? "s" : ""} - ${widget.difficulty}',
           style: const TextStyle(color: Colors.white, fontSize: 15),
         ),
@@ -2104,12 +2106,12 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [BoxShadow(color: const Color(0xFFEC7A34).withValues(alpha: glow), blurRadius: 18, spreadRadius: 3)],
                         ),
-                        child: const Column(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.casino_rounded, color: Colors.white, size: 28),
-                            SizedBox(height: 4),
-                            Text('LANZAR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
+                            const Icon(Icons.casino_rounded, color: Colors.white, size: 28),
+                            const SizedBox(height: 4),
+                            Text(S.of(context).rollDice, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
                           ],
                         ),
                       );

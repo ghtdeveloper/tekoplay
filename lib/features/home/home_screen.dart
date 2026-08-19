@@ -241,7 +241,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       },
                       icon: Icon(Icons.sports_esports),
                       label: Text(
-                        'Dominó Tradicional',
+                        S.of(context).traditionalDomino,
                         style: TextStyle(fontSize: 16),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -277,7 +277,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       },
                       icon: Icon(Icons.casino),
                       label: Text(
-                        'Dominó Pase',
+                        S.of(context).dominoPaseTitle,
                         style: TextStyle(fontSize: 16),
                       ),
                       style: ElevatedButton.styleFrom(

@@ -19,7 +19,7 @@ class CoinPurchaseDialog extends StatelessWidget {
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85, // Reducido de 0.9 a 0.85
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
           maxWidth: MediaQuery.of(context).size.width * 0.95,
         ),
         decoration: BoxDecoration(
@@ -45,7 +45,6 @@ class CoinPurchaseDialog extends StatelessWidget {
           children: [
             _buildHeader(context),
 
-            // Envolver el contenido en Expanded para evitar overflow
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -57,7 +56,6 @@ class CoinPurchaseDialog extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    // Header del contenido (no scrolleable)
                     Padding(
                       padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
                       child: Column(
@@ -82,7 +80,6 @@ class CoinPurchaseDialog extends StatelessWidget {
                       ),
                     ),
 
-                    // Lista scrolleable de paquetes
                     Expanded(
                       child: SingleChildScrollView(
                         padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -155,7 +152,7 @@ class CoinPurchaseDialog extends StatelessWidget {
                               isMegaPack: true,
                               megaPackText: S.of(context).megaPack,
                             ),
-                            SizedBox(height: 10), // Espacio extra al final
+                            SizedBox(height: 10),
                           ],
                         ),
                       ),
@@ -263,7 +260,6 @@ class CoinPurchaseDialog extends StatelessWidget {
             padding: EdgeInsets.all(16),
             child: Row(
               children: [
-                // Coin icon
                 Container(
                   width: isMegaPack ? 45 : 40,
                   height: isMegaPack ? 45 : 40,

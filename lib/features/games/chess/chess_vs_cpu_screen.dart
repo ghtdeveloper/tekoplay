@@ -265,8 +265,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
     String message =
         isInitialTimeout
-            ? 'Tiempo agotado: No realizaste tu primer movimiento en 14 segundos'
-            : 'Tiempo agotado: No completaste tu movimiento en 1 minuto';
+            ? S.of(context).timeExpiredFirstMove
+            : S.of(context).timeExpiredMove;
 
     _showTimeoutDialog(message);
     _recordGameResult(GameResultModel.loss);
@@ -285,7 +285,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
                 Icon(Icons.timer_off, color: Colors.red, size: 28),
                 SizedBox(width: 12),
                 Text(
-                  'Tiempo Agotado',
+                  S.of(context).timeExpiredTitle,
                   style: TextStyle(
                     color: Colors.red,
                     fontWeight: FontWeight.bold,
@@ -681,11 +681,11 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
       if (playerWon) {
         playerScore++;
-        _showGameEndDialog('${S.of(context).youWonCheckMate}\n¡Jaque Mate!');
+        _showGameEndDialog('${S.of(context).youWonCheckMate}\n${S.of(context).checkmate}');
         _recordGameResult(GameResultModel.win);
       } else {
         cpuScore++;
-        _showGameEndDialog('${S.of(context).cpuWonCheckMate}\n¡Jaque Mate!');
+        _showGameEndDialog('${S.of(context).cpuWonCheckMate}\n${S.of(context).checkmate}');
         _recordGameResult(GameResultModel.loss);
       }
 
@@ -728,7 +728,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '¡Jaque!',
+          S.of(context).check,
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
@@ -1087,7 +1087,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              'Costo: $gameCost',
+              S.of(context).gameCostLabel(gameCost),
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -1294,7 +1294,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
                       _buildPlayerAvatar(),
                       const SizedBox(height: 6),
                       Text(
-                        currentUser?.displayName ?? 'Tú',
+                        currentUser?.displayName ?? S.of(context).you,
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -1346,7 +1346,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
               Container(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  _isPlayerTurn ? 'Tu turno' : 'Turno del CPU',
+                  _isPlayerTurn ? S.of(context).yourTurn : S.of(context).cpuTurn,
                   style: TextStyle(
                     color: _isPlayerTurn ? Colors.green[300] : Colors.white70,
                     fontSize: 16,
