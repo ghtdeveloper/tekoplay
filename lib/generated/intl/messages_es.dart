@@ -579,6 +579,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Hacer Contraoferta",
     ),
     "marker": MessageLookupByLibrary.simpleMessage("Marcador"),
+    "me": MessageLookupByLibrary.simpleMessage("Yo"),
     "megaPack": MessageLookupByLibrary.simpleMessage("¡MEGA PACK!"),
     "messages": MessageLookupByLibrary.simpleMessage("Recibir nuevos mensajes"),
     "minute": MessageLookupByLibrary.simpleMessage("minuto"),
@@ -979,6 +980,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "toPlay": MessageLookupByLibrary.simpleMessage("para jugar"),
     "toUse": MessageLookupByLibrary.simpleMessage("Para usar"),
     "tokens": MessageLookupByLibrary.simpleMessage("Fichas"),
+    "top": MessageLookupByLibrary.simpleMessage("TOP"),
     "totalPoints": MessageLookupByLibrary.simpleMessage("Total de puntos"),
     "totalRequired": MessageLookupByLibrary.simpleMessage("Total requerido"),
     "traditionalDomino": MessageLookupByLibrary.simpleMessage(
@@ -1049,6 +1051,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "whatPlay": MessageLookupByLibrary.simpleMessage("¿Qué deseas jugar?"),
     "whichDiceToUse": MessageLookupByLibrary.simpleMessage("¿Qué dado usar?"),
     "whites": MessageLookupByLibrary.simpleMessage("Blancas"),
+    "winRate": MessageLookupByLibrary.simpleMessage("% Victorias"),
     "wins": MessageLookupByLibrary.simpleMessage("Victoria"),
     "withdrawDiamonds": MessageLookupByLibrary.simpleMessage(
       "Retirar Diamantes",

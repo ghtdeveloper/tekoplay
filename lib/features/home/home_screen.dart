@@ -1213,15 +1213,24 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardSize = (screenWidth * 0.35).clamp(120.0, 160.0);
+    final cardSize = (screenWidth * 0.40).clamp(130.0, 170.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFEC7A34),
       appBar: AppBar(
-        title: const Text('TekoPlay', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'TekoPlay',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            letterSpacing: 1.2,
+          ),
+        ),
         automaticallyImplyLeading: false,
         iconTheme: const IconThemeData(color: Colors.white),
-        backgroundColor: const Color(0xFFEC7A34),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
@@ -1246,221 +1255,261 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const BannerAdWidget(),
-          if (_currentUser != null && !_isEmailVerified)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16.0),
-              child: Card(
-                color: Colors.orange.shade50,
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.orange, width: 1),
-                ),
-                child: InkWell(
-                  onTap: () => _showEmailVerificationDialog(context),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_outlined,
-                          color: Colors.orange.shade700,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                S.of(context).verifyYourEmail,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange.shade700,
-                                ),
-                              ),
-                              Text(
-                                S.of(context).tapHereForFeatures,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.orange.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.orange.shade600,
-                          size: 16,
-                        ),
-                      ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFEC7A34),
+              Color(0xFFE06820),
+              Color(0xFFD45A15),
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            if (_currentUser != null && !_isEmailVerified)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Card(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.3),
                     ),
                   ),
-                ),
-              ),
-            ),
-
-          if (_currentUser == null)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16.0),
-              child: Card(
-                color: Colors.white,
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: InkWell(
-                  onTap: () => _showLoginDialog(context),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.account_circle_outlined,
-                          color: Color(0xFFEC7A34),
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                S.of(context).addAccount,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              Text(
-                                S.of(context).loginToSaveProgress,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.black45,
-                          size: 16,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      S.of(context).whatPlay,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      constraints: BoxConstraints(
-                        maxWidth: screenWidth - 32,
-                        maxHeight: (cardSize * 2) + 40,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                  child: InkWell(
+                    onTap: () => _showEmailVerificationDialog(context),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14.0),
+                      child: Row(
                         children: [
-                          // Primera fila
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              // Ajedrez - Habilitado
-                              GameCard(
-                                imagePath: 'assets/images/chess.png',
-                                title: S.of(context).chess,
-                                onTap: () {
-                                  _showGameTypeDialog(context, S.of(context).chess);
-                                },
-                                size: cardSize,
-                                isEnabled: true,
-                              ),
-                              GameCard(
-                                imagePath: 'assets/images/domino.png',
-                                title: S.of(context).domino,
-                                onTap: () {
-                                  _showDominoModeDialog(context);
-                                },
-                                size: cardSize,
-                                isEnabled: true,
-                              ),
-                            ],
+                          const Icon(
+                            Icons.warning_amber_outlined,
+                            color: Colors.white,
+                            size: 26,
                           ),
-                          const SizedBox(height: 16),
-                          // Segunda fila
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              GameCard(
-                                imagePath: 'assets/images/parchis.png',
-                                title: S.of(context).parchisShort,
-                                onTap: () {
-                                  _showGameTypeDialog(context, S.of(context).parchisShort);
-                                },
-                                size: cardSize,
-                                isEnabled: true,
-                              ),
-                              // Poker - Deshabilitado
-                              GameCard(
-                                imagePath: 'assets/images/poker.png',
-                                title: S.of(context).poker,
-                                onTap: () {
-                                },
-                                size: cardSize,
-                                isEnabled: false,
-                              ),
-                            ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  S.of(context).verifyYourEmail,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                Text(
+                                  S.of(context).tapHereForFeatures,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            size: 14,
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
+                ),
+              ),
+
+            if (_currentUser == null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Card(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: () => _showLoginDialog(context),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14.0),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.account_circle_outlined,
+                            color: Colors.white,
+                            size: 26,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  S.of(context).addAccount,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                Text(
+                                  S.of(context).loginToSaveProgress,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 800),
+                        curve: Curves.easeOutBack,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value.clamp(0.0, 1.0),
+                            child: Transform.translate(
+                              offset: Offset(0, 20 * (1 - value)),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Text(
+                          S.of(context).whatPlay,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                            shadows: [
+                              Shadow(
+                                color: Color(0x40000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      Container(
+                        constraints: BoxConstraints(
+                          maxWidth: screenWidth - 32,
+                          maxHeight: (cardSize * 2) + 44,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                GameCard(
+                                  imagePath: 'assets/images/chess.png',
+                                  title: S.of(context).chess,
+                                  onTap: () {
+                                    _showGameTypeDialog(
+                                        context, S.of(context).chess);
+                                  },
+                                  size: cardSize,
+                                  isEnabled: true,
+                                  animationDelay: 0,
+                                ),
+                                GameCard(
+                                  imagePath: 'assets/images/domino.png',
+                                  title: S.of(context).domino,
+                                  onTap: () {
+                                    _showDominoModeDialog(context);
+                                  },
+                                  size: cardSize,
+                                  isEnabled: true,
+                                  animationDelay: 1,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                GameCard(
+                                  imagePath: 'assets/images/parchis.png',
+                                  title: S.of(context).parchisShort,
+                                  onTap: () {
+                                    _showGameTypeDialog(
+                                        context, S.of(context).parchisShort);
+                                  },
+                                  size: cardSize,
+                                  isEnabled: true,
+                                  animationDelay: 2,
+                                ),
+                                GameCard(
+                                  imagePath: 'assets/images/poker.png',
+                                  title: S.of(context).poker,
+                                  onTap: () {},
+                                  size: cardSize,
+                                  isEnabled: false,
+                                  animationDelay: 3,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const BannerAdWidget(),
-        ],
+            const BannerAdWidget(),
+          ],
+        ),
       ),
     );
   }
 }
 
-class GameCard extends StatelessWidget {
+class GameCard extends StatefulWidget {
   final String imagePath;
   final String title;
   final VoidCallback onTap;
   final double size;
   final bool isEnabled;
+  final int animationDelay;
 
   const GameCard({
     super.key,
@@ -1469,92 +1518,224 @@ class GameCard extends StatelessWidget {
     required this.onTap,
     required this.size,
     this.isEnabled = true,
+    this.animationDelay = 0,
   });
 
   @override
+  State<GameCard> createState() => _GameCardState();
+}
+
+class _GameCardState extends State<GameCard>
+    with TickerProviderStateMixin {
+  late AnimationController _controller;
+  late AnimationController _floatController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _floatAnimation;
+  bool _isPressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _floatController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 2000 + (widget.animationDelay * 300)),
+    );
+
+    _floatAnimation = Tween<double>(begin: -4.0, end: 4.0).animate(
+      CurvedAnimation(
+        parent: _floatController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+      ),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    Future.delayed(
+      Duration(milliseconds: 200 + (widget.animationDelay * 120)),
+      () {
+        if (mounted) {
+          _controller.forward();
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted) _floatController.repeat(reverse: true);
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _floatController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        InkWell(
-          onTap: isEnabled ? onTap : null,
-          borderRadius: BorderRadius.circular(16),
-          child: Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Container(
-              width: size,
-              height: size,
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Image.asset(
-                      imagePath,
-                      fit: BoxFit.contain,
-                      color: isEnabled ? null : Colors.grey.withValues(alpha: 0.1),
-                      colorBlendMode: isEnabled ? null : BlendMode.srcATop,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: isEnabled ? Colors.black : Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: child,
             ),
           ),
-        ),
-        if (!isEnabled)
-          Container(
-            width: size,
-            height: size,
-            margin: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.70),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.lock_outline,
+        );
+      },
+      child: GestureDetector(
+        onTapDown: widget.isEnabled
+            ? (_) => setState(() => _isPressed = true)
+            : null,
+        onTapUp: widget.isEnabled
+            ? (_) {
+                setState(() => _isPressed = false);
+                widget.onTap();
+              }
+            : null,
+        onTapCancel: widget.isEnabled
+            ? () => setState(() => _isPressed = false)
+            : null,
+        child: AnimatedScale(
+          scale: _isPressed ? 0.93 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeInOut,
+          child: Stack(
+            children: [
+              Container(
+                width: widget.size,
+                height: widget.size,
+                decoration: BoxDecoration(
                   color: Colors.white,
-                  size: size * 0.12,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: _isPressed ? 0.15 : 0.2),
+                      blurRadius: _isPressed ? 8 : 16,
+                      offset: Offset(0, _isPressed ? 3 : 6),
+                      spreadRadius: _isPressed ? -2 : 0,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: AnimatedBuilder(
+                        animation: _floatAnimation,
+                        builder: (context, child) {
+                          return Transform.translate(
+                            offset: Offset(0, _floatAnimation.value),
+                            child: child,
+                          );
+                        },
+                        child: Image.asset(
+                          widget.imagePath,
+                          fit: BoxFit.contain,
+                          color: widget.isEnabled
+                              ? null
+                              : Colors.grey.withValues(alpha: 0.1),
+                          colorBlendMode:
+                              widget.isEnabled ? null : BlendMode.srcATop,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      widget.title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: widget.isEnabled
+                            ? Colors.black87
+                            : Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!widget.isEnabled)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  width: widget.size,
+                  height: widget.size,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEC7A34),
+                    color: Colors.black.withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        spreadRadius: 1,
-                        blurRadius: 3,
-                        offset: const Offset(0, 2),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        color: Colors.white.withValues(alpha: 0.9),
+                        size: widget.size * 0.14,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEC7A34),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFEC7A34)
+                                  .withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          S.of(context).comingSoon,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: widget.size * 0.065,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  child: Text(
-                    S.of(context).comingSoon,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: size * 0.06,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
                 ),
-              ],
-            ),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }

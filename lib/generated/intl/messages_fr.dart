@@ -583,6 +583,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Faire une contre-offre",
     ),
     "marker": MessageLookupByLibrary.simpleMessage("Tableau de score"),
+    "me": MessageLookupByLibrary.simpleMessage("Moi"),
     "megaPack": MessageLookupByLibrary.simpleMessage("MEGA PACK !"),
     "messages": MessageLookupByLibrary.simpleMessage(
       "Recevoir de nouveaux messages",
@@ -1005,6 +1006,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "toPlay": MessageLookupByLibrary.simpleMessage("pour jouer"),
     "toUse": MessageLookupByLibrary.simpleMessage("Pour utiliser"),
     "tokens": MessageLookupByLibrary.simpleMessage("Jetons"),
+    "top": MessageLookupByLibrary.simpleMessage("TOP"),
     "totalPoints": MessageLookupByLibrary.simpleMessage("Total des points"),
     "totalRequired": MessageLookupByLibrary.simpleMessage("Total requis"),
     "traditionalDomino": MessageLookupByLibrary.simpleMessage(
@@ -1080,6 +1082,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Quel dé utiliser ?",
     ),
     "whites": MessageLookupByLibrary.simpleMessage("Blancs"),
+    "winRate": MessageLookupByLibrary.simpleMessage("Taux de victoire"),
     "wins": MessageLookupByLibrary.simpleMessage("Victoire"),
     "withdrawDiamonds": MessageLookupByLibrary.simpleMessage(
       "Retirer des Diamants",

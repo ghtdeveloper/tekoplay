@@ -525,6 +525,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Make Counteroffer",
     ),
     "marker": MessageLookupByLibrary.simpleMessage("Scoreboard"),
+    "me": MessageLookupByLibrary.simpleMessage("Me"),
     "megaPack": MessageLookupByLibrary.simpleMessage("MEGA PACK!"),
     "messages": MessageLookupByLibrary.simpleMessage("Receive new messages"),
     "minute": MessageLookupByLibrary.simpleMessage("minute"),
@@ -893,6 +894,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "toPlay": MessageLookupByLibrary.simpleMessage("to play"),
     "toUse": MessageLookupByLibrary.simpleMessage("To use"),
     "tokens": MessageLookupByLibrary.simpleMessage("Tokens"),
+    "top": MessageLookupByLibrary.simpleMessage("TOP"),
     "totalPoints": MessageLookupByLibrary.simpleMessage("Total Points"),
     "totalRequired": MessageLookupByLibrary.simpleMessage("Total required"),
     "traditionalDomino": MessageLookupByLibrary.simpleMessage(
@@ -961,6 +963,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "whichDiceToUse": MessageLookupByLibrary.simpleMessage("Which die to use?"),
     "whites": MessageLookupByLibrary.simpleMessage("Whites"),
+    "winRate": MessageLookupByLibrary.simpleMessage("Win rate"),
     "wins": MessageLookupByLibrary.simpleMessage("Win"),
     "withdrawDiamonds": MessageLookupByLibrary.simpleMessage(
       "Withdraw Diamonds",

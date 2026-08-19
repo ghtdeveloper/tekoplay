@@ -1138,140 +1138,151 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEC7A34),
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(
           S.of(context).settings,
-          style: TextStyle(color: Colors.white),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
         ),
-        backgroundColor: const Color(0xFFEC7A34),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFEC7A34),
+                Color(0xFFE06820),
+                Color(0xFFD45A15),
+              ],
+            ),
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [
-          if (_currentUser != null && !_isEmailVerified)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16.0),
-              child: Card(
-                color: Colors.orange.shade50,
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.orange, width: 1),
-                ),
-                child: InkWell(
-                  onTap: () => _showEmailVerificationDialog(context),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_outlined,
-                          color: Colors.orange.shade700,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                               S.of(context).verifyYourEmail,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange.shade700,
-                                ),
-                              ),
-                              Text(
-                                S.of(context).tapHereForFeatures,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.orange.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.orange.shade600,
-                          size: 16,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          if (_currentUser != null) _buildUserSection(),
-
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               children: [
+                if (_currentUser != null && !_isEmailVerified)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: InkWell(
+                      onTap: () => _showEmailVerificationDialog(context),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14.0),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.warning_amber_outlined,
+                              color: Colors.orange.shade700,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    S.of(context).verifyYourEmail,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                  Text(
+                                    S.of(context).tapHereForFeatures,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              color: Colors.orange.shade400,
+                              size: 14,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (_currentUser != null) _buildUserSection(),
+
                 _currentUser == null
                     ? _buildSettingsCard(
-                  title: S.of(context).addAccount,
-                  subtitle: S.of(context).signInAccount,
-                  icon: Icons.account_circle_outlined,
-                  onTap: () => _showLoginDialog(context),
-                )
+                        title: S.of(context).addAccount,
+                        subtitle: S.of(context).signInAccount,
+                        icon: Icons.account_circle_outlined,
+                        onTap: () => _showLoginDialog(context),
+                      )
                     : _buildSettingsCard(
-                  title: S.of(context).signOut,
-                  subtitle: S.of(context).signOutAccount,
-                  icon: Icons.logout,
-                  onTap: () => _showLogoutDialog(context),
-                ),
+                        title: S.of(context).signOut,
+                        subtitle: S.of(context).signOutAccount,
+                        icon: Icons.logout_rounded,
+                        onTap: () => _showLogoutDialog(context),
+                      ),
 
                 _buildSettingsCard(
                   title: S.of(context).gameMusic,
                   subtitle: S.of(context).adjustGameMusic,
-                  icon: Icons.music_note,
+                  icon: Icons.music_note_rounded,
                   onTap: () => _showMusicVolumeDialog(context),
                 ),
                 _buildSettingsCard(
                   title: S.of(context).language,
                   subtitle: S.of(context).changeGameLanguage,
-                  icon: Icons.language,
-                  onTap: () {
-                    _showLanguageDialog(context);
-                  },
+                  icon: Icons.language_rounded,
+                  onTap: () => _showLanguageDialog(context),
                 ),
                 _buildSettingsCard(
                   title: S.of(context).privacyTitle,
                   subtitle: S.of(context).privacy,
                   icon: Icons.privacy_tip_outlined,
-                  onTap: () {
-                    _launchUrl(AppConstants.urlPrivacy);
-                  },
+                  onTap: () => _launchUrl(AppConstants.urlPrivacy),
                 ),
                 _buildSettingsCard(
                   title: S.of(context).terms,
                   subtitle: S.of(context).termsCheck,
                   icon: Icons.description_outlined,
-                  onTap: () {
-                    _launchUrl(AppConstants.urlTerms);
-                  },
+                  onTap: () => _launchUrl(AppConstants.urlTerms),
                 ),
                 _buildSettingsCard(
                   title: S.of(context).technicalSupport,
                   subtitle: S.of(context).contactSupport,
-                  icon: Icons.support_agent,
+                  icon: Icons.support_agent_rounded,
                   onTap: () => _showTechnicalSupportDialog(context),
                 ),
+
+                const SizedBox(height: 12),
+                Center(
+                  child: Text(
+                    _appVersion,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 8),
               ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              _appVersion,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
           const BannerAdWidget(),
@@ -1284,16 +1295,16 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     bool isEmailPasswordOnly = _isEmailPasswordLogin(_currentUser);
 
     return Container(
-      margin: const EdgeInsets.all(16.0),
+      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -1320,20 +1331,20 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                    color: Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _currentUser?.email ?? '',
-                  style: const TextStyle(fontSize: 14, color: Colors.black54),
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
                 if (isEmailPasswordOnly)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                     S.of(context).tapPhotoToChange,
-                      style: TextStyle(
+                      S.of(context).tapPhotoToChange,
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFFEC7A34),
                         fontStyle: FontStyle.italic,
@@ -1354,27 +1365,60 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return Card(
-      color: Colors.white,
-      elevation: 3,
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: Icon(icon, color: Colors.black),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEC7A34).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: const Color(0xFFEC7A34), size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    color: Colors.grey[500], size: 22),
+              ],
+            ),
           ),
         ),
-        subtitle: Text(subtitle, style: const TextStyle(color: Colors.black54)),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          color: Colors.black45,
-          size: 16,
-        ),
-        onTap: onTap,
       ),
     );
   }

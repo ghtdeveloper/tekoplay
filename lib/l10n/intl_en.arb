@@ -530,5 +530,8 @@
   "kingStep3Title": "Diagonal Move",
   "kingStep3Desc": "The king can also move diagonally. Move it diagonally.",
   "kingStep4Title": "All Directions",
-  "kingStep4Desc": "The king is versatile: horizontal, vertical and diagonal. Move it however you like!"
+  "kingStep4Desc": "The king is versatile: horizontal, vertical and diagonal. Move it however you like!",
+  "me": "Me",
+  "top": "TOP",
+  "winRate": "Win rate"
 }

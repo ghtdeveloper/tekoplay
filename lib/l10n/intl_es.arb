@@ -530,5 +530,8 @@
   "kingStep3Title": "Movimiento Diagonal",
   "kingStep3Desc": "El rey también puede moverse en diagonal. Muévelo diagonalmente.",
   "kingStep4Title": "Todas las Direcciones",
-  "kingStep4Desc": "El rey es versátil: horizontal, vertical y diagonal. ¡Muévelo como quieras!"
+  "kingStep4Desc": "El rey es versátil: horizontal, vertical y diagonal. ¡Muévelo como quieras!",
+  "me": "Yo",
+  "top": "TOP",
+  "winRate": "% Victorias"
 }

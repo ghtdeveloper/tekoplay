@@ -4488,6 +4488,21 @@ class S {
       args: [],
     );
   }
+
+  /// `Me`
+  String get me {
+    return Intl.message('Me', name: 'me', desc: '', args: []);
+  }
+
+  /// `TOP`
+  String get top {
+    return Intl.message('TOP', name: 'top', desc: '', args: []);
+  }
+
+  /// `Win rate`
+  String get winRate {
+    return Intl.message('Win rate', name: 'winRate', desc: '', args: []);
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<S> {

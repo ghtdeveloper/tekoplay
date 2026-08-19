@@ -18,13 +18,16 @@ class GameHistoryScreen extends StatefulWidget {
 }
 
 class _GameHistoryScreenState extends State<GameHistoryScreen>
-    with TickerProviderStateMixin,WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   final AuthService _authService = AuthService();
   bool _isScreenKeepOnActive = false;
   final Map<GameTypeModel, List<GameMatch>> _gameHistory = {};
+  List<GameMatch> _allHistory = [];
   final Map<GameTypeModel, GameStats> _gameStats = {};
   bool _isLoading = true;
+
+  static const _kAccent = Color(0xFFEC7A34);
 
   @override
   void initState() {
@@ -46,70 +49,49 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
     super.dispose();
   }
 
-@override
-void didChangeAppLifecycleState(AppLifecycleState state) {
-  super.didChangeAppLifecycleState(state);
-
-  switch (state) {
-    case AppLifecycleState.resumed:
-      if (_isScreenKeepOnActive) {
-        _enableWakeLock();
-      }
-      break;
-    case AppLifecycleState.paused:
-      _disableWakeLock();
-      break;
-    case AppLifecycleState.detached:
-    case AppLifecycleState.hidden:
-    case AppLifecycleState.inactive:
-      break;
-  }
-}
-
-Future<void> _enableWakeLock() async {
-  try {
-    if (!await WakelockPlus.enabled) {
-      await WakelockPlus.enable();
-      if (mounted) {
-        setState(() {
-          _isScreenKeepOnActive = true;
-        });
-      }
-      if (kDebugMode) {
-        print('WakeLock enabled - screen will stay on');
-      }
-    }
-  } catch (e) {
-    if (kDebugMode) {
-      print('Error enabling WakeLock: $e');
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_isScreenKeepOnActive) _enableWakeLock();
+        break;
+      case AppLifecycleState.paused:
+        _disableWakeLock();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
     }
   }
-}
 
-Future<void> _disableWakeLock() async {
-  try {
-    if (await WakelockPlus.enabled) {
-      await WakelockPlus.disable();
-      if (mounted) {
-        setState(() {
-          _isScreenKeepOnActive = false;
-        });
+  Future<void> _enableWakeLock() async {
+    try {
+      if (!await WakelockPlus.enabled) {
+        await WakelockPlus.enable();
+        if (mounted) setState(() => _isScreenKeepOnActive = true);
+        if (kDebugMode) print('WakeLock enabled - screen will stay on');
       }
-      if (kDebugMode) {
-        print('WakeLock disabled - screen can turn off normally');
-      }
-    }
-  } catch (e) {
-    if (kDebugMode) {
-      print('Error disabling WakeLock: $e');
+    } catch (e) {
+      if (kDebugMode) print('Error enabling WakeLock: $e');
     }
   }
-}
+
+  Future<void> _disableWakeLock() async {
+    try {
+      if (await WakelockPlus.enabled) {
+        await WakelockPlus.disable();
+        if (mounted) setState(() => _isScreenKeepOnActive = false);
+        if (kDebugMode) print('WakeLock disabled - screen can turn off normally');
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error disabling WakeLock: $e');
+    }
+  }
 
   Future<void> _loadGameHistory() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       for (GameTypeModel gameType in GameTypeModel.values) {
@@ -117,24 +99,27 @@ Future<void> _disableWakeLock() async {
           gameType: gameType,
           limit: 100,
         );
-
         final stats = await _authService.getCurrentUserGameStats(gameType);
-
         _gameHistory[gameType] = history;
         _gameStats[gameType] = stats ?? GameStats.initial(gameType);
       }
-      final allHistory = await _authService.getCurrentUserGameHistory(
+
+      _allHistory = await _authService.getCurrentUserGameHistory(
         limit: 100,
       );
-      _gameHistory[GameTypeModel.chess] = allHistory;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error loading game history: $e');
+
+      if (_allHistory.isEmpty) {
+        final merged = <GameMatch>[];
+        for (final matches in _gameHistory.values) {
+          merged.addAll(matches);
+        }
+        merged.sort((a, b) => b.playedAt.compareTo(a.playedAt));
+        _allHistory = merged;
       }
+    } catch (e) {
+      if (kDebugMode) print('Error loading game history: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -152,160 +137,169 @@ Future<void> _disableWakeLock() async {
 
       double winRate = totalGames > 0 ? (totalWins / totalGames) * 100 : 0;
 
-      return Card(
-        margin: EdgeInsets.all(16),
-        elevation: 4,
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.bar_chart,
-                    color: const Color(0xFFEC7A34),
-                    size: 28,
+      return Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.bar_chart, color: _kAccent, size: 24),
+                const SizedBox(width: 10),
+                Text(
+                  S.of(context).generalSummary,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
-                  SizedBox(width: 12),
-                  Text(
-                    S.of(context).generalSummary,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatItem(
+                    S.of(context).games, '$totalGames', Icons.games,
                   ),
-                ],
-              ),
-              SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatItem(
-                      S.of(context).games,
-                      '$totalGames',
-                      Icons.games,
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildStatItem(
+                    S.of(context).victories, '$totalWins', Icons.emoji_events,
                   ),
-                  Expanded(
-                    child: _buildStatItem(
-                      S.of(context).victories,
-                      '$totalWins',
-                      Icons.emoji_events,
-                    ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatItem(
+                    S.of(context).victoriesPct,
+                    '${winRate.toStringAsFixed(1)}%',
+                    Icons.trending_up,
                   ),
-                ],
-              ),
-              SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatItem(
-                      S.of(context).victoriesPct,
-                      '${winRate.toStringAsFixed(1)}%',
-                      Icons.trending_up,
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildStatItem(
+                    S.of(context).totalPoints, '$totalPoints', Icons.star,
                   ),
-                  Expanded(
-                    child: _buildStatItem(
-                      S.of(context).totalPoints,
-                      '$totalPoints',
-                      Icons.star,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     }
 
     final stats = _gameStats[gameType] ?? GameStats.initial(gameType);
 
-    return Card(
-      margin: EdgeInsets.all(16),
-      elevation: 4,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                getGameIcon(gameType),
-                SizedBox(width: 12),
-                Text(
-                  '${gameType.displayName} - ${S.of(context).stats}',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              getGameIcon(gameType, size: 24),
+              const SizedBox(width: 10),
+              Text(
+                '${gameType.displayName} - ${S.of(context).stats}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    S.of(context).games,
-                    '${stats.gamesPlayed}',
-                    Icons.games,
-                  ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    S.of(context).point,
-                    '${stats.points}',
-                    Icons.star,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    S.of(context).victories,
-                    '${stats.wins}',
-                    Icons.emoji_events,
-                  ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    S.of(context).defeats,
-                    '${stats.losses}',
-                    Icons.close,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    S.of(context).ties,
-                    '${stats.draws}',
-                    Icons.handshake,
-                  ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    S.of(context).victoriesPct,
-                    '${stats.winRate.toStringAsFixed(1)}%',
-                    Icons.trending_up,
-                  ),
-                ),
-              ],
-            ),
-            if (stats.averageGameTimeMinutes > 0) ...[
-              SizedBox(height: 12),
-              _buildStatItem(
-                S.of(context).averageTime,
-                '${stats.averageGameTimeMinutes.toStringAsFixed(1)} min',
-                Icons.access_time,
-                fullWidth: true,
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  S.of(context).games, '${stats.gamesPlayed}', Icons.games,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatItem(
+                  S.of(context).point, '${stats.points}', Icons.star,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  S.of(context).victories, '${stats.wins}', Icons.emoji_events,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatItem(
+                  S.of(context).defeats, '${stats.losses}', Icons.close,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  S.of(context).ties, '${stats.draws}', Icons.handshake,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatItem(
+                  S.of(context).victoriesPct,
+                  '${stats.winRate.toStringAsFixed(1)}%',
+                  Icons.trending_up,
+                ),
+              ),
+            ],
+          ),
+          if (stats.averageGameTimeMinutes > 0) ...[
+            const SizedBox(height: 8),
+            _buildStatItem(
+              S.of(context).averageTime,
+              '${stats.averageGameTimeMinutes.toStringAsFixed(1)} min',
+              Icons.access_time,
+              fullWidth: true,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -317,43 +311,51 @@ Future<void> _disableWakeLock() async {
     bool fullWidth = false,
   }) {
     return Container(
-      padding: EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey[200]!),
       ),
-      child:
-          fullWidth
-              ? Row(
-                children: [
-                  Icon(icon, color: const Color(0xFFEC7A34), size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+      child: fullWidth
+          ? Row(
+              children: [
+                Icon(icon, color: _kAccent, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                const Spacer(),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
-                  Spacer(),
-                  Text(
-                    value,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ],
+            )
+          : Column(
+              children: [
+                Icon(icon, color: _kAccent, size: 18),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
-                ],
-              )
-              : Column(
-                children: [
-                  Icon(icon, color: const Color(0xFFEC7A34), size: 20),
-                  SizedBox(height: 4),
-                  Text(
-                    label,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    value,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -361,11 +363,7 @@ Future<void> _disableWakeLock() async {
     List<GameMatch> matches;
 
     if (gameType == null) {
-      matches = [];
-      for (List<GameMatch> gameMatches in _gameHistory.values) {
-        matches.addAll(gameMatches);
-      }
-      matches.sort((a, b) => b.playedAt.compareTo(a.playedAt));
+      matches = _allHistory;
     } else {
       matches = _gameHistory[gameType] ?? [];
     }
@@ -375,27 +373,24 @@ Future<void> _disableWakeLock() async {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history, size: 64, color: Colors.grey[400]),
-            SizedBox(height: 16),
+            Icon(Icons.history, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
             Text(
               gameType == null
                   ? S.of(context).notPlayedGameYet
                   : '${S.of(context).youHaventPlayed} ${gameType.displayName} ${S.of(context).still}',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 15, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
             ),
-            const BannerAdWidget(),
           ],
         ),
       );
     }
 
     return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: matches.length,
-      itemBuilder: (context, index) {
-        final match = matches[index];
-        return _buildMatchCard(match);
-      },
+      itemBuilder: (context, index) => _buildMatchCard(matches[index]),
     );
   }
 
@@ -422,30 +417,50 @@ Future<void> _disableWakeLock() async {
         break;
     }
 
-    return Card(
-      margin: EdgeInsets.symmetric(vertical: 4),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         leading: CircleAvatar(
-          backgroundColor: resultColor.withValues(alpha: 0.2),
-          child: Icon(resultIcon, color: resultColor),
+          backgroundColor: resultColor.withValues(alpha: 0.12),
+          child: Icon(resultIcon, color: resultColor, size: 22),
         ),
         title: Row(
           children: [
-            getGameIcon(match.gameType),
-            SizedBox(width: 8),
-            Text(match.gameType.displayName),
-            Spacer(),
+            getGameIcon(match.gameType, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              match.gameType.displayName,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: Colors.black87,
+              ),
+            ),
+            const Spacer(),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: resultColor.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
+                color: resultColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 resultText,
                 style: TextStyle(
                   color: resultColor,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -455,22 +470,32 @@ Future<void> _disableWakeLock() async {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: 4),
-            if (match.opponentName != null) Text('vs ${match.opponentName}'),
+            const SizedBox(height: 6),
+            if (match.opponentName != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'vs ${match.opponentName}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
             Row(
               children: [
-                Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
-                SizedBox(width: 4),
+                Icon(Icons.access_time, size: 12, color: Colors.grey[400]),
+                const SizedBox(width: 3),
                 Text(
                   '${match.durationMinutes} min',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
-                SizedBox(width: 16),
-                Icon(Icons.calendar_today, size: 12, color: Colors.grey[600]),
-                SizedBox(width: 4),
+                const SizedBox(width: 14),
+                Icon(Icons.calendar_today, size: 12, color: Colors.grey[400]),
+                const SizedBox(width: 3),
                 Text(
                   DateFormat('dd/MM/yyyy HH:mm').format(match.playedAt),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
               ],
             ),
@@ -490,7 +515,7 @@ Future<void> _disableWakeLock() async {
             ),
             Text(
               'pts',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
             ),
           ],
         ),
@@ -505,107 +530,140 @@ Future<void> _disableWakeLock() async {
       appBar: AppBar(
         title: Text(
           S.of(context).gameHistory,
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        backgroundColor: const Color(0xFFEC7A34),
-        iconTheme: IconThemeData(color: Colors.white),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFEC7A34),
+                Color(0xFFE06820),
+                Color(0xFFD45A15),
+              ],
+            ),
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
+          indicatorWeight: 3,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          unselectedLabelColor: Colors.white60,
           isScrollable: true,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+          unselectedLabelStyle: const TextStyle(fontSize: 13),
           tabs: [
-            Tab(text: S.of(context).all, icon: Icon(Icons.all_inclusive)),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.all_inclusive, size: 18),
+                  const SizedBox(width: 6),
+                  Text(S.of(context).all),
+                ],
+              ),
+            ),
             ...GameTypeModel.values.map((gameType) {
-              return Tab(text: gameType.displayName);
+              return Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    getGameIcon(gameType, size: 18),
+                    const SizedBox(width: 6),
+                    Text(gameType.displayName),
+                  ],
+                ),
+              );
             }),
           ],
         ),
       ),
-      body:
-          _isLoading
-              ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        const Color(0xFFEC7A34),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      S.of(context).loadingHistory,
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              )
-              : TabBarView(
-                controller: _tabController,
-                children: [
-                  RefreshIndicator(
-                    onRefresh: _loadGameHistory,
+      body: Column(
+        children: [
+          Expanded(
+            child: _isLoading
+                ? Center(
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildSummaryCard(null),
-                        Expanded(child: _buildGameHistoryList(null)),
+                        const CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(_kAccent),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          S.of(context).loadingHistory,
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.grey[600],
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                  ...GameTypeModel.values.map((gameType) {
-                    return RefreshIndicator(
-                      onRefresh: _loadGameHistory,
-                      child: Column(
-                        children: [
-                          _buildSummaryCard(gameType),
-                          Expanded(child: _buildGameHistoryList(gameType)),
-                          const BannerAdWidget(),
-                        ],
-
+                  )
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // "All" tab
+                      RefreshIndicator(
+                        color: _kAccent,
+                        onRefresh: _loadGameHistory,
+                        child: Column(
+                          children: [
+                            _buildSummaryCard(null),
+                            Expanded(child: _buildGameHistoryList(null)),
+                          ],
+                        ),
                       ),
-                    );
-                  }),
-
-                ],
-              ),
-
+                      // Per-game tabs
+                      ...GameTypeModel.values.map((gameType) {
+                        return RefreshIndicator(
+                          color: _kAccent,
+                          onRefresh: _loadGameHistory,
+                          child: Column(
+                            children: [
+                              _buildSummaryCard(gameType),
+                              Expanded(
+                                child: _buildGameHistoryList(gameType),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+          ),
+          const BannerAdWidget(),
+        ],
+      ),
     );
-
   }
 
   Widget getGameIcon(GameTypeModel gameType, {double size = 32}) {
     switch (gameType) {
       case GameTypeModel.chess:
-        return Image.asset(
-          'assets/images/chess.png',
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-        );
+        return Image.asset('assets/images/chess.png',
+            width: size, height: size, fit: BoxFit.contain);
       case GameTypeModel.domino:
-        return Image.asset(
-          'assets/images/domino.png',
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-        );
+        return Image.asset('assets/images/domino.png',
+            width: size, height: size, fit: BoxFit.contain);
       case GameTypeModel.ludo:
-        return Image.asset(
-          'assets/images/parchis.png',
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-        );
+        return Image.asset('assets/images/parchis.png',
+            width: size, height: size, fit: BoxFit.contain);
       case GameTypeModel.dominoPase:
-        return Image.asset(
-          'assets/images/domino.png',
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-        );
+        return Image.asset('assets/images/domino.png',
+            width: size, height: size, fit: BoxFit.contain);
     }
   }
 }

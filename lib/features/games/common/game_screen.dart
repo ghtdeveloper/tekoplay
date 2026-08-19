@@ -516,7 +516,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       }
 
       if (user != null && !_isDisposed) {
-        // Conectar listener en tiempo real tan pronto se conoce el usuario
         _setupFirestoreWalletListener();
         final userData = await FirestoreService().getUser(user.uid);
         if (userData != null && mounted && !_isDisposed) {
@@ -654,8 +653,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }).toList();
 
     for (final newGame in newGames) {
-      // Skip friend games (isOnlineMatchmaking: false) — MultiplayerLudoScreen
-      // handles its own waiting room → game transition internally.
       final isMatchmaking = newGame.gameSettings?['isOnlineMatchmaking'] == true;
       if (!isMatchmaking) continue;
 
@@ -789,8 +786,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           if (_currentUser == null) {
             await _updateAnonymousWalletUI();
           }
-          // For authenticated users the Firestore realtime listener
-          // already updates _userDiamonds automatically — no manual setState needed.
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -818,8 +813,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void deactivate() {
-    // Detenemos el audio en cuanto la pantalla sale del árbol de widgets,
-    // antes de que home_screen reanude su propio player.
     _audioPlayer?.stop();
     super.deactivate();
   }
@@ -848,29 +841,50 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  String _getGameAsset() {
+    if (isChess) return 'assets/images/chess.png';
+    if (isLudo) return 'assets/images/parchis.png';
+    return 'assets/images/domino.png';
+  }
+
   Widget _buildUserAvatar() {
     String? photoUrl = _currentPhotoUrl ?? _currentUser?.photoURL;
 
-    if (photoUrl != null && photoUrl.isNotEmpty) {
-      return CircleAvatar(
-        radius: 60,
-        backgroundColor: Colors.grey[300],
-        backgroundImage: NetworkImage(photoUrl),
-        onBackgroundImageError: (exception, stackTrace) {
-          if (mounted && !_isDisposed) {
-            setState(() {
-              _currentPhotoUrl = null;
-            });
-          }
-        },
-      );
-    } else {
-      return CircleAvatar(
-        radius: 60,
-        backgroundImage: AssetImage('assets/images/img_perfil_unknown.png'),
-        backgroundColor: Colors.grey[300],
-      );
-    }
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.4),
+          width: 3,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: photoUrl != null && photoUrl.isNotEmpty
+          ? CircleAvatar(
+              radius: 50,
+              backgroundColor: Colors.grey[300],
+              backgroundImage: NetworkImage(photoUrl),
+              onBackgroundImageError: (exception, stackTrace) {
+                if (mounted && !_isDisposed) {
+                  setState(() {
+                    _currentPhotoUrl = null;
+                  });
+                }
+              },
+            )
+          : CircleAvatar(
+              radius: 50,
+              backgroundImage:
+                  const AssetImage('assets/images/img_perfil_unknown.png'),
+              backgroundColor: Colors.grey[300],
+            ),
+    );
   }
 
   Widget _buildMatchTypeIndicator() {
@@ -983,105 +997,128 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void _showUserOptionsDialog(BuildContext context) {
     if (_currentUser == null) return;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: true,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          backgroundColor: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
+              ),
 
-                _buildUserAvatar(),
-                SizedBox(height: 12),
+              _buildUserAvatar(),
+              const SizedBox(height: 12),
 
+              Text(
+                _currentUser!.displayName ?? S.of(context).anonymous,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              if (_currentUser!.email != null) ...[
+                const SizedBox(height: 4),
                 Text(
-                  _currentUser!.displayName ?? S.of(context).anonymous,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-
-                SizedBox(height: 20),
-
-                // Botón Ranking
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => RankingScreen(),
-                        ),
-                      );
-                    },
-                    icon: Icon(Icons.leaderboard),
-                    label: Text(
-                      S.of(context).ranking,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC7A34),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: 12),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => GameHistoryScreen(),
-                        ),
-                      );
-                    },
-                    icon: Icon(Icons.history),
-                    label: Text(
-                      S.of(context).gameStats,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC7A34),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
+                  _currentUser!.email!,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                 ),
               ],
-            ),
+
+              const SizedBox(height: 24),
+
+              _buildOptionTile(
+                icon: Icons.leaderboard_rounded,
+                label: S.of(context).ranking,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => RankingScreen()),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 10),
+
+              _buildOptionTile(
+                icon: Icons.history_rounded,
+                label: S.of(context).gameStats,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => GameHistoryScreen()),
+                  );
+                },
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildOptionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEC7A34).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: const Color(0xFFEC7A34), size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: Colors.grey[400], size: 22),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1093,41 +1130,49 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final isInteractive = _currentUser != null;
 
     return GestureDetector(
-      onTap:
-          isInteractive
-              ? () => _showUserOptionsDialog(context)
-              : () => _showAnonymousUserDialog(context),
+      onTap: isInteractive
+          ? () => _showUserOptionsDialog(context)
+          : () => _showAnonymousUserDialog(context),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
+          color: Colors.white.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.25),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_isAnonymousMode) ...[
-              Icon(Icons.person_outline, color: Colors.white70, size: 16),
-              SizedBox(width: 4),
+              Icon(Icons.person_outline,
+                  color: Colors.white.withValues(alpha: 0.7), size: 16),
+              const SizedBox(width: 6),
             ],
-            Text(
-              displayName,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: _isAnonymousMode ? Colors.white70 : Colors.white,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: Text(
+                displayName,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: _isAnonymousMode
+                      ? Colors.white.withValues(alpha: 0.7)
+                      : Colors.white,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
             ),
             if (isInteractive) ...[
-              SizedBox(width: 8),
-              Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 20),
+              const SizedBox(width: 6),
+              Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white.withValues(alpha: 0.8), size: 20),
             ] else if (_isAnonymousMode) ...[
-              SizedBox(width: 8),
-              Icon(Icons.info_outline, color: Colors.white70, size: 16),
+              const SizedBox(width: 6),
+              Icon(Icons.info_outline,
+                  color: Colors.white.withValues(alpha: 0.7), size: 16),
             ],
           ],
         ),
@@ -1222,16 +1267,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     if (!_isInitialized) {
       return Scaffold(
-        backgroundColor: Color(0xFFEC7A34),
+        backgroundColor: const Color(0xFFEC7A34),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 16),
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 16),
               Text(
                 S.of(context).loadingDots,
-                style: TextStyle(color: Colors.white, fontSize: 16),
+                style: const TextStyle(color: Colors.white, fontSize: 16),
               ),
             ],
           ),
@@ -1240,148 +1285,240 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      backgroundColor: Color(0xFFEC7A34),
-      body: SafeArea(
-        child: Column(
-          children: [
-            const BannerAdWidget(),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 12.0,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-                      padding: EdgeInsets.zero,
-                      onPressed: () {
-                        if (!_isDisposed) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => MainScreen()),
-                          );
-                        }
-                      },
+      backgroundColor: const Color(0xFFEC7A34),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFEC7A34),
+              Color(0xFFE06820),
+              Color(0xFFD45A15),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Top bar
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8.0,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        onPressed: () {
+                          if (!_isDisposed) {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => MainScreen()),
+                            );
+                          }
+                        },
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 4),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final shouldStack = constraints.maxWidth < 200 &&
-                            (matchType == S.of(context).bet || isPase) &&
-                            (_withdrawableDiamonds ?? 0) > 0;
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final shouldStack = constraints.maxWidth < 200 &&
+                              (matchType == S.of(context).bet || isPase) &&
+                              (_withdrawableDiamonds ?? 0) > 0;
 
-                        if (shouldStack) {
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildBalanceRow(),
-                              SizedBox(height: 4),
-                              WithdrawalCounterWidget(
-                                withdrawableAmount: _withdrawableDiamonds ?? 0,
-                                onWithdraw: _showWithdrawalDialog,
-                              ),
-                            ],
-                          );
-                        } else {
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(child: _buildBalanceRow()),
-                              if ((matchType == S.of(context).bet || isPase) &&
-                                  (_withdrawableDiamonds ?? 0) > 0) ...[
-                                SizedBox(width: 4),
+                          if (shouldStack) {
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildBalanceRow(),
+                                const SizedBox(height: 4),
                                 WithdrawalCounterWidget(
                                   withdrawableAmount: _withdrawableDiamonds ?? 0,
                                   onWithdraw: _showWithdrawalDialog,
                                 ),
                               ],
-                            ],
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  SizedBox(width: 4),
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: _buildNotificationsIcon(),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildUserAvatar(),
-                    SizedBox(height: 10),
-                    Text(
-                      gameType,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                            );
+                          } else {
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(child: _buildBalanceRow()),
+                                if ((matchType == S.of(context).bet || isPase) &&
+                                    (_withdrawableDiamonds ?? 0) > 0) ...[
+                                  const SizedBox(width: 4),
+                                  WithdrawalCounterWidget(
+                                    withdrawableAmount: _withdrawableDiamonds ?? 0,
+                                    onWithdraw: _showWithdrawalDialog,
+                                  ),
+                                ],
+                              ],
+                            );
+                          }
+                        },
                       ),
                     ),
-                    SizedBox(height: 8),
-                    if (!isPase) _buildMatchTypeIndicator(),
-                    SizedBox(height: 8),
-                    _buildUserNameSection(),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: _buildNotificationsIcon(),
+                    ),
                   ],
                 ),
               ),
-            ),
 
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  GameModeButton(
-                    imagePath: 'assets/images/icon_play_vs_friend.png',
-                    label: S.of(context).vsFriend,
-                    onPressed: () {
-                      if (!_isDisposed) _showFriendGameDialog(context);
-                    },
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOutBack,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value.clamp(0.0, 1.0),
+                            child: Transform.scale(
+                              scale: value,
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Image.asset(
+                            _getGameAsset(),
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 700),
+                        curve: Curves.easeOutBack,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value.clamp(0.0, 1.0),
+                            child: Transform.translate(
+                              offset: Offset(0, 20 * (1 - value)),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: _buildUserAvatar(),
+                      ),
+                      const SizedBox(height: 14),
+
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 800),
+                        curve: Curves.easeOut,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value,
+                            child: Transform.translate(
+                              offset: Offset(0, 10 * (1 - value)),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Text(
+                          gameType,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                            shadows: [
+                              Shadow(
+                                color: Color(0x40000000),
+                                blurRadius: 6,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Match type + username
+                      if (!isPase) _buildMatchTypeIndicator(),
+                      const SizedBox(height: 10),
+                      _buildUserNameSection(),
+                    ],
                   ),
-                  if (!isPase) ...[
+                ),
+              ),
+
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
                     GameModeButton(
-                      imagePath: 'assets/images/icon_lessons.png',
-                      label: S.of(context).tutorial,
+                      imagePath: 'assets/images/icon_play_vs_friend.png',
+                      label: S.of(context).vsFriend,
+                      animationDelay: 0,
                       onPressed: () {
-                        if (!_isDisposed) _showTutorial(context);
+                        if (!_isDisposed) _showFriendGameDialog(context);
                       },
                     ),
+                    if (!isPase) ...[
+                      GameModeButton(
+                        imagePath: 'assets/images/icon_lessons.png',
+                        label: S.of(context).tutorial,
+                        animationDelay: 1,
+                        onPressed: () {
+                          if (!_isDisposed) _showTutorial(context);
+                        },
+                      ),
+                      GameModeButton(
+                        imagePath: 'assets/images/icon_play_vs_computer.png',
+                        label: S.of(context).vsCpu,
+                        animationDelay: 2,
+                        onPressed: () {
+                          if (!_isDisposed) _showComputerGameDialog(context);
+                        },
+                      ),
+                    ],
                     GameModeButton(
-                      imagePath: 'assets/images/icon_play_vs_computer.png',
-                      label: S.of(context).vsCpu,
+                      imagePath: 'assets/images/icon_play_online.png',
+                      label: S.of(context).online,
+                      animationDelay: isPase ? 1 : 3,
                       onPressed: () {
-                        if (!_isDisposed) _showComputerGameDialog(context);
+                        if (!_isDisposed) _showOnlineGameDialog(context);
                       },
                     ),
                   ],
-                  GameModeButton(
-                    imagePath: 'assets/images/icon_play_online.png',
-                    label: S.of(context).online,
-                    onPressed: () {
-                      if (!_isDisposed) _showOnlineGameDialog(context);
-                    },
-                  ),
-                ],
+                ),
               ),
-            ),
-            const BannerAdWidget(),
-          ],
+              const BannerAdWidget(),
+            ],
+          ),
         ),
       ),
     );
@@ -1394,7 +1531,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Balance número
         Flexible(
           child: Text(
             '$balance',
@@ -1872,7 +2008,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         ),
                         SizedBox(height: 8),
 
-                        // Balance actual
                         Container(
                           padding: EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -1906,8 +2041,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         ),
 
                         SizedBox(height: 20),
-
-                        // Campo de email
                         TextField(
                           controller: emailController,
                           enabled: !isLoading,
@@ -1951,7 +2084,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             ),
                           ),
 
-                          // Botones de monto rápido
                           SizedBox(height: 8),
                           Wrap(
                             spacing: 8,
@@ -2174,7 +2306,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       barrierDismissible: false,
       builder: (context) {
         final isBet = widget.matchType == S.of(context).bet;
-        // En modo apuesta solo existe dificultad máxima para que la CPU gane
         String selectedDifficulty = isBet ? S.of(context).ultraDifficult : S.of(context).normal;
         int selectedCpuCount = 1;
 
@@ -2190,7 +2321,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ── Header fijo ──────────────────────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
                       child: Row(
@@ -2223,8 +2353,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     ),
 
                     const Divider(height: 20),
-
-                    // ── Contenido scrollable ─────────────────────────────
                     Flexible(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -2308,8 +2436,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             ),
 
                             const SizedBox(height: 14),
-
-                            // Selector de dificultad (oculto en modo apuesta — siempre Difícil)
                             if (!isBet) ...[
                               Container(
                                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
@@ -2353,7 +2479,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               ),
                               const SizedBox(height: 14),
                             ] else ...[
-                              // Badge informativo en modo apuesta
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                 decoration: BoxDecoration(
@@ -2386,7 +2511,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               const SizedBox(height: 14),
                             ],
 
-                            // Info card
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
@@ -2417,8 +2541,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-
-                    // ── Botón Empezar siempre visible ────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                       child: SizedBox(

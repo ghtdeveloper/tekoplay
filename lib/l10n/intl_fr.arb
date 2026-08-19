@@ -528,7 +528,10 @@
   "kingStep3Title": "Mouvement diagonal",
   "kingStep3Desc": "Le roi peut également se déplacer en diagonale. Déplacez-le en diagonale.",
   "kingStep4Title": "Toutes les Directions",
-  "kingStep4Desc": "Le roi est polyvalent : horizontal, vertical et diagonal. Déplacez-le comme vous voulez !"
+  "kingStep4Desc": "Le roi est polyvalent : horizontal, vertical et diagonal. Déplacez-le comme vous voulez !",
+  "me": "Moi",
+  "top": "TOP",
+  "winRate": "Taux de victoire"
 
 
 

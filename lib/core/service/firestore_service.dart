@@ -9,6 +9,18 @@ import '../models/game_match.dart';
 import '../models/multiplayer_game_match_chess.dart';
 import '../models/user.dart';
 
+class LeaderboardPage {
+  final List<Map<String, dynamic>> items;
+  final DocumentSnapshot? lastDocument;
+  final bool hasMore;
+
+  const LeaderboardPage({
+    required this.items,
+    required this.lastDocument,
+    required this.hasMore,
+  });
+}
+
 class FirestoreService {
   static final FirestoreService _instance = FirestoreService._internal();
 
@@ -469,20 +481,27 @@ class FirestoreService {
     int limit = 50,
   }) async {
     try {
+      // All where() clauses must come before orderBy()
       Query query = _firestore
           .collection(_gameMatchesCollection)
-          .where('userId', isEqualTo: userId)
-          .orderBy('playedAt', descending: true);
+          .where('userId', isEqualTo: userId);
 
       if (gameType != null) {
         query = query.where('gameType', isEqualTo: gameType.id);
       }
 
-      final snapshot = await query.limit(limit).get();
+      query = query.orderBy('playedAt', descending: true).limit(limit);
+
+      final snapshot = await query.get();
       return snapshot.docs.map((doc) => GameMatch.fromFirestore(doc)).toList();
     } catch (e) {
       if (kDebugMode) {
-        print('Error getting user game history: $e');
+        print('Error getting user game history (gameType: ${gameType?.id}): $e');
+        if (e.toString().contains('index')) {
+          print('⚠️ Missing Firestore composite index. '
+              'Create index for collection "game_matches" with fields: '
+              'userId (Ascending), ${gameType != null ? 'gameType (Ascending), ' : ''}playedAt (Descending)');
+        }
       }
       return [];
     }
@@ -610,6 +629,48 @@ class FirestoreService {
         print('Error getting game leaderboard: $e');
       }
       return [];
+    }
+  }
+
+  Future<LeaderboardPage> getGameLeaderboardPaginated({
+    required GameTypeModel gameType,
+    int pageSize = 20,
+    DocumentSnapshot? startAfterDoc,
+  }) async {
+    try {
+      Query query = _firestore
+          .collection(_usersCollection)
+          .orderBy('gameStats.${gameType.id}.points', descending: true)
+          .limit(pageSize);
+
+      if (startAfterDoc != null) {
+        query = query.startAfterDocument(startAfterDoc);
+      }
+
+      final snapshot = await query.get();
+
+      final items = snapshot.docs.map((doc) {
+        final user = UserModel.fromFirestore(doc);
+        final gameStats = user.getGameStats(gameType);
+        return {
+          'userId': user.id,
+          'userName': user.name,
+          'points': gameStats.points,
+          'gamesPlayed': gameStats.gamesPlayed,
+          'winRate': gameStats.winRate,
+        };
+      }).toList();
+
+      return LeaderboardPage(
+        items: items,
+        lastDocument: snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
+        hasMore: snapshot.docs.length == pageSize,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error getting paginated leaderboard: $e');
+      }
+      return LeaderboardPage(items: [], lastDocument: null, hasMore: false);
     }
   }
 
