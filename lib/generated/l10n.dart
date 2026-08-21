@@ -3649,10 +3649,10 @@ class S {
     );
   }
 
-  /// `El Pase is a special domino mode for 3 or 4 players.\n\nA single hand is played per game, with diamonds only.`
+  /// `El Pase is a special domino mode for 2, 3 or 4 players.\n\nA single hand is played per game, with diamonds only.`
   String get paseWhatBody {
     return Intl.message(
-      'El Pase is a special domino mode for 3 or 4 players.\n\nA single hand is played per game, with diamonds only.',
+      'El Pase is a special domino mode for 2, 3 or 4 players.\n\nA single hand is played per game, with diamonds only.',
       name: 'paseWhatBody',
       desc: '',
       args: [],
@@ -3669,10 +3669,10 @@ class S {
     );
   }
 
-  /// `At the start each player receives 7 tiles. The player with the highest double goes first.\n\nPlace tiles by connecting matching numbers at the ends of the chain.`
+  /// `At the start each player receives 7 tiles. The player with the highest double goes first.\n\nThe game flows counter-clockwise. Place tiles by connecting matching numbers at the ends of the chain.`
   String get paseHowToPlayBody {
     return Intl.message(
-      'At the start each player receives 7 tiles. The player with the highest double goes first.\n\nPlace tiles by connecting matching numbers at the ends of the chain.',
+      'At the start each player receives 7 tiles. The player with the highest double goes first.\n\nThe game flows counter-clockwise. Place tiles by connecting matching numbers at the ends of the chain.',
       name: 'paseHowToPlayBody',
       desc: '',
       args: [],
@@ -3684,10 +3684,10 @@ class S {
     return Intl.message('The Pase!', name: 'paseThePase', desc: '', args: []);
   }
 
-  /// `If you can't play any tile, you must pass your turn. When you pass, each of your rivals pays you a diamond amount.\n\nYou can also pass if there is a total blockage (nobody can play).`
+  /// `If you can't play any tile, you must pass your turn. When you pass, each of your rivals pays you a diamond amount.\n\nOnce a valid pass is made, the turn continues with the next player.`
   String get paseThePaseBody {
     return Intl.message(
-      'If you can\'t play any tile, you must pass your turn. When you pass, each of your rivals pays you a diamond amount.\n\nYou can also pass if there is a total blockage (nobody can play).',
+      'If you can\'t play any tile, you must pass your turn. When you pass, each of your rivals pays you a diamond amount.\n\nOnce a valid pass is made, the turn continues with the next player.',
       name: 'paseThePaseBody',
       desc: '',
       args: [],
@@ -3714,11 +3714,31 @@ class S {
     );
   }
 
-  /// `The player who places all their tiles first wins.\n\nIf the game is blocked (nobody can play), the player with the fewest points in their remaining tiles wins.`
+  /// `The player who places all their tiles first wins.\n\nIf the game is blocked (nobody can play), the player with the FEWEST points in their remaining tiles wins.\n\nIn case of a tie, the player closest to the starting position in turn order wins.`
   String get paseHowToWinBody {
     return Intl.message(
-      'The player who places all their tiles first wins.\n\nIf the game is blocked (nobody can play), the player with the fewest points in their remaining tiles wins.',
+      'The player who places all their tiles first wins.\n\nIf the game is blocked (nobody can play), the player with the FEWEST points in their remaining tiles wins.\n\nIn case of a tie, the player closest to the starting position in turn order wins.',
       name: 'paseHowToWinBody',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Blocked game`
+  String get paseBlockedTitle {
+    return Intl.message(
+      'Blocked game',
+      name: 'paseBlockedTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The game can end when a player runs out of tiles or when the board is blocked.\n\nPoints are counted by adding both sides of each tile. Example: 6-2 and 1-0 = 9 points.\n\nIf tied, the player closest to the starting position wins.`
+  String get paseBlockedBody {
+    return Intl.message(
+      'The game can end when a player runs out of tiles or when the board is blocked.\n\nPoints are counted by adding both sides of each tile. Example: 6-2 and 1-0 = 9 points.\n\nIf tied, the player closest to the starting position wins.',
+      name: 'paseBlockedBody',
       desc: '',
       args: [],
     );

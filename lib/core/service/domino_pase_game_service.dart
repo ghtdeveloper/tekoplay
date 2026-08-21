@@ -51,6 +51,7 @@ class DominoPaseGameService {
         gameSettings: {
           'isOnlineMatchmaking': isOnlineMatchmaking,
           'gameMode': 'pase',
+          'firstPlayer': firstTurn,
           'passValue': passValue(betAmount),
           'commissionAmount': commission(betAmount, numberOfPlayers),
           'requiredBalance': requiredBalance(betAmount),
@@ -435,8 +436,26 @@ class DominoPaseGameService {
           }
           final minPips =
               pipCounts.values.reduce((a, b) => a < b ? a : b);
-          final winnerNum =
-              pipCounts.entries.firstWhere((e) => e.value == minPips).key;
+          final tiedPlayers = pipCounts.entries
+              .where((e) => e.value == minPips)
+              .map((e) => e.key)
+              .toList();
+
+          int winnerNum;
+          if (tiedPlayers.length == 1) {
+            winnerNum = tiedPlayers.first;
+          } else {
+            final firstPlayerStr =
+                game.gameSettings?['firstPlayer'] as String? ?? 'player1';
+            final firstNum =
+                int.tryParse(firstPlayerStr.replaceAll('player', '')) ?? 1;
+            tiedPlayers.sort((a, b) {
+              final distA = ((a - firstNum) % nPlayers + nPlayers) % nPlayers;
+              final distB = ((b - firstNum) % nPlayers + nPlayers) % nPlayers;
+              return distA.compareTo(distB);
+            });
+            winnerNum = tiedPlayers.first;
+          }
           final winnerId = game.playerIdOf(winnerNum);
 
           updates['status'] = 'finished';
@@ -603,7 +622,6 @@ class DominoPaseGameService {
           }
         }
 
-        // ── ALL WRITES AFTER READS ──
         transaction.update(gameRef, {
           'gameSettings.rematchAccepted': rematch,
         });

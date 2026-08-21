@@ -1574,7 +1574,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             onPressed: () {
               if (matchType == S.of(context).fun) {
                 _showCoinPurchaseDialog();
-              } else if (matchType == S.of(context).bet) {
+              } else if (matchType == S.of(context).bet || isPase) {
                 _showDiamondPurchaseDialog();
               }
             },

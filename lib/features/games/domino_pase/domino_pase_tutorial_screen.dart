@@ -43,6 +43,12 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
       highlight: null,
     ),
     _TutorialPage(
+      emoji: '🔒',
+      title: s.paseBlockedTitle,
+      body: s.paseBlockedBody,
+      highlight: null,
+    ),
+    _TutorialPage(
       emoji: '💎',
       title: s.paseBetTitle,
       body: s.paseBetBody,
@@ -56,7 +62,7 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
     super.dispose();
   }
 
-  static const int _pageCount = 5;
+  static const int _pageCount = 6;
 
   void _next() {
     if (_page < _pageCount - 1) {

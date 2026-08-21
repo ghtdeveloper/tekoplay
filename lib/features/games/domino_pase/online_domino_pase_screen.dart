@@ -8,9 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/domino_game_match.dart';
+import '../../../core/service/auth_service.dart';
 import '../../../core/service/domino_pase_game_service.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/service/payment_service.dart';
 import '../../../core/utils/game_result.dart';
+import '../../coins/diamond_purchase_dialog.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
@@ -72,9 +75,11 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
   Timer? _turnTimer;
   int _turnSecondsLeft = 30;
   Timer? _opponentTimer;
-  int _opponentSecondsLeft = 60;
+  int _opponentSecondsLeft = 25;
   Timer? _awayTimer;
   int _awaySecondsLeft = 60;
+  int _opponentConsecutiveTimeouts = 0;
+  String? _lastTimeoutPlayer;
   final ScrollController _chainScrollCtrl = ScrollController();
   bool _isScreenKeepOnActive = false;
   int _unreadChatCount = 0;
@@ -119,7 +124,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
       WakelockPlus.disable();
       if (!_gameEnded && _activeGameId != null) {
         _stopTurnTimer();
-        _awaySecondsLeft = 60;
+        _awaySecondsLeft = 25;
         _awayTimer = Timer.periodic(const Duration(seconds: 1), (t) {
           _awaySecondsLeft--;
           if (_awaySecondsLeft <= 0) {
@@ -163,6 +168,51 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
         _userDiamonds = (d['diamonds'] as num?)?.toInt() ?? 0;
       });
     });
+  }
+
+  void _showDiamondPurchaseDialog() {
+    showDiamondPurchaseDialog(
+      context,
+      onPurchase: (diamondAmount, price) {
+        _processDiamondPurchase(diamondAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processDiamondPurchase(int diamonds, double price) async {
+    final notAvailableMsg = S.of(context).googlePayNotAvailable;
+    final diamondsLabel = S.of(context).diamonds;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
+    try {
+      final paymentService = PaymentService();
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(notAvailableMsg), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      final result = await paymentService.makePayment(
+        label: '$diamonds $diamondsLabel',
+        amount: price,
+        productId: 'diamonds_$diamonds',
+      );
+      if (result != null && result['success'] == true) {
+        await AuthService().addDiamonds(diamonds);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successMsg +$diamonds $diamondsLabel'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error en compra: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _enableWakeLock() async {
@@ -532,7 +582,12 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
   void _startOpponentTimer() {
     _opponentTimer?.cancel();
-    _opponentSecondsLeft = 60;
+    final currentTurn = _currentGame?.currentTurn;
+    if (currentTurn != _lastTimeoutPlayer) {
+      _opponentConsecutiveTimeouts = 0;
+      _lastTimeoutPlayer = currentTurn;
+    }
+    _opponentSecondsLeft = 25;
     _opponentTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted || _gameEnded) {
         t.cancel();
@@ -541,7 +596,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
       setState(() => _opponentSecondsLeft--);
       if (_opponentSecondsLeft <= 0) {
         t.cancel();
-        _abandonInactiveOpponent();
+        _handleOpponentTimeout();
       }
     });
   }
@@ -549,6 +604,15 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
   void _stopOpponentTimer() {
     _opponentTimer?.cancel();
     _opponentTimer = null;
+  }
+
+  void _handleOpponentTimeout() {
+    _opponentConsecutiveTimeouts++;
+    if (_opponentConsecutiveTimeouts < 3) {
+      _startOpponentTimer();
+      return;
+    }
+    _abandonInactiveOpponent();
   }
 
   Future<void> _abandonInactiveOpponent() async {
@@ -913,6 +977,31 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
             if (!inGame)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${_userDiamonds ?? 0}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.diamond, color: Colors.white, size: 16),
+                      SizedBox(
+                        width: 32, height: 32,
+                        child: IconButton(
+                          icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
+                          padding: EdgeInsets.zero,
+                          onPressed: _showDiamondPurchaseDialog,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (!inGame)
               IconButton(
                 icon: const Icon(Icons.help_outline, color: Colors.white),
                 tooltip: S.of(context).tutorial,
@@ -1040,16 +1129,16 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
           Text(S.of(context).howManyPlayers, style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [2, 3, 4].map((n) {
               final sel = _selectedPlayerCount == n;
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+              return Expanded(
+                child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: GestureDetector(
                   onTap: () => setState(() => _selectedPlayerCount = n),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    width: 100, height: 96,
+                    height: 96,
                     decoration: BoxDecoration(
                       color: sel ? _accentColor : _panelColor,
                       borderRadius: BorderRadius.circular(16),
@@ -1067,6 +1156,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                     ),
                   ),
                 ),
+              ),
               );
             }).toList(),
           ),
@@ -1353,7 +1443,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
           Positioned(
             left: 8,
             bottom: 100,
-            child: _buildMyPanel(isMyTurn, myPaid),
+            child: _buildMyPanel(isMyTurn, myReceived, myPaid),
           ),
           if (_flyingTileData != null) _buildPlayerFlyOverlay(),
           if (_gameEnded && _currentGame != null) _buildGameOverOverlay(_currentGame!),
@@ -1411,18 +1501,6 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
                           ),
                         ),
                       ],
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: opp.handCount > 0 ? _accentColor : Colors.white24,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '${opp.handCount}',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ),
                       if (opp.isActive && _opponentTimer != null) ...[
                         const SizedBox(width: 4),
                         Text(
@@ -1595,7 +1673,8 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
     );
   }
 
-  Widget _buildMyPanel(bool isActive, int passCount) {
+  Widget _buildMyPanel(bool isActive, int myReceived, int myPaid) {
+    final passNet = myReceived - myPaid;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
@@ -1613,13 +1692,16 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(_myName ?? 'Yo', style: const TextStyle(color: Colors.white70, fontSize: 9)),
-              if (passCount > 0)
-                Text(
-                  'Pases: $passCount',
-                  style: TextStyle(
-                    color: Colors.orange[300],
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+              if (myReceived > 0 || myPaid > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: passNet >= 0 ? Colors.green.shade800 : Colors.red.shade800,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${passNet >= 0 ? '+' : ''}$passNet',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
               if (isActive && _turnTimer != null)

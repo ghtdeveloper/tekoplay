@@ -623,17 +623,21 @@ class MessageLookup extends MessageLookupByLibrary {
       "Diamonds only — no coins",
     ),
     "paseBetTitle": MessageLookupByLibrary.simpleMessage("The Bet"),
+    "paseBlockedBody": MessageLookupByLibrary.simpleMessage(
+      "The game can end when a player runs out of tiles or when the board is blocked.\n\nPoints are counted by adding both sides of each tile. Example: 6-2 and 1-0 = 9 points.\n\nIf tied, the player closest to the starting position wins.",
+    ),
+    "paseBlockedTitle": MessageLookupByLibrary.simpleMessage("Blocked game"),
     "paseHowToPlay": MessageLookupByLibrary.simpleMessage("How to play"),
     "paseHowToPlayBody": MessageLookupByLibrary.simpleMessage(
-      "At the start each player receives 7 tiles. The player with the highest double goes first.\n\nPlace tiles by connecting matching numbers at the ends of the chain.",
+      "At the start each player receives 7 tiles. The player with the highest double goes first.\n\nThe game flows counter-clockwise. Place tiles by connecting matching numbers at the ends of the chain.",
     ),
     "paseHowToWin": MessageLookupByLibrary.simpleMessage("How to win?"),
     "paseHowToWinBody": MessageLookupByLibrary.simpleMessage(
-      "The player who places all their tiles first wins.\n\nIf the game is blocked (nobody can play), the player with the fewest points in their remaining tiles wins.",
+      "The player who places all their tiles first wins.\n\nIf the game is blocked (nobody can play), the player with the FEWEST points in their remaining tiles wins.\n\nIn case of a tie, the player closest to the starting position in turn order wins.",
     ),
     "paseThePase": MessageLookupByLibrary.simpleMessage("The Pase!"),
     "paseThePaseBody": MessageLookupByLibrary.simpleMessage(
-      "If you can\'t play any tile, you must pass your turn. When you pass, each of your rivals pays you a diamond amount.\n\nYou can also pass if there is a total blockage (nobody can play).",
+      "If you can\'t play any tile, you must pass your turn. When you pass, each of your rivals pays you a diamond amount.\n\nOnce a valid pass is made, the turn continues with the next player.",
     ),
     "paseThePaseHighlight": MessageLookupByLibrary.simpleMessage(
       "Passing can be profitable!",
@@ -642,7 +646,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "How to play — El Pase",
     ),
     "paseWhatBody": MessageLookupByLibrary.simpleMessage(
-      "El Pase is a special domino mode for 3 or 4 players.\n\nA single hand is played per game, with diamonds only.",
+      "El Pase is a special domino mode for 2, 3 or 4 players.\n\nA single hand is played per game, with diamonds only.",
     ),
     "paseWhatIsIt": MessageLookupByLibrary.simpleMessage("What is El Pase?"),
     "pass": MessageLookupByLibrary.simpleMessage("Pass"),
