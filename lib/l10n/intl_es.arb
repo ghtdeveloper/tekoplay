@@ -375,7 +375,7 @@
   "cancelRoom": "Cancelar sala",
   "errorCreatingRoom": "Error al crear la sala. Intenta de nuevo.",
   "realPlayersOnly": "Solo jugadores reales",
-  "realPlayersNoBots": "Solo jugadores reales - sin bots",
+  "realPlayersNoBots": "Solo jugadores reales",
   "passAutomatic": "Sin opciones, pasas automáticamente",
   "youHavePlayableTiles": "Tienes fichas jugables",
   "tileDoesntConnect": "Esta ficha no conecta con los extremos",

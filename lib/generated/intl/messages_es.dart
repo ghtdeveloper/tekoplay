@@ -811,7 +811,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "quickAmounts": MessageLookupByLibrary.simpleMessage("Cantidades rápidas:"),
     "ranking": MessageLookupByLibrary.simpleMessage("Clasificación"),
     "realPlayersNoBots": MessageLookupByLibrary.simpleMessage(
-      "Solo jugadores reales - sin bots",
+      "Solo jugadores reales",
     ),
     "realPlayersOnly": MessageLookupByLibrary.simpleMessage(
       "Solo jugadores reales",

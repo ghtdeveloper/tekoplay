@@ -21,6 +21,7 @@ import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import 'domino_pase_tutorial_screen.dart';
+import '../../settings/settings_screen.dart';
 import '../../../generated/l10n.dart';
 
 enum _FriendPaseState { setup, waitingRoom, gameActive }
@@ -127,6 +128,14 @@ class _MultiplayerDominoPaseScreenState
       DeviceOrientation.portraitDown,
     ]);
     WidgetsBinding.instance.addObserver(this);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.isAnonymous) {
+        _showLoginRequiredDialog();
+      }
+    });
+
     _loadUserData();
 
     if (widget.gameId != null) {
@@ -158,6 +167,75 @@ class _MultiplayerDominoPaseScreenState
         });
       }
     }
+  }
+
+  void _showLoginRequiredDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_outline, size: 48, color: Color(0xFFEC7A34)),
+              const SizedBox(height: 16),
+              Text(
+                S.of(context).loginRequired,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${S.of(context).toUse} ${S.of(context).vsFriend} ${S.of(context).youNeedToLogin}',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        Navigator.of(context).pop();
+                      },
+                      child: Text(S.of(context).cancel),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                        );
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user == null || user.isAnonymous) {
+                          if (mounted) Navigator.of(context).pop();
+                        } else {
+                          _loadUserData();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEC7A34),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(S.of(context).login),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadUserData() async {
@@ -1577,10 +1655,6 @@ class _MultiplayerDominoPaseScreenState
                             : Colors.black45,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(S.of(context).realPlayersOnly,
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.purple)),
                   ] else ...[
                     const Icon(Icons.check_circle,
                         color: Colors.green, size: 28),
@@ -1643,7 +1717,6 @@ class _MultiplayerDominoPaseScreenState
     final opponents = <({
       int playerNum,
       String name,
-      int handCount,
       bool isActive,
       String? playerId,
       int passReceived,
@@ -1663,7 +1736,6 @@ class _MultiplayerDominoPaseScreenState
       opponents.add((
         playerNum: p,
         name: game.playerNameOf(p),
-        handCount: game.gameState.handOf(p).length,
         isActive: game.currentTurn == 'player$p',
         playerId: pid,
         passReceived: (pPayments?['received'] as int?) ?? 0,
@@ -1699,7 +1771,6 @@ class _MultiplayerDominoPaseScreenState
     List<({
       int playerNum,
       String name,
-      int handCount,
       bool isActive,
       String? playerId,
       int passReceived,
@@ -1707,9 +1778,6 @@ class _MultiplayerDominoPaseScreenState
     })>
         opponents,
   ) {
-    final tileW = opponents.length > 1 ? 16.0 : 20.0;
-    final tileH = opponents.length > 1 ? 30.0 : 38.0;
-
     return Container(
       height: 80,
       color: const Color(0xFF1A0A2E),
@@ -1755,8 +1823,8 @@ class _MultiplayerDominoPaseScreenState
                           decoration: BoxDecoration(
                             color:
                                 (opp.passReceived - opp.passPaid) >= 0
-                                    ? Colors.green.shade800
-                                    : Colors.red.shade800,
+                                    ? Colors.red.shade800
+                                    : Colors.green.shade800,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -1783,25 +1851,7 @@ class _MultiplayerDominoPaseScreenState
                       ],
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Expanded(
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: List.generate(
-                        opp.handCount,
-                        (_) => Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 2),
-                          child: DominoTileWidget(
-                              left: 0,
-                              right: 0,
-                              width: tileW,
-                              height: tileH,
-                              faceDown: true),
-                        ),
-                      ),
-                    ),
-                  ),
+                  const Spacer(),
                 ],
               ),
             ),
