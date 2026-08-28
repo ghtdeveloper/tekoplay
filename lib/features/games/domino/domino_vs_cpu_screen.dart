@@ -901,13 +901,8 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         final userData = await _firestoreService.getUser(_currentUser!.uid);
         if (userData != null && mounted) {
           if (isBet) {
-            final newDiamonds = userData.diamonds + prize;
-            await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
-            final netGain = prize - gameCost;
-            if (netGain > 0) {
-              final newDiamondsEarned = userData.diamondsEarned + netGain;
-              await _firestoreService.updateUserDiamondsEarned(_currentUser!.uid, newDiamondsEarned);
-            }
+            final newDiamondsEarned = userData.diamondsEarned + prize;
+            await _firestoreService.updateUserDiamondsEarned(_currentUser!.uid, newDiamondsEarned);
           } else {
             final newCoins = userData.coins + prize;
             await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);

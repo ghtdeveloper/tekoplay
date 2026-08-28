@@ -131,79 +131,9 @@ class DominoPaseGameService {
 
       if (joinResult == null) return false;
 
-      final willBeActive = joinResult['willBeActive'] as bool;
-      final betAmount = joinResult['betAmount'] as int? ?? 0;
-      final nPlayers = joinResult['numberOfPlayers'] as int;
-      final slotField = joinResult['slotField'] as String;
-
-      if (willBeActive && betAmount > 0) {
-        try {
-          await _firestore.runTransaction((transaction) async {
-            final doc = await transaction.get(gameRef);
-            if (!doc.exists) throw Exception('Game not found');
-            final game = DominoGameMatch.fromFirestore(doc);
-            if (game.quotasCollected) return; // idempotente
-
-            final required = requiredBalance(betAmount);
-            final commissionAmt = commission(betAmount, nPlayers);
-
-            final playerIds = <String>[
-              game.hostId,
-              if (game.guestId != null) game.guestId!,
-              if (game.guest2Id != null) game.guest2Id!,
-              if (game.guest3Id != null) game.guest3Id!,
-            ];
-
-            final playerDocs = <DocumentSnapshot>[];
-            for (final pid in playerIds) {
-              playerDocs.add(await transaction
-                  .get(_firestore.collection('users').doc(pid)));
-            }
-
-            for (int i = 0; i < playerIds.length; i++) {
-              final data = playerDocs[i].data() as Map<String, dynamic>?;
-              final balance = (data?['diamonds'] as num?)?.toInt() ?? 0;
-              if (balance < required) {
-                throw Exception(
-                    'Player ${playerIds[i]} insufficient diamonds ($balance < $required)');
-              }
-            }
-
-            for (int i = 0; i < playerIds.length; i++) {
-              transaction.update(playerDocs[i].reference, {
-                'diamonds': FieldValue.increment(-required),
-              });
-            }
-
-            transaction.update(gameRef, {
-              'quotasCollected': true,
-              'quotasCollectedAt': FieldValue.serverTimestamp(),
-              'totalPot': required * playerIds.length,
-              'gameSettings.commissionAmount': commissionAmt,
-            });
-          });
-        } catch (e) {
-          if (kDebugMode) print('Error collecting pase quotas: $e');
-          await _firestore.runTransaction((transaction) async {
-            final doc = await transaction.get(gameRef);
-            if (!doc.exists) return;
-            final slotValue = doc.data()?[slotField];
-            if (slotValue != guestId) return;
-            final rollback = <String, dynamic>{
-              'status': 'waiting',
-              'startedAt': null,
-              slotField: null,
-              slotField.replaceAll('Id', 'Name'): null,
-            };
-            if (slotField == 'guestId') {
-              rollback['guestPhotoUrl'] = null;
-              rollback['guestQuota'] = null;
-            }
-            transaction.update(gameRef, rollback);
-          });
-          return false;
-        }
-      }
+      // Quotas are now collected on first playTile (when chain is empty),
+      // not on join. This ensures diamonds are only deducted once tiles
+      // are actually on the board.
 
       return true;
     } catch (e) {
@@ -275,6 +205,52 @@ class DominoPaseGameService {
         int? newRightOpen = rightOpen;
 
         if (chain.isEmpty) {
+          // --- Collect quotas on first tile played ---
+          if (!game.quotasCollected) {
+            final betAmount = game.betAmount ?? 0;
+            if (betAmount > 0) {
+              final nPlayers = game.numberOfPlayers;
+              final required = requiredBalance(betAmount);
+              final commissionAmt = commission(betAmount, nPlayers);
+
+              final playerIds = <String>[
+                game.hostId,
+                if (game.guestId != null) game.guestId!,
+                if (game.guest2Id != null) game.guest2Id!,
+                if (game.guest3Id != null) game.guest3Id!,
+              ];
+
+              final playerDocs = <DocumentSnapshot>[];
+              for (final pid in playerIds) {
+                playerDocs.add(await transaction
+                    .get(_firestore.collection('users').doc(pid)));
+              }
+
+              for (int i = 0; i < playerIds.length; i++) {
+                final data =
+                    playerDocs[i].data() as Map<String, dynamic>?;
+                final balance =
+                    (data?['diamonds'] as num?)?.toInt() ?? 0;
+                if (balance < required) {
+                  return false;
+                }
+              }
+
+              for (int i = 0; i < playerIds.length; i++) {
+                transaction.update(playerDocs[i].reference, {
+                  'diamonds': FieldValue.increment(-required),
+                });
+              }
+
+              transaction.update(gameRef, {
+                'quotasCollected': true,
+                'quotasCollectedAt': FieldValue.serverTimestamp(),
+                'totalPot': required * playerIds.length,
+                'gameSettings.commissionAmount': commissionAmt,
+              });
+            }
+          }
+
           final currentHand = game.getHand(playerNum);
           int maxDouble = -1;
           for (final id in currentHand) {

@@ -875,11 +875,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     if (isCoins) {
       await _firestoreService.incrementUserCoins(_currentUser!.uid, prize);
     } else {
-      await _firestoreService.incrementUserDiamonds(_currentUser!.uid, prize);
-      final netGain = prize - betAmount;
-      if (netGain > 0) {
-        await _firestoreService.incrementUserDiamondsEarned(_currentUser!.uid, netGain);
-      }
+      await _firestoreService.incrementUserDiamondsEarned(_currentUser!.uid, prize);
     }
   }
 

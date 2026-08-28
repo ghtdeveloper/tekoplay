@@ -586,14 +586,12 @@ exports.distributeOnlineBetGameRewards = onDocumentUpdated(
         // FieldValue.increment — atómico, no requiere leer el balance actual
         if (hostReward > 0) {
           transaction.update(hostRef, {
-            diamonds:       admin.firestore.FieldValue.increment(hostReward),
-            diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, hostNetGain)),
+            diamondsEarned: admin.firestore.FieldValue.increment(hostReward),
           });
         }
         if (guestReward > 0) {
           transaction.update(guestRef, {
-            diamonds:       admin.firestore.FieldValue.increment(guestReward),
-            diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, guestNetGain)),
+            diamondsEarned: admin.firestore.FieldValue.increment(guestReward),
           });
         }
 
@@ -724,7 +722,7 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
             if (isCoins) {
               transaction.update(playerRef, { coins: admin.firestore.FieldValue.increment(betAmount) });
             } else {
-              transaction.update(playerRef, { diamonds: admin.firestore.FieldValue.increment(betAmount) });
+              transaction.update(playerRef, { diamondsEarned: admin.firestore.FieldValue.increment(betAmount) });
             }
             console.log(`   ↩️ Reembolso a ${playerId}: +${betAmount} ${currencyType}`);
           }
@@ -772,8 +770,7 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
           transaction.update(winnerRef, { coins: admin.firestore.FieldValue.increment(winnerPrize) });
         } else {
           transaction.update(winnerRef, {
-            diamonds: admin.firestore.FieldValue.increment(winnerPrize),
-            diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, winnerNetGain)),
+            diamondsEarned: admin.firestore.FieldValue.increment(winnerPrize),
           });
         }
 
@@ -911,8 +908,7 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
           transaction.update(winnerRef, { coins: admin.firestore.FieldValue.increment(winnerPrize) });
         } else {
           transaction.update(winnerRef, {
-            diamonds: admin.firestore.FieldValue.increment(winnerPrize),
-            diamondsEarned: admin.firestore.FieldValue.increment(Math.max(0, winnerNetGain)),
+            diamondsEarned: admin.firestore.FieldValue.increment(winnerPrize),
           });
         }
 

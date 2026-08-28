@@ -87,7 +87,7 @@ class _MultiplayerDominoPaseScreenState
   Timer? _turnTimer;
   int _turnSecondsLeft = 30;
   Timer? _opponentTimer;
-  int _opponentSecondsLeft = 25;
+  int _opponentSecondsLeft = 30;
   Timer? _awayTimer;
   int _awaySecondsLeft = 60;
   int _opponentConsecutiveTimeouts = 0;
@@ -95,9 +95,17 @@ class _MultiplayerDominoPaseScreenState
   Timer? _waitingTimer;
   int _waitingSeconds = 0;
   // Rematch
+  bool _gameOverMinimized = false;
   bool _rematchRequested = false;
   bool _waitingForRematch = false;
   DateTime? _gameStartedAt;
+
+  // Chat bubbles
+  String? _lastMsgSenderId;
+  String? _lastMsgText;
+  String? _ownMsgText;
+  Timer? _msgBubbleTimer;
+  Timer? _ownMsgBubbleTimer;
 
   static const Color _accentColor = Color(0xFF9C27B0);
   static const Color _panelColor = Colors.white;
@@ -343,6 +351,8 @@ class _MultiplayerDominoPaseScreenState
     _turnTimer?.cancel();
     _opponentTimer?.cancel();
     _awayTimer?.cancel();
+    _msgBubbleTimer?.cancel();
+    _ownMsgBubbleTimer?.cancel();
     _chainScrollCtrl.dispose();
     _playerFlyAnimCtrl.dispose();
     _mandatoryTileAnimCtrl.dispose();
@@ -393,6 +403,7 @@ class _MultiplayerDominoPaseScreenState
 
       if (game.isFinished || game.isAbandoned) {
         _stopTurnTimer();
+        _stopOpponentTimer();
         setState(() {
           _currentGame = game;
           _gameEnded = true;
@@ -444,6 +455,8 @@ class _MultiplayerDominoPaseScreenState
       } else {
         _autoPassPending = false;
         _stopTurnTimer();
+        _opponentConsecutiveTimeouts = 0;
+        _lastTimeoutPlayer = null;
         _startOpponentTimer();
       }
     });
@@ -477,7 +490,7 @@ class _MultiplayerDominoPaseScreenState
       _opponentConsecutiveTimeouts = 0;
       _lastTimeoutPlayer = currentTurn;
     }
-    _opponentSecondsLeft = 25;
+    _opponentSecondsLeft = 30;
     _opponentTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted || _gameEnded) {
         t.cancel();
@@ -780,12 +793,15 @@ class _MultiplayerDominoPaseScreenState
       return;
     }
     final s = S.of(context);
+    final quotasCollected = _currentGame?.quotasCollected ?? false;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(s.abandonGame),
-        content: Text(s.abandonWarningPase),
+        content: Text(quotasCollected
+            ? s.abandonWarningPase
+            : s.abandonGameWarning),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -1260,6 +1276,33 @@ class _MultiplayerDominoPaseScreenState
                 onUnreadCountChanged: (c) {
                   if (mounted) setState(() => _unreadChatCount = c);
                 },
+                onNewMessageFromOther: (senderId, _) {
+                  if (!mounted) return;
+                  setState(() => _lastMsgSenderId = senderId);
+                  _msgBubbleTimer?.cancel();
+                  _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() => _lastMsgSenderId = null);
+                  });
+                },
+                onNewMessageWithText: (senderId, _, text) {
+                  if (!mounted) return;
+                  setState(() {
+                    _lastMsgSenderId = senderId;
+                    _lastMsgText = text;
+                  });
+                  _msgBubbleTimer?.cancel();
+                  _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() { _lastMsgSenderId = null; _lastMsgText = null; });
+                  });
+                },
+                onOwnMessageSent: (text) {
+                  if (!mounted) return;
+                  setState(() => _ownMsgText = text);
+                  _ownMsgBubbleTimer?.cancel();
+                  _ownMsgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() => _ownMsgText = null);
+                  });
+                },
               ),
           ],
         ),
@@ -1358,15 +1401,16 @@ class _MultiplayerDominoPaseScreenState
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [2, 3, 4].map((n) {
               final sel = _selectedPlayerCount == n;
-              return Expanded(
-                child: Padding(
+              return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: GestureDetector(
                   onTap: () => setState(() => _selectedPlayerCount = n),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
+                    width: 90,
                     height: 96,
                     decoration: BoxDecoration(
                       color: sel ? _accentColor : _panelColor,
@@ -1408,7 +1452,6 @@ class _MultiplayerDominoPaseScreenState
                     ),
                   ),
                 ),
-              ),
               );
             }).toList(),
           ),
@@ -1748,7 +1791,7 @@ class _MultiplayerDominoPaseScreenState
         children: [
           Column(
             children: [
-              _buildOpponentHeader(opponents),
+              _buildOpponentHeader(opponents, state),
               _buildChainArea(state),
               _buildPlayerFooter(
                   myHand, state, isMyTurn, canPass, myReceived, myPaid),
@@ -1759,9 +1802,32 @@ class _MultiplayerDominoPaseScreenState
             bottom: 100,
             child: _buildMyPanel(isMyTurn, myReceived, myPaid),
           ),
+          if (_ownMsgText != null)
+            Positioned(
+              right: 12,
+              bottom: 110,
+              child: _buildChatBubble(_ownMsgText!, isMe: true),
+            ),
+          for (final entry in opponents.asMap().entries)
+            if (_lastMsgText != null && entry.value.playerId == _lastMsgSenderId)
+              Positioned(
+                top: 80,
+                left: entry.key * (MediaQuery.of(context).size.width / opponents.length) + 8,
+                child: _buildChatBubble(_lastMsgText!, isMe: false),
+              ),
           if (_flyingTileData != null) _buildPlayerFlyOverlay(),
-          if (_gameEnded && _currentGame != null)
+          if (_gameEnded && _currentGame != null && !_gameOverMinimized)
             _buildGameOverOverlay(_currentGame!),
+          if (_gameEnded && _gameOverMinimized)
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: FloatingActionButton.small(
+                backgroundColor: _accentColor,
+                onPressed: () => setState(() => _gameOverMinimized = false),
+                child: const Icon(Icons.expand_less, color: Colors.white),
+              ),
+            ),
         ],
       ),
     );
@@ -1777,7 +1843,11 @@ class _MultiplayerDominoPaseScreenState
       int passPaid
     })>
         opponents,
+    DominoGameState state,
   ) {
+    final tileW = opponents.length > 1 ? 16.0 : 20.0;
+    final tileH = opponents.length > 1 ? 30.0 : 38.0;
+
     return Container(
       height: 80,
       color: const Color(0xFF1A0A2E),
@@ -1841,7 +1911,7 @@ class _MultiplayerDominoPaseScreenState
                         Text(
                           '⏱$_opponentSecondsLeft"',
                           style: TextStyle(
-                            color: _opponentSecondsLeft <= 15
+                            color: _opponentSecondsLeft <= 10
                                 ? Colors.red[300]
                                 : Colors.orange[300],
                             fontSize: 9,
@@ -1851,7 +1921,19 @@ class _MultiplayerDominoPaseScreenState
                       ],
                     ],
                   ),
-                  const Spacer(),
+                  const SizedBox(height: 4),
+                  Expanded(
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: List.generate(
+                        state.handOf(opp.playerNum).length,
+                        (_) => Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1),
+                          child: DominoTileWidget(left: 0, right: 0, width: tileW, height: tileH, faceDown: true),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2077,6 +2159,35 @@ class _MultiplayerDominoPaseScreenState
     );
   }
 
+  Widget _buildChatBubble(String text, {required bool isMe}) {
+    final isEmoji = text.characters.length <= 3 && !text.contains(RegExp(r'[a-zA-Z0-9]'));
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('bubble_${isMe ? 'me' : 'other'}_$text'),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutBack,
+      builder: (_, v, child) => Transform.scale(scale: v.clamp(0.0, 1.0), child: child),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 150),
+        padding: EdgeInsets.symmetric(horizontal: isEmoji ? 6 : 10, vertical: isEmoji ? 4 : 6),
+        decoration: BoxDecoration(
+          color: isMe ? _accentColor : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: isEmoji ? 28 : 13,
+            color: isMe ? Colors.white : Colors.black87,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPlayerFlyOverlay() {
     final t = _flyingTileData!;
     return Positioned.fill(
@@ -2108,6 +2219,10 @@ class _MultiplayerDominoPaseScreenState
   }
 
   Widget _buildGameOverOverlay(DominoGameMatch game) {
+    if (!game.quotasCollected) {
+      return _buildNoQuotasGameOverOverlay(game);
+    }
+
     final bool iWon = game.winnerId == _currentUser!.uid;
     final String title =
         iWon ? S.of(context).youWonHand : S.of(context).youLostHand;
@@ -2130,8 +2245,9 @@ class _MultiplayerDominoPaseScreenState
     final myPassNet = ((myPayments?['received'] as int?) ?? 0) -
         ((myPayments?['paid'] as int?) ?? 0);
 
-    final totalResult =
-        iWon ? (winnerPrize - required + myPassNet) : (-required + myPassNet);
+    final totalResult = game.quotasCollected
+        ? (iWon ? (winnerPrize - required + myPassNet) : (-required + myPassNet))
+        : 0;
 
     final playerTiles =
         <({String name, int pips, int tileCount})>[];
@@ -2187,13 +2303,26 @@ class _MultiplayerDominoPaseScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            GestureDetector(
+              onTap: () => setState(() => _gameOverMinimized = true),
+              child: Container(
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
                     color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 10),
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => setState(() => _gameOverMinimized = true),
+                child: const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.expand_more, color: Colors.white38, size: 22),
+                ),
+              ),
+            ),
             Text(title,
                 style: TextStyle(
                     color: titleColor,
@@ -2337,6 +2466,76 @@ class _MultiplayerDominoPaseScreenState
                       borderRadius: BorderRadius.circular(12)),
                   padding:
                       const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: Text(S.of(context).exit,
+                    style: const TextStyle(fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoQuotasGameOverOverlay(DominoGameMatch game) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xF20D0A1E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+                color: Color(0x88000000),
+                blurRadius: 16,
+                offset: Offset(0, -4))
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: () => setState(() => _gameOverMinimized = true),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => setState(() => _gameOverMinimized = true),
+                child: const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.expand_more, color: Colors.white38, size: 22),
+                ),
+              ),
+            ),
+            const Icon(Icons.info_outline, color: Colors.orange, size: 40),
+            const SizedBox(height: 12),
+            Text(S.of(context).playerAbandonedGame,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white24),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 child: Text(S.of(context).exit,
                     style: const TextStyle(fontSize: 15)),

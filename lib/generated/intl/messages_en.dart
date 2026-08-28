@@ -743,11 +743,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "quickAmounts": MessageLookupByLibrary.simpleMessage("Quick amounts:"),
     "ranking": MessageLookupByLibrary.simpleMessage("Ranking"),
     "realPlayersNoBots": MessageLookupByLibrary.simpleMessage(
-      "Real players only - no bots",
+      "Search players ",
     ),
-    "realPlayersOnly": MessageLookupByLibrary.simpleMessage(
-      "Real players only",
-    ),
+    "realPlayersOnly": MessageLookupByLibrary.simpleMessage("Search players"),
     "reconnecting": MessageLookupByLibrary.simpleMessage("Reconnecting..."),
     "recovered": MessageLookupByLibrary.simpleMessage("Recovered"),
     "reject": MessageLookupByLibrary.simpleMessage("Reject"),
@@ -791,7 +789,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Searching opponent",
     ),
     "searchingRealPlayers": MessageLookupByLibrary.simpleMessage(
-      "Searching for real players...",
+      "Searching for players...",
     ),
     "seconds": MessageLookupByLibrary.simpleMessage("seconds"),
     "selectGameTime": MessageLookupByLibrary.simpleMessage("Select game time"),

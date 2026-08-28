@@ -1615,12 +1615,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               ? (betAmount * playerCount * 0.9).floor()
               : (betAmount * playerCount * 0.7).floor());
       if (isBet) {
-        _firestoreService.incrementUserDiamonds(_currentUser!.uid, prize);
-        final netGain = prize - betAmount;
-        if (netGain > 0) {
-          _firestoreService.incrementUserDiamondsEarned(_currentUser!.uid, netGain);
-        }
-        if (mounted) setState(() => _userDiamonds = (_userDiamonds ?? 0) + prize);
+        _firestoreService.incrementUserDiamondsEarned(_currentUser!.uid, prize);
       } else {
         _firestoreService.incrementUserCoins(_currentUser!.uid, prize);
         if (mounted) setState(() => _userCoins = (_userCoins ?? 0) + prize);

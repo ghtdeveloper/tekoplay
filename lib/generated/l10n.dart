@@ -3084,20 +3084,20 @@ class S {
     );
   }
 
-  /// `Real players only`
+  /// `Search players`
   String get realPlayersOnly {
     return Intl.message(
-      'Real players only',
+      'Search players',
       name: 'realPlayersOnly',
       desc: '',
       args: [],
     );
   }
 
-  /// `Real players only - no bots`
+  /// `Search players `
   String get realPlayersNoBots {
     return Intl.message(
-      'Real players only - no bots',
+      'Search players ',
       name: 'realPlayersNoBots',
       desc: '',
       args: [],
@@ -3344,10 +3344,10 @@ class S {
     );
   }
 
-  /// `Searching for real players...`
+  /// `Searching for players...`
   String get searchingRealPlayers {
     return Intl.message(
-      'Searching for real players...',
+      'Searching for players...',
       name: 'searchingRealPlayers',
       desc: '',
       args: [],

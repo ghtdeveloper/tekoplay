@@ -777,18 +777,8 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
         if (!mounted) return;
         if (userData != null) {
           if (isBet) {
-            final newDiamonds = userData.diamonds + currencyChange;
-            await _firestoreService.updateUserDiamonds(
-              currentUser!.uid,
-              newDiamonds,
-            );
-            final netGain = currencyChange - gameCost;
-            if (netGain > 0) {
-              final newDiamondsEarned = userData.diamondsEarned + netGain;
-              await _firestoreService.updateUserDiamondsEarned(currentUser!.uid, newDiamondsEarned);
-            }
-            if (!mounted) return;
-            setState(() => _userDiamonds = newDiamonds);
+            final newDiamondsEarned = userData.diamondsEarned + currencyChange;
+            await _firestoreService.updateUserDiamondsEarned(currentUser!.uid, newDiamondsEarned);
           } else {
             final newCoins = userData.coins + currencyChange;
             await _firestoreService.updateUserCoins(currentUser!.uid, newCoins);

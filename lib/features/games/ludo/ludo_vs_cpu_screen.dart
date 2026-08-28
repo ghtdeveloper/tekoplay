@@ -1648,13 +1648,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         final userData = await _firestoreService.getUser(_currentUser!.uid);
         if (userData != null && mounted) {
           if (isBet) {
-            final newDiamonds = userData.diamonds + currencyChange;
-            await _firestoreService.updateUserDiamonds(_currentUser!.uid, newDiamonds);
-            final netGain = currencyChange - gameCost;
-            if (netGain > 0) {
-              final newDiamondsEarned = userData.diamondsEarned + netGain;
-              await _firestoreService.updateUserDiamondsEarned(_currentUser!.uid, newDiamondsEarned);
-            }
+            final newDiamondsEarned = userData.diamondsEarned + currencyChange;
+            await _firestoreService.updateUserDiamondsEarned(_currentUser!.uid, newDiamondsEarned);
           } else {
             final newCoins = userData.coins + currencyChange;
             await _firestoreService.updateUserCoins(_currentUser!.uid, newCoins);
