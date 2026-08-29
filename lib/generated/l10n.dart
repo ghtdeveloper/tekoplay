@@ -549,9 +549,9 @@ class S {
     );
   }
 
-  /// `Step`
+  /// `Passed`
   String get passed {
-    return Intl.message('Step', name: 'passed', desc: '', args: []);
+    return Intl.message('Passed', name: 'passed', desc: '', args: []);
   }
 
   /// `Watch movement`

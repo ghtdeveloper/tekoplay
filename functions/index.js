@@ -1018,8 +1018,8 @@ exports.distributeDominoPaseGameRewards = onDocumentUpdated(
           return;
         }
 
-        // Pase formulas: requiredBalance = betAmount * 2, commission = ceil(requiredBalance * nPlayers * 0.10)
-        const requiredBalance = betAmount * 2;
+        // Pase formulas: requiredBalance = betAmount, commission = ceil(requiredBalance * nPlayers * 0.10)
+        const requiredBalance = betAmount;
         const commissionAmt = currentGameData.gameSettings?.commissionAmount
           || Math.ceil(requiredBalance * numberOfPlayers * 0.10);
         const totalPot = currentGameData.totalPot || (requiredBalance * numberOfPlayers);
@@ -1077,20 +1077,14 @@ exports.distributeDominoPaseGameRewards = onDocumentUpdated(
         console.log(`📊 [DominoPase] settlement:`, JSON.stringify(rawSettlement));
 
         // Distribute to each player (diamonds only in Pase mode)
-        // diamonds gets back at most the requiredBalance (refund), net gain goes only to diamondsEarned
+        // All rewards go to diamondsEarned only (diamonds = purchases only)
         for (const pid of allPlayerIds) {
           const reward = rawSettlement[pid] || 0;
           if (reward > 0) {
             const userRef = db.collection('users').doc(pid);
-            const refund = Math.min(reward, requiredBalance);
-            const netGain = reward - requiredBalance;
-            const updateData = {
-              diamonds: admin.firestore.FieldValue.increment(refund),
-            };
-            if (netGain > 0) {
-              updateData.diamondsEarned = admin.firestore.FieldValue.increment(netGain);
-            }
-            transaction.update(userRef, updateData);
+            transaction.update(userRef, {
+              diamondsEarned: admin.firestore.FieldValue.increment(reward),
+            });
           }
         }
 

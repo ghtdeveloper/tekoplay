@@ -729,7 +729,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "passCountLabel": MessageLookupByLibrary.simpleMessage("Passes"),
     "passValueLabel": MessageLookupByLibrary.simpleMessage("Valeur du passe"),
-    "passed": MessageLookupByLibrary.simpleMessage("Étape"),
+    "passed": MessageLookupByLibrary.simpleMessage("Passé"),
     "password": MessageLookupByLibrary.simpleMessage("Mot de passe"),
     "passwordResetSent": MessageLookupByLibrary.simpleMessage(
       "Email de récupération envoyé. Vérifiez votre boîte de réception.",

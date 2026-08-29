@@ -94,13 +94,13 @@ class _MultiplayerDominoPaseScreenState
   String? _lastTimeoutPlayer;
   Timer? _waitingTimer;
   int _waitingSeconds = 0;
-  // Rematch
   bool _gameOverMinimized = false;
   bool _rematchRequested = false;
   bool _waitingForRematch = false;
   DateTime? _gameStartedAt;
-
-  // Chat bubbles
+  int? _passedPlayerNum;
+  Timer? _passIndicatorTimer;
+  int _lastConsecutivePasses = 0;
   String? _lastMsgSenderId;
   String? _lastMsgText;
   String? _ownMsgText;
@@ -353,6 +353,7 @@ class _MultiplayerDominoPaseScreenState
     _awayTimer?.cancel();
     _msgBubbleTimer?.cancel();
     _ownMsgBubbleTimer?.cancel();
+    _passIndicatorTimer?.cancel();
     _chainScrollCtrl.dispose();
     _playerFlyAnimCtrl.dispose();
     _mandatoryTileAnimCtrl.dispose();
@@ -429,6 +430,22 @@ class _MultiplayerDominoPaseScreenState
       if (serverPlayerNum != _myPlayerNumber) {
         _myPlayerNumber = serverPlayerNum;
       }
+
+      final newPasses = game.gameState.consecutivePasses;
+      if (newPasses > _lastConsecutivePasses && _lastConsecutivePasses >= 0) {
+        final currentTurnStr = game.currentTurn;
+        final currentTurnNum = int.tryParse(currentTurnStr.replaceAll('player', '')) ?? 0;
+        final nPlayers = game.numberOfPlayers;
+        final passedNum = ((currentTurnNum - 2) % nPlayers) + 1;
+        if (passedNum != _myPlayerNumber) {
+          setState(() => _passedPlayerNum = passedNum);
+          _passIndicatorTimer?.cancel();
+          _passIndicatorTimer = Timer(const Duration(seconds: 2), () {
+            if (mounted) setState(() => _passedPlayerNum = null);
+          });
+        }
+      }
+      _lastConsecutivePasses = newPasses;
 
       setState(() => _currentGame = game);
 
@@ -511,11 +528,50 @@ class _MultiplayerDominoPaseScreenState
 
   void _handleOpponentTimeout() {
     _opponentConsecutiveTimeouts++;
-    if (_opponentConsecutiveTimeouts < 3) {
-      _startOpponentTimer();
+    if (_opponentConsecutiveTimeouts >= 2) {
+      _abandonInactiveOpponent();
       return;
     }
-    _abandonInactiveOpponent();
+    _autoPlayForOpponent();
+  }
+
+  Future<void> _autoPlayForOpponent() async {
+    if (_activeGameId == null || _gameEnded) return;
+    final game = _currentGame;
+    if (game == null) return;
+    final turnStr = game.currentTurn;
+    final turnNum = int.tryParse(turnStr.replaceAll('player', '')) ?? 0;
+    final opponentId = game.playerIdOf(turnNum);
+    if (opponentId == null || opponentId == _currentUser?.uid) return;
+
+    final opponentHand = game.getHand(turnNum);
+    final state = game.gameState;
+    final playable = opponentHand.where((id) => state.canPlay(id)).toList();
+
+    if (playable.isNotEmpty) {
+      final tileId = playable.first;
+      final tileData = state.tiles[tileId]!;
+      String side;
+      if (state.chain.isEmpty) {
+        side = 'right';
+      } else {
+        final canLeft =
+            tileData['left'] == state.leftOpen ||
+            tileData['right'] == state.leftOpen;
+        side = canLeft ? 'left' : 'right';
+      }
+      await _gameService.playTile(
+        gameId: _activeGameId!,
+        playerId: opponentId,
+        tileId: tileId,
+        side: side,
+      );
+    } else {
+      await _gameService.passTurn(
+        gameId: _activeGameId!,
+        playerId: opponentId,
+      );
+    }
   }
 
   Future<void> _abandonInactiveOpponent() async {
@@ -1749,7 +1805,6 @@ class _MultiplayerDominoPaseScreenState
     final state = game.gameState;
     final canPass = !state.canPlayAny(myHand);
 
-    // Pass payments info
     final payments =
         Map<String, dynamic>.from(game.gameSettings?['passPayments'] ?? {});
     final myPayments =
@@ -1870,6 +1925,24 @@ class _MultiplayerDominoPaseScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_passedPlayerNum == opp.playerNum)
+                    Center(
+                      child: TweenAnimationBuilder<double>(
+                        key: ValueKey('pass_${opp.playerNum}_${DateTime.now().millisecondsSinceEpoch ~/ 2000}'),
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutBack,
+                        builder: (_, v, child) => Opacity(opacity: v.clamp(0.0, 1.0), child: Transform.scale(scale: v.clamp(0.0, 1.0), child: child)),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade800,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(S.of(context).passed, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ),
                   Row(
                     children: [
                       const Icon(Icons.person_outline,

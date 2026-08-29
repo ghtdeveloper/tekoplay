@@ -13,7 +13,7 @@ class DominoPaseGameService {
   static const String _collection = 'domino_pase_games';
   final Random _random = Random();
 
-  static int requiredBalance(int betAmount) => betAmount * 2;
+  static int requiredBalance(int betAmount) => betAmount;
   static int commission(int betAmount, int nPlayers) =>
       (requiredBalance(betAmount) * nPlayers * 0.10).ceil();
   static int passValue(int betAmount) => (betAmount * 0.10).ceil();
@@ -131,10 +131,6 @@ class DominoPaseGameService {
 
       if (joinResult == null) return false;
 
-      // Quotas are now collected on first playTile (when chain is empty),
-      // not on join. This ensures diamonds are only deducted once tiles
-      // are actually on the board.
-
       return true;
     } catch (e) {
       if (kDebugMode) print('Error joining pase game: $e');
@@ -205,7 +201,6 @@ class DominoPaseGameService {
         int? newRightOpen = rightOpen;
 
         if (chain.isEmpty) {
-          // --- Collect quotas on first tile played ---
           if (!game.quotasCollected) {
             final betAmount = game.betAmount ?? 0;
             if (betAmount > 0) {
@@ -387,13 +382,13 @@ class DominoPaseGameService {
 
           final opponentData =
               Map<String, dynamic>.from(payments[pKey] ?? {'received': 0, 'paid': 0});
-          opponentData['paid'] = (opponentData['paid'] as int? ?? 0) + pValue;
+          opponentData['received'] = (opponentData['received'] as int? ?? 0) + pValue;
           payments[pKey] = opponentData;
 
           final passerData =
               Map<String, dynamic>.from(payments[passerKey] ?? {'received': 0, 'paid': 0});
-          passerData['received'] =
-              (passerData['received'] as int? ?? 0) + pValue;
+          passerData['paid'] =
+              (passerData['paid'] as int? ?? 0) + pValue;
           payments[passerKey] = passerData;
         }
 
