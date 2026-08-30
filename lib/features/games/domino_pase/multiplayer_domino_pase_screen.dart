@@ -457,7 +457,7 @@ class _MultiplayerDominoPaseScreenState
         if (!state.canPlayAny(myHand)) {
           if (!_autoPassPending) {
             _autoPassPending = true;
-            Future.delayed(const Duration(milliseconds: 800), () {
+            Future.delayed(const Duration(milliseconds: 2000), () {
               _autoPassPending = false;
               if (mounted && !_gameEnded) {
                 _showSnack(S.of(context).passAutomatic);
@@ -1966,8 +1966,8 @@ class _MultiplayerDominoPaseScreenState
                           decoration: BoxDecoration(
                             color:
                                 (opp.passReceived - opp.passPaid) >= 0
-                                    ? Colors.red.shade800
-                                    : Colors.green.shade800,
+                                    ? Colors.green.shade800
+                                    : Colors.red.shade800,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(

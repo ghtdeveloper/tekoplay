@@ -13,6 +13,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'ludo_board_painter.dart';
+import '../../../core/service/game_chat_service.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import '../../../generated/l10n.dart';
 
@@ -124,7 +125,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
-  static const int _turnTimeoutSeconds = 20;
+  static const int _turnTimeoutSeconds = 30;
 
   Timer? _waitRoomTimer;
   int _waitRoomCountdown = 60;
@@ -132,6 +133,12 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   final Set<String> _botColors = {};
   bool _botTurnScheduled = false;
   bool get _isHost => _myPlayerNumber == 1;
+
+  String? _lastMsgSenderId;
+  String? _lastMsgText;
+  String? _ownMsgText;
+  Timer? _msgBubbleTimer;
+  Timer? _ownMsgBubbleTimer;
 
 
   static const List<_Coord> _boardPath = [
@@ -196,6 +203,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _balanceSubscription?.cancel();
     _turnTimer?.cancel();
     _waitRoomTimer?.cancel();
+    _msgBubbleTimer?.cancel();
+    _ownMsgBubbleTimer?.cancel();
     _pulseController.dispose();
     _diceAnimController.dispose();
     _toastController.dispose();
@@ -232,7 +241,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         _waitRoomPausedAt = DateTime.now();
         _waitRoomTimer?.cancel();
       }
-      if (_isMyTurn && !_gameEnded) {
+      if (!_gameEnded) {
         _turnTimer?.cancel();
       }
     }
@@ -445,7 +454,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       setState(() => _turnTimerSeconds--);
       if (_turnTimerSeconds <= 0) {
         t.cancel();
-        if (_isMyTurn) _autoAction();
+        _handleTurnTimeout();
       }
     });
   }
@@ -455,7 +464,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final remaining = deadline.difference(DateTime.now()).inSeconds.clamp(0, _turnTimeoutSeconds);
     if (remaining <= 0) {
       setState(() => _turnTimerSeconds = 0);
-      if (_isMyTurn && !_gameEnded) _autoAction();
+      if (!_gameEnded) _handleTurnTimeout();
       return;
     }
     setState(() => _turnTimerSeconds = remaining);
@@ -465,9 +474,52 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       setState(() => _turnTimerSeconds = rem);
       if (rem <= 0) {
         t.cancel();
-        if (_isMyTurn && !_gameEnded) _autoAction();
+        if (!_gameEnded) _handleTurnTimeout();
       }
     });
+  }
+
+  void _handleTurnTimeout() {
+    if (_gameEnded || !mounted) return;
+    if (_isMyTurn) {
+      _autoAction();
+    } else if (_shouldHandleAbsentOpponent()) {
+      final absentColor = _colorForCurrentTurn();
+      if (!_botTurnScheduled) {
+        _botTurnScheduled = true;
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          _botTurnScheduled = false;
+          if (!mounted || _gameEnded) return;
+          if (_colorForCurrentTurn() != absentColor) return;
+          _executeBotRollAndMove(absentColor);
+        });
+      }
+    }
+  }
+
+  bool _shouldHandleAbsentOpponent() {
+    if (_currentGame == null) return false;
+    final absentTurn = _currentTurn;
+    final absentNum = int.tryParse(absentTurn.replaceAll('player', '')) ?? 0;
+    for (int n = 1; n <= 4; n++) {
+      if (n == absentNum) continue;
+      final pid = _currentGame!.getPlayerIdByNumber(n);
+      if (pid == null) continue;
+      if (_botColors.contains(_colorForPlayerNumber(n))) continue;
+      return n == _myPlayerNumber;
+    }
+    return false;
+  }
+
+  String _colorForPlayerNumber(int num) {
+    if (_currentGame == null) return '';
+    switch (num) {
+      case 1: return _currentGame!.player1Color;
+      case 2: return _currentGame!.player2Color ?? '';
+      case 3: return _currentGame!.player3Color ?? '';
+      case 4: return _currentGame!.player4Color ?? '';
+      default: return '';
+    }
   }
 
   Future<void> _writeTurnDeadline() async {
@@ -831,21 +883,27 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (newPos == null || !_canLandOn(color, newPos, piece)) return;
 
     bool captured = false;
-    if (newPos < 52 && !_isSafeForColor(newPos, color)) {
-      final isBarrierBreak = piece.isHome && newPos == _getStartPosition(color);
+    final isBarrierBreak = newPos < 52 && piece.isHome && newPos == _getStartPosition(color);
+    if (isBarrierBreak) {
       for (final ec in _activePlayers) {
         if (ec == color) continue;
         final enemyPiecesHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
             .toList();
-        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+        if (enemyPiecesHere.length >= 2) {
           enemyPiecesHere.last.position = -1;
           captured = true;
-        } else {
-          for (final ep in enemyPiecesHere) {
-            ep.position = -1;
-            captured = true;
-          }
+        }
+      }
+    } else if (newPos < 52 && !_isSafeForColor(newPos, color)) {
+      for (final ec in _activePlayers) {
+        if (ec == color) continue;
+        final enemyPiecesHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
+            .toList();
+        for (final ep in enemyPiecesHere) {
+          ep.position = -1;
+          captured = true;
         }
       }
     }
@@ -1148,7 +1206,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   bool _isSafeForColor(int pos, String color) {
-    return const {4, 8, 17, 21, 30, 34, 43, 47}.contains(pos);
+    return const {0, 4, 8, 13, 17, 21, 26, 30, 34, 39, 43, 47}.contains(pos);
   }
 
   Offset? _getPieceScreenPosition(LudoPiece piece, String color, double sq) {
@@ -1399,17 +1457,22 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     bool captured = false;
-    if (newPos < 52 && !_isSafeForColor(newPos, botColor)) {
-      final isBarrierBreak = wasHome && newPos == _getStartPosition(botColor);
+    final isBarrierBreak = newPos < 52 && wasHome && newPos == _getStartPosition(botColor);
+    if (isBarrierBreak) {
       for (final ec in _activePlayers) {
         if (ec == botColor) continue;
         final enemyHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos).toList();
-        if (isBarrierBreak && enemyHere.length >= 2) {
+        if (enemyHere.length >= 2) {
           enemyHere.last.position = -1; captured = true;
-        } else {
-          for (final ep in enemyHere) { ep.position = -1; captured = true; }
         }
+      }
+    } else if (newPos < 52 && !_isSafeForColor(newPos, botColor)) {
+      for (final ec in _activePlayers) {
+        if (ec == botColor) continue;
+        final enemyHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPos).toList();
+        for (final ep in enemyHere) { ep.position = -1; captured = true; }
       }
     }
     setState(() {});
@@ -1474,13 +1537,13 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _gameService.finishGame(gameId: _activeGameId!, winnerId: _currentUser!.uid);
     }
     _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
-    _showEndDialog(isWin ? S.of(context).victory : '${_getColorName(winnerColor)} ganó', _currentGame);
+    _showEndDialog(isWin ? S.of(context).victory : '${_getColorName(winnerColor)} ganó', _currentGame, forceIsWin: isWin);
   }
 
   void _handleGameEnd(LudoGameMatch game) {
     final isWin = game.winnerId == _currentUser?.uid;
     _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
-    _showEndDialog(isWin ? S.of(context).victory : S.of(context).endOfGame, game);
+    _showEndDialog(isWin ? S.of(context).victory : S.of(context).endOfGame, game, forceIsWin: isWin);
   }
 
   void _handleAbandon(LudoGameMatch game) {
@@ -1491,7 +1554,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (!_hasUserExited) {
         _recordResult(GameResultModel.loss);
       }
-      _showEndDialog('Partida abandonada.', game);
+      _showEndDialog('Partida abandonada.', game, forceIsWin: false);
     }
   }
 
@@ -1603,9 +1666,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     } catch (_) {}
   }
 
-  void _showEndDialog(String message, LudoGameMatch? game) {
+  void _showEndDialog(String message, LudoGameMatch? game, {bool? forceIsWin}) {
     if (!mounted) return;
-    final isWin = game?.winnerId == _currentUser?.uid;
+    final isWin = forceIsWin ?? (game?.winnerId == _currentUser?.uid);
     final betAmount = game?.betAmount;
     final isBetGame = betAmount != null && betAmount > 0 && game?.currencyType == 'diamonds';
     final int realPlayerCount = _activePlayers
@@ -2498,6 +2561,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                                     ),
                                   ),
                                   _buildBoardPlayerLabels(sz),
+                                  _buildBoardChatBubbles(sz),
                                 ],
                               );
                             },
@@ -2576,6 +2640,31 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                 collectionName: 'ludo_games',
                 currentUserId: _currentUser?.uid ?? '',
                 currentUserName: _currentUser?.displayName ?? 'Jugador',
+                showFloatingBubbles: false,
+                onNewMessageFromOther: (senderId, _) {
+                  setState(() => _lastMsgSenderId = senderId);
+                  _msgBubbleTimer?.cancel();
+                  _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() => _lastMsgSenderId = null);
+                  });
+                },
+                onNewMessageWithText: (senderId, _, text) {
+                  setState(() {
+                    _lastMsgSenderId = senderId;
+                    _lastMsgText = text;
+                  });
+                  _msgBubbleTimer?.cancel();
+                  _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() { _lastMsgSenderId = null; _lastMsgText = null; });
+                  });
+                },
+                onOwnMessageSent: (text) {
+                  setState(() => _ownMsgText = text);
+                  _ownMsgBubbleTimer?.cancel();
+                  _ownMsgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                    if (mounted) setState(() => _ownMsgText = null);
+                  });
+                },
               ),
           ],
         ),
@@ -2665,6 +2754,95 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     );
   }
 
+  String? _colorForPlayerId(String playerId) {
+    if (_currentGame == null) return null;
+    if (playerId == _currentGame!.hostId) return _currentGame!.player1Color;
+    if (playerId == _currentGame!.guest2Id) return _currentGame!.player2Color;
+    if (playerId == _currentGame!.guest3Id) return _currentGame!.player3Color;
+    if (playerId == _currentGame!.guest4Id) return _currentGame!.player4Color;
+    return null;
+  }
+
+  Widget _buildBoardChatBubbles(double sz) {
+    const pad = 28.0;
+    final myColor = _myColor;
+
+    List<Widget> bubbles = [];
+
+    if (_ownMsgText != null) {
+      final pos = _bubblePositionForColor(myColor, sz, pad);
+      if (pos != null) {
+        bubbles.add(Positioned(
+          top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right,
+          child: _buildLudoChatBubble(_ownMsgText!, isMe: true),
+        ));
+      }
+    }
+
+    if (_lastMsgText != null && _lastMsgSenderId != null) {
+      final senderColor = _colorForPlayerId(_lastMsgSenderId!);
+      if (senderColor != null) {
+        final pos = _bubblePositionForColor(senderColor, sz, pad);
+        if (pos != null) {
+          bubbles.add(Positioned(
+            top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right,
+            child: _buildLudoChatBubble(_lastMsgText!, isMe: false),
+          ));
+        }
+      }
+    }
+
+    if (bubbles.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      width: sz, height: sz,
+      child: Stack(children: bubbles),
+    );
+  }
+
+  ({double? top, double? bottom, double? left, double? right}) ? _bubblePositionForColor(String color, double sz, double pad) {
+    switch (color) {
+      case 'green':
+        return (top: pad, bottom: null, left: pad, right: null);
+      case 'yellow':
+        return (top: pad, bottom: null, left: null, right: pad);
+      case 'red':
+        return (top: null, bottom: pad, left: pad, right: null);
+      case 'blue':
+        return (top: null, bottom: pad, left: null, right: pad);
+      default:
+        return null;
+    }
+  }
+
+  Widget _buildLudoChatBubble(String text, {required bool isMe}) {
+    final isEmoji = text.characters.length <= 3 && !text.contains(RegExp(r'[a-zA-Z0-9]'));
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('ludo_bubble_${isMe ? 'me' : 'other'}_$text'),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutBack,
+      builder: (_, v, child) => Transform.scale(scale: v.clamp(0.0, 1.0), child: child),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 120),
+        padding: EdgeInsets.symmetric(horizontal: isEmoji ? 6 : 10, vertical: isEmoji ? 4 : 6),
+        decoration: BoxDecoration(
+          color: isMe ? const Color(0xFFEC7A34) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: isEmoji ? 28 : 12,
+            color: isMe ? Colors.white : Colors.black87,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   Widget _buildChatWidget() {
     const quickEmojis = ['😂', '😤', '💀', '🫡', '🔥', '😈', '👑', '🤡'];
     return Container(
@@ -2689,7 +2867,19 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                   borderRadius: BorderRadius.circular(20),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
-                    onTap: null, // TODO: enviar emoji al chat
+                    onTap: () {
+                      if (_activeGameId == null) return;
+                      GameChatService(collectionName: 'ludo_games', gameId: _activeGameId!).sendMessage(
+                        senderId: _currentUser?.uid ?? '',
+                        senderName: _currentUser?.displayName ?? 'Jugador',
+                        text: quickEmojis[i],
+                      );
+                      setState(() => _ownMsgText = quickEmojis[i]);
+                      _ownMsgBubbleTimer?.cancel();
+                      _ownMsgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                        if (mounted) setState(() => _ownMsgText = null);
+                      });
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       child: Text(quickEmojis[i], style: const TextStyle(fontSize: 16)),

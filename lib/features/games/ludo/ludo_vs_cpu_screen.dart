@@ -969,22 +969,28 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     if (!_canLandOn(color, newPosition, piece)) return;
 
     bool captured = false;
+    final isBarrierBreak = newPosition < 52 && piece.isHome && newPosition == _getStartPosition(color);
 
-    if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
-      final isBarrierBreak = piece.isHome && newPosition == _getStartPosition(color);
+    if (isBarrierBreak) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
         final enemyPiecesHere = _gameState.getPiecesByColor(enemyColor)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPosition)
             .toList();
-        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+        if (enemyPiecesHere.length >= 2) {
           setState(() { enemyPiecesHere.last.position = -1; });
           captured = true;
-        } else {
-          for (final ep in enemyPiecesHere) {
-            setState(() { ep.position = -1; });
-            captured = true;
-          }
+        }
+      }
+    } else if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
+      for (final enemyColor in _activePlayers) {
+        if (enemyColor == color) continue;
+        final enemyPiecesHere = _gameState.getPiecesByColor(enemyColor)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPosition)
+            .toList();
+        for (final ep in enemyPiecesHere) {
+          setState(() { ep.position = -1; });
+          captured = true;
         }
       }
     }
@@ -1299,22 +1305,28 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     if (!_canLandOn(color, newPosition, piece)) return false;
 
     bool captured = false;
+    final isBarrierBreak = newPosition < 52 && piece.isHome && newPosition == _getStartPosition(color);
 
-    if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
-      final isBarrierBreak = piece.isHome && newPosition == _getStartPosition(color);
+    if (isBarrierBreak) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
         final enemyPiecesHere = _gameState.getPiecesByColor(enemyColor)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPosition)
             .toList();
-        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+        if (enemyPiecesHere.length >= 2) {
           setState(() => enemyPiecesHere.last.position = -1);
           captured = true;
-        } else {
-          for (final ep in enemyPiecesHere) {
-            setState(() => ep.position = -1);
-            captured = true;
-          }
+        }
+      }
+    } else if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
+      for (final enemyColor in _activePlayers) {
+        if (enemyColor == color) continue;
+        final enemyPiecesHere = _gameState.getPiecesByColor(enemyColor)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPosition)
+            .toList();
+        for (final ep in enemyPiecesHere) {
+          setState(() => ep.position = -1);
+          captured = true;
         }
       }
     }
@@ -1561,14 +1573,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
 
   bool _isSafeForColor(int position, String color) {
-    final startPositions = {
-      'green': 0, 'red': 13, 'blue': 26, 'yellow': 39,
-    };
-    for (final entry in startPositions.entries) {
-      if (position == entry.value) {
-        return entry.key == color;
-      }
-    }
     return _isSafePosition(position);
   }
 

@@ -153,6 +153,21 @@ class DominoPaseGameService {
     return game.nextTurnAfter(current);
   }
 
+  String _previousActiveTurn(DominoGameMatch game, String current) {
+    final abandoned = List<String>.from(
+        game.gameSettings?['abandonedPlayers'] ?? []);
+    final nPlayers = game.numberOfPlayers;
+    var prev = current;
+    for (int i = 0; i < nPlayers; i++) {
+      final num = int.parse(prev.replaceAll('player', ''));
+      final prevNum = ((num - 2) % nPlayers) + 1;
+      prev = 'player$prevNum';
+      final pid = game.playerIdOf(prevNum);
+      if (pid != null && !abandoned.contains(pid)) return prev;
+    }
+    return current;
+  }
+
   int _activePlayerCount(DominoGameMatch game) {
     final abandoned = List<String>.from(
         game.gameSettings?['abandonedPlayers'] ?? []);
@@ -372,25 +387,21 @@ class DominoPaseGameService {
             game.gameSettings?['abandonedPlayers'] ?? []);
         final activePlayers = _activePlayerCount(game);
 
-        for (int p = 1; p <= nPlayers; p++) {
-          if (p == pNum) continue;
-          final pid = game.playerIdOf(p);
-          if (pid != null && abandoned.contains(pid)) continue;
+        final prevTurn = _previousActiveTurn(game, game.currentTurn);
+        final prevNum = int.parse(prevTurn.replaceAll('player', ''));
 
-          final pKey = 'player$p';
-          final passerKey = 'player$pNum';
+        final prevKey = 'player$prevNum';
+        final passerKey = 'player$pNum';
 
-          final opponentData =
-              Map<String, dynamic>.from(payments[pKey] ?? {'received': 0, 'paid': 0});
-          opponentData['received'] = (opponentData['received'] as int? ?? 0) + pValue;
-          payments[pKey] = opponentData;
+        final prevData =
+            Map<String, dynamic>.from(payments[prevKey] ?? {'received': 0, 'paid': 0});
+        prevData['received'] = (prevData['received'] as int? ?? 0) + pValue;
+        payments[prevKey] = prevData;
 
-          final passerData =
-              Map<String, dynamic>.from(payments[passerKey] ?? {'received': 0, 'paid': 0});
-          passerData['paid'] =
-              (passerData['paid'] as int? ?? 0) + pValue;
-          payments[passerKey] = passerData;
-        }
+        final passerData =
+            Map<String, dynamic>.from(payments[passerKey] ?? {'received': 0, 'paid': 0});
+        passerData['paid'] = (passerData['paid'] as int? ?? 0) + pValue;
+        payments[passerKey] = passerData;
 
         final newPasses = game.gameState.consecutivePasses + 1;
         final Map<String, dynamic> updates = {

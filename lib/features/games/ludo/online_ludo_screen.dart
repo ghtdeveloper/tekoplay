@@ -14,6 +14,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
+import '../../../core/service/game_chat_service.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import 'ludo_board_painter.dart';
 import 'multiplayer_ludo_screen.dart';
@@ -65,6 +66,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
+  String? _lastMsgSenderId;
+  String? _lastMsgText;
+  String? _ownMsgText;
+  Timer? _msgBubbleTimer;
+  Timer? _ownMsgBubbleTimer;
 
   String _opponentName   = '';
   String _opponentEmoji  = '🎮';
@@ -109,7 +115,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   Timer? _turnTimer;
   int _turnTimerSeconds = 0;
-  static const int _turnTimeoutSeconds = 20;
+  static const int _turnTimeoutSeconds = 30;
   DateTime? _turnStartedAt;
 
   String _toastMessage = '';
@@ -187,6 +193,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _turnTimer?.cancel();
     _botSafetyTimer?.cancel();
     _awayTimer?.cancel();
+    _msgBubbleTimer?.cancel();
+    _ownMsgBubbleTimer?.cancel();
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
     _pulseController.dispose();
@@ -847,20 +855,26 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (newPos == null || !_canLandOn(color, newPos, piece)) return;
 
     bool captured = false;
-    if (newPos < 52 && !_isSafeForColor(newPos, color)) {
-      final isBarrierBreak = piece.isHome && newPos == _getStartPosition(color);
+    final isBarrierBreak = newPos < 52 && piece.isHome && newPos == _getStartPosition(color);
+    if (isBarrierBreak) {
       for (final ec in _activePlayers) {
         if (ec == color) continue;
         final enemyPiecesHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
             .toList();
-        if (isBarrierBreak && enemyPiecesHere.length >= 2) {
+        if (enemyPiecesHere.length >= 2) {
           enemyPiecesHere.last.position = -1;
           captured = true;
-        } else {
-          for (final ep in enemyPiecesHere) {
-            ep.position = -1; captured = true;
-          }
+        }
+      }
+    } else if (newPos < 52 && !_isSafeForColor(newPos, color)) {
+      for (final ec in _activePlayers) {
+        if (ec == color) continue;
+        final enemyPiecesHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
+            .toList();
+        for (final ep in enemyPiecesHere) {
+          ep.position = -1; captured = true;
         }
       }
     }
@@ -1541,7 +1555,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   bool _isSafeForColor(int pos, String color) {
-    return const {4, 8, 17, 21, 30, 34, 43, 47}.contains(pos);
+    return const {0, 4, 8, 13, 17, 21, 26, 30, 34, 39, 43, 47}.contains(pos);
   }
 
   Offset? _getPieceScreenPos(LudoPiece piece, String color, double sq) {
@@ -1897,6 +1911,31 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               collectionName: 'ludo_games',
               currentUserId: _currentUser?.uid ?? '',
               currentUserName: _currentUser?.displayName ?? 'Jugador',
+              showFloatingBubbles: false,
+              onNewMessageFromOther: (senderId, _) {
+                setState(() => _lastMsgSenderId = senderId);
+                _msgBubbleTimer?.cancel();
+                _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                  if (mounted) setState(() => _lastMsgSenderId = null);
+                });
+              },
+              onNewMessageWithText: (senderId, _, text) {
+                setState(() {
+                  _lastMsgSenderId = senderId;
+                  _lastMsgText = text;
+                });
+                _msgBubbleTimer?.cancel();
+                _msgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                  if (mounted) setState(() { _lastMsgSenderId = null; _lastMsgText = null; });
+                });
+              },
+              onOwnMessageSent: (text) {
+                setState(() => _ownMsgText = text);
+                _ownMsgBubbleTimer?.cancel();
+                _ownMsgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                  if (mounted) setState(() => _ownMsgText = null);
+                });
+              },
             ),
         ],
       ),
@@ -1974,6 +2013,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                                 ),
                               ),
                               _buildBoardPlayerLabels(sz),
+                              _buildBoardChatBubbles(sz),
                             ],
                           );
                         },
@@ -2091,6 +2131,88 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     );
   }
 
+  Widget _buildBoardChatBubbles(double sz) {
+    const pad = 28.0;
+    List<Widget> bubbles = [];
+
+    if (_ownMsgText != null) {
+      final pos = _bubblePositionForColor(_myColor, sz, pad);
+      if (pos != null) {
+        bubbles.add(Positioned(
+          top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right,
+          child: _buildLudoChatBubble(_ownMsgText!, isMe: true),
+        ));
+      }
+    }
+
+    if (_lastMsgText != null && _lastMsgSenderId != null) {
+      String? senderColor;
+      for (final bc in _botColors) {
+        senderColor = bc;
+        break;
+      }
+      if (senderColor != null) {
+        final pos = _bubblePositionForColor(senderColor, sz, pad);
+        if (pos != null) {
+          bubbles.add(Positioned(
+            top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right,
+            child: _buildLudoChatBubble(_lastMsgText!, isMe: false),
+          ));
+        }
+      }
+    }
+
+    if (bubbles.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      width: sz, height: sz,
+      child: Stack(children: bubbles),
+    );
+  }
+
+  ({double? top, double? bottom, double? left, double? right})? _bubblePositionForColor(String color, double sz, double pad) {
+    switch (color) {
+      case 'green':
+        return (top: pad, bottom: null, left: pad, right: null);
+      case 'yellow':
+        return (top: pad, bottom: null, left: null, right: pad);
+      case 'red':
+        return (top: null, bottom: pad, left: pad, right: null);
+      case 'blue':
+        return (top: null, bottom: pad, left: null, right: pad);
+      default:
+        return null;
+    }
+  }
+
+  Widget _buildLudoChatBubble(String text, {required bool isMe}) {
+    final isEmoji = text.characters.length <= 3 && !text.contains(RegExp(r'[a-zA-Z0-9]'));
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('ludo_bubble_${isMe ? 'me' : 'other'}_$text'),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutBack,
+      builder: (_, v, child) => Transform.scale(scale: v.clamp(0.0, 1.0), child: child),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 120),
+        padding: EdgeInsets.symmetric(horizontal: isEmoji ? 6 : 10, vertical: isEmoji ? 4 : 6),
+        decoration: BoxDecoration(
+          color: isMe ? const Color(0xFFEC7A34) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: isEmoji ? 28 : 12,
+            color: isMe ? Colors.white : Colors.black87,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   Widget _buildChatWidget() {
     const quickEmojis = ['😂', '😤', '💀', '🫡', '🔥', '😈', '👑', '🤡'];
     return Container(
@@ -2115,7 +2237,19 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                   borderRadius: BorderRadius.circular(20),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
-                    onTap: null, // TODO: enviar emoji al chat
+                    onTap: () {
+                      if (_activeGameId == null) return;
+                      GameChatService(collectionName: 'ludo_games', gameId: _activeGameId!).sendMessage(
+                        senderId: _currentUser?.uid ?? '',
+                        senderName: _currentUser?.displayName ?? 'Jugador',
+                        text: quickEmojis[i],
+                      );
+                      setState(() => _ownMsgText = quickEmojis[i]);
+                      _ownMsgBubbleTimer?.cancel();
+                      _ownMsgBubbleTimer = Timer(const Duration(seconds: 4), () {
+                        if (mounted) setState(() => _ownMsgText = null);
+                      });
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       child: Text(quickEmojis[i], style: const TextStyle(fontSize: 16)),
