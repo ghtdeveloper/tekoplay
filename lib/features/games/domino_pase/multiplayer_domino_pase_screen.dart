@@ -158,10 +158,12 @@ class _MultiplayerDominoPaseScreenState
       if (_isScreenKeepOnActive) WakelockPlus.enable();
       _awayTimer?.cancel();
       _awayTimer = null;
+      _resumeTimersAfterReturn();
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
       if (!_gameEnded && _activeGameId != null) {
         _stopTurnTimer();
+        _stopOpponentTimer();
         _awaySecondsLeft = 25;
         _awayTimer = Timer.periodic(const Duration(seconds: 1), (t) {
           _awaySecondsLeft--;
@@ -524,6 +526,32 @@ class _MultiplayerDominoPaseScreenState
   void _stopOpponentTimer() {
     _opponentTimer?.cancel();
     _opponentTimer = null;
+  }
+
+  void _resumeTimersAfterReturn() {
+    if (_gameEnded || _activeGameId == null || _currentGame == null) return;
+    final game = _currentGame!;
+    if (_currentUser == null) return;
+    final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
+    if (isMyTurn) {
+      _stopOpponentTimer();
+      final myHand = game.getHand(_myPlayerNumber);
+      final st = game.gameState;
+      if (!st.canPlayAny(myHand)) {
+        if (!_autoPassPending) {
+          _autoPassPending = true;
+          Future.delayed(const Duration(milliseconds: 800), () {
+            _autoPassPending = false;
+            if (mounted && !_gameEnded) _passTurn();
+          });
+        }
+      } else {
+        _startTurnTimer();
+      }
+    } else {
+      _stopTurnTimer();
+      _startOpponentTimer();
+    }
   }
 
   void _handleOpponentTimeout() {
@@ -2319,7 +2347,7 @@ class _MultiplayerDominoPaseScreenState
         ((myPayments?['paid'] as int?) ?? 0);
 
     final totalResult = game.quotasCollected
-        ? (iWon ? (winnerPrize - required + myPassNet) : (-required + myPassNet))
+        ? (iWon ? (winnerPrize + myPassNet) : (-required + myPassNet))
         : 0;
 
     final playerTiles =

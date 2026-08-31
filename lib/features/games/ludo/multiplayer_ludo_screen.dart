@@ -13,9 +13,12 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'ludo_board_painter.dart';
+import '../../../core/service/auth_service.dart';
 import '../../../core/service/game_chat_service.dart';
+import '../../../core/service/payment_service.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import '../../../generated/l10n.dart';
+import '../../coins/diamond_purchase_dialog.dart';
 
 enum _FriendLudoState { setup, waitingRoom, gameActive }
 
@@ -89,6 +92,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   final List<int> _validMovePositions = [];
   bool _bonusSelectionActive = false;
   bool _bonusHadDouble = false;
+  int _bonusRemainingDie = 0;
+  int _bonusRemainingDieNumber = 0;
   final List<Map<String, dynamic>> _pendingBonusMoves = [];
   Set<int> _bridgeBreakPieceIds = {};
 
@@ -216,7 +221,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      if (!_gameEnded && _screenState == _FriendLudoState.gameActive) _enableWakeLock();
+      if (_wakelockActive || (!_gameEnded && _screenState == _FriendLudoState.gameActive)) {
+        WakelockPlus.enable().then((_) => _wakelockActive = true).catchError((_) => false);
+      }
       if (_waitRoomPausedAt != null && _screenState == _FriendLudoState.waitingRoom) {
         final elapsed = DateTime.now().difference(_waitRoomPausedAt!).inSeconds;
         _waitRoomPausedAt = null;
@@ -247,13 +254,61 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
   }
 
+  void _showDiamondPurchaseDialog() {
+    showDiamondPurchaseDialog(
+      context,
+      onPurchase: (diamondAmount, price) {
+        _processDiamondPurchase(diamondAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processDiamondPurchase(int diamonds, double price) async {
+    final diamondsLabel = S.of(context).diamonds;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
+    try {
+      final paymentService = PaymentService();
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).googlePayNotAvailable), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      final result = await paymentService.makePayment(
+        label: '$diamonds $diamondsLabel',
+        amount: price,
+        productId: 'diamonds_$diamonds',
+      );
+      if (result != null && result['success'] == true) {
+        await AuthService().addDiamonds(diamonds);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successMsg +$diamonds $diamondsLabel'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error en compra: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  bool _wakelockActive = false;
+
   Future<void> _enableWakeLock() async {
     try {
       await WakelockPlus.enable();
+      _wakelockActive = true;
     } catch (_) {}
   }
 
   Future<void> _disableWakeLock() async {
+    _wakelockActive = false;
     try {
       if (await WakelockPlus.enabled) {
         await WakelockPlus.disable();
@@ -883,15 +938,15 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (newPos == null || !_canLandOn(color, newPos, piece)) return;
 
     bool captured = false;
-    final isBarrierBreak = newPos < 52 && piece.isHome && newPos == _getStartPosition(color);
-    if (isBarrierBreak) {
+    final isExitingHome = newPos < 52 && piece.isHome && newPos == _getStartPosition(color);
+    if (isExitingHome) {
       for (final ec in _activePlayers) {
         if (ec == color) continue;
         final enemyPiecesHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
             .toList();
-        if (enemyPiecesHere.length >= 2) {
-          enemyPiecesHere.last.position = -1;
+        for (final ep in enemyPiecesHere) {
+          ep.position = -1;
           captured = true;
         }
       }
@@ -928,6 +983,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
 
     if (captured) {
+      final remainingDie = !_hasUsedDice1 ? _dice1Value : (!_hasUsedDice2 ? _dice2Value : 0);
+      final remainingNum = !_hasUsedDice1 ? 1 : (!_hasUsedDice2 ? 2 : 0);
+      _bonusRemainingDie = hadDouble ? 0 : remainingDie;
+      _bonusRemainingDieNumber = hadDouble ? 0 : remainingNum;
       _dice1Value = 0; _dice2Value = 0;
       _hasUsedDice1 = false; _hasUsedDice2 = false;
       _movablePieces.clear();
@@ -997,6 +1056,20 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           if (best['bonusPos'] == 57) pieces[pid].isFinished = true;
         }
         setState(() {});
+        if (_bonusRemainingDie > 0) {
+          if (_bonusRemainingDieNumber == 1) {
+            _dice1Value = _bonusRemainingDie; _dice2Value = 0;
+            _hasUsedDice1 = false; _hasUsedDice2 = true;
+          } else {
+            _dice1Value = 0; _dice2Value = _bonusRemainingDie;
+            _hasUsedDice1 = true; _hasUsedDice2 = false;
+          }
+          _bonusRemainingDie = 0;
+          _bonusRemainingDieNumber = 0;
+          _syncGameState(advanceTurn: false);
+          _scheduleMultiplayerBotMove(color);
+          return;
+        }
         if (hadDouble) {
           _syncGameState(advanceTurn: false);
           _scheduleMultiplayerBotMove(color);
@@ -1031,6 +1104,25 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (_checkVictory(_myColor)) {
       _syncGameState(advanceTurn: false).then((_) => _endGame(_myColor));
       return;
+    }
+
+    if (_bonusRemainingDie > 0) {
+      if (_bonusRemainingDieNumber == 1) {
+        _dice1Value = _bonusRemainingDie; _dice2Value = 0;
+        _hasUsedDice1 = false; _hasUsedDice2 = true;
+      } else {
+        _dice1Value = 0; _dice2Value = _bonusRemainingDie;
+        _hasUsedDice1 = true; _hasUsedDice2 = false;
+      }
+      _bonusRemainingDie = 0;
+      _bonusRemainingDieNumber = 0;
+      setState(() {});
+      _calculateMovablePieces();
+      if (_movablePieces.isNotEmpty) {
+        _syncGameState(advanceTurn: false);
+        _startTurnTimer();
+        return;
+      }
     }
 
     if (_bonusHadDouble) {
@@ -1904,13 +1996,39 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(S.of(context).parchisVsFriend, style: const TextStyle(color: Colors.white)),
         elevation: 2,
+        actions: [
+          if (widget.matchType == 'Apuesta')
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${_userDiamonds ?? 0}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.diamond, color: Colors.white, size: 16),
+                    SizedBox(
+                      width: 32, height: 32,
+                      child: IconButton(
+                        icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        onPressed: _showDiamondPurchaseDialog,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(

@@ -9,11 +9,14 @@ import '../../../core/models/ludo_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/ludo_game_service.dart';
+import '../../../core/service/auth_service.dart';
 import '../../../core/service/bot_name_service.dart';
+import '../../../core/service/payment_service.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
+import '../../coins/diamond_purchase_dialog.dart';
 import '../../../core/service/game_chat_service.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import 'ludo_board_painter.dart';
@@ -99,6 +102,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   final List<int> _validMovePositions = [];
   bool _bonusSelectionActive = false;
   bool _bonusHadDouble = false;
+  int _bonusRemainingDie = 0;
+  int _bonusRemainingDieNumber = 0;
   final List<Map<String, dynamic>> _pendingBonusMoves = [];
   Set<int> _bridgeBreakPieceIds = {};
 
@@ -208,7 +213,9 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      if (!_gameEnded && _screenState == _LudoOnlineState.gameActive) _enableWakeLock();
+      if (_wakelockActive || (!_gameEnded && _screenState == _LudoOnlineState.gameActive)) {
+        WakelockPlus.enable().then((_) => _wakelockActive = true).catchError((_) => false);
+      }
       _awayTimer?.cancel();
       _awayTimer = null;
       if (_turnStartedAt != null && !_gameEnded && _isMyTurn) {
@@ -244,13 +251,61 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     }
   }
 
+  void _showDiamondPurchaseDialog() {
+    showDiamondPurchaseDialog(
+      context,
+      onPurchase: (diamondAmount, price) {
+        _processDiamondPurchase(diamondAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processDiamondPurchase(int diamonds, double price) async {
+    final diamondsLabel = S.of(context).diamonds;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
+    try {
+      final paymentService = PaymentService();
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).googlePayNotAvailable), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      final result = await paymentService.makePayment(
+        label: '$diamonds $diamondsLabel',
+        amount: price,
+        productId: 'diamonds_$diamonds',
+      );
+      if (result != null && result['success'] == true) {
+        await AuthService().addDiamonds(diamonds);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successMsg +$diamonds $diamondsLabel'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error en compra: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  bool _wakelockActive = false;
+
   Future<void> _enableWakeLock() async {
     try {
       await WakelockPlus.enable();
+      _wakelockActive = true;
     } catch (_) {}
   }
 
   Future<void> _disableWakeLock() async {
+    _wakelockActive = false;
     try {
       if (await WakelockPlus.enabled) {
         await WakelockPlus.disable();
@@ -855,15 +910,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (newPos == null || !_canLandOn(color, newPos, piece)) return;
 
     bool captured = false;
-    final isBarrierBreak = newPos < 52 && piece.isHome && newPos == _getStartPosition(color);
-    if (isBarrierBreak) {
+    final isExitingHome = newPos < 52 && piece.isHome && newPos == _getStartPosition(color);
+    if (isExitingHome) {
       for (final ec in _activePlayers) {
         if (ec == color) continue;
         final enemyPiecesHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos)
             .toList();
-        if (enemyPiecesHere.length >= 2) {
-          enemyPiecesHere.last.position = -1;
+        for (final ep in enemyPiecesHere) {
+          ep.position = -1;
           captured = true;
         }
       }
@@ -898,6 +953,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
 
     if (captured) {
+      final remainingDie = !_hasUsedDice1 ? _dice1Value : (!_hasUsedDice2 ? _dice2Value : 0);
+      final remainingNum = !_hasUsedDice1 ? 1 : (!_hasUsedDice2 ? 2 : 0);
+      _bonusRemainingDie = hadDouble ? 0 : remainingDie;
+      _bonusRemainingDieNumber = hadDouble ? 0 : remainingNum;
       _dice1Value = 0; _dice2Value = 0;
       _hasUsedDice1 = false; _hasUsedDice2 = false;
       _movablePieces.clear();
@@ -1007,6 +1066,27 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _clearBotExecution();
       _endGame(color);
       return;
+    }
+
+    if (_bonusRemainingDie > 0) {
+      if (_bonusRemainingDieNumber == 1) {
+        _dice1Value = _bonusRemainingDie; _dice2Value = 0;
+        _hasUsedDice1 = false; _hasUsedDice2 = true;
+      } else {
+        _dice1Value = 0; _dice2Value = _bonusRemainingDie;
+        _hasUsedDice1 = true; _hasUsedDice2 = false;
+      }
+      _bonusRemainingDie = 0;
+      _bonusRemainingDieNumber = 0;
+      _calculateMovablePieces();
+      if (_movablePieces.isNotEmpty) {
+        if (color == _myColor) {
+          _startTurnTimer();
+        } else {
+          Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)), _executeBotBestMove);
+        }
+        return;
+      }
     }
 
     if (hadDouble) {
@@ -1852,6 +1932,31 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         title: Text(S.of(context).parchisOnline, style: const TextStyle(color: Colors.white)),
         elevation: 2,
         actions: [
+          if (_screenState != _LudoOnlineState.gameActive && widget.matchType == 'Apuesta')
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${_userDiamonds ?? 0}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.diamond, color: Colors.white, size: 16),
+                    SizedBox(
+                      width: 32, height: 32,
+                      child: IconButton(
+                        icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        onPressed: _showDiamondPurchaseDialog,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           if (_screenState == _LudoOnlineState.gameActive && !_gameEnded && _activeGameId != null)
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),

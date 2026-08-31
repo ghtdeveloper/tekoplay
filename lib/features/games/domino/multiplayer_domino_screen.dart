@@ -17,6 +17,9 @@ import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../core/service/auth_service.dart';
+import '../../../core/service/payment_service.dart';
+import '../../coins/diamond_purchase_dialog.dart';
 import '../../../generated/l10n.dart';
 
 enum _FriendDominoState { setup, waitingRoom, gameActive }
@@ -99,13 +102,19 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
   final ScrollController _chainScrollCtrl = ScrollController();
 
   Timer? _turnTimer;
-  int _turnSecondsLeft = 60;
+  int _turnSecondsLeft = 30;
+  Timer? _opponentTimer;
+  int _opponentSecondsLeft = 30;
   Timer? _awayTimer;
   int _awaySecondsLeft = 60;
   bool _isOpponentThinking = false;
   Timer? _botMoveTimer;
   Timer? _waitingTimer;
   int _waitingSeconds = 0;
+
+  int? _passedPlayerNum;
+  Timer? _passIndicatorTimer;
+  int _lastConsecutivePasses = 0;
 
   static const Color _panelColor   = Color(0xEE0D2010);
 
@@ -153,10 +162,12 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       if (_isScreenKeepOnActive) WakelockPlus.enable();
       _awayTimer?.cancel();
       _awayTimer = null;
+      _resumeTimersAfterReturn();
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
       if (!_gameEnded && _activeGameId != null) {
         _stopTurnTimer();
+        _stopOpponentTimer();
         _awaySecondsLeft = 60;
         _awayTimer = Timer.periodic(const Duration(seconds: 1), (t) {
           _awaySecondsLeft--;
@@ -204,6 +215,50 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     });
   }
 
+  void _showDiamondPurchaseDialog() {
+    showDiamondPurchaseDialog(
+      context,
+      onPurchase: (diamondAmount, price) {
+        _processDiamondPurchase(diamondAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processDiamondPurchase(int diamonds, double price) async {
+    final diamondsLabel = S.of(context).diamonds;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
+    try {
+      final paymentService = PaymentService();
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).googlePayNotAvailable), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      final result = await paymentService.makePayment(
+        label: '$diamonds $diamondsLabel',
+        amount: price,
+        productId: 'diamonds_$diamonds',
+      );
+      if (result != null && result['success'] == true) {
+        await AuthService().addDiamonds(diamonds);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successMsg +$diamonds $diamondsLabel'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error en compra: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _enableWakeLock() async {
     try {
       await WakelockPlus.enable();
@@ -231,9 +286,11 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     _botMoveTimer?.cancel();
     _waitingTimer?.cancel();
     _turnTimer?.cancel();
+    _opponentTimer?.cancel();
     _awayTimer?.cancel();
     _msgBubbleTimer?.cancel();
     _ownMsgBubbleTimer?.cancel();
+    _passIndicatorTimer?.cancel();
     _roundEndTimer?.cancel();
     _chainScrollCtrl.dispose();
     _playerFlyAnimCtrl.dispose();
@@ -337,10 +394,27 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
         return;
       }
 
+      final newPasses = game.gameState.consecutivePasses;
+      if (newPasses > _lastConsecutivePasses && _lastConsecutivePasses >= 0) {
+        final currentTurnStr = game.currentTurn;
+        final currentTurnNum = int.tryParse(currentTurnStr.replaceAll('player', '')) ?? 0;
+        final nPlayers = game.numberOfPlayers;
+        final passedNum = ((currentTurnNum - 2) % nPlayers) + 1;
+        if (passedNum != _myPlayerNumber) {
+          setState(() => _passedPlayerNum = passedNum);
+          _passIndicatorTimer?.cancel();
+          _passIndicatorTimer = Timer(const Duration(seconds: 2), () {
+            if (mounted) setState(() => _passedPlayerNum = null);
+          });
+        }
+      }
+      _lastConsecutivePasses = newPasses;
+
       setState(() { _currentGame = game; _isDrawing = false; });
 
       final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
       if (isMyTurn) {
+        _stopOpponentTimer();
         final myHand = game.getHand(_myPlayerNumber);
         final state = game.gameState;
         if (!state.canPlayAny(myHand) && state.boneyard.isEmpty) {
@@ -361,6 +435,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       } else {
         _autoPassPending = false;
         _stopTurnTimer();
+        _startOpponentTimer();
         if (_isOpponent(game)) _scheduleOpponentTurn(game);
       }
     });
@@ -421,6 +496,47 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
   void _stopTurnTimer() {
     _turnTimer?.cancel();
     _turnTimer = null;
+  }
+
+  void _startOpponentTimer() {
+    _opponentTimer?.cancel();
+    _opponentSecondsLeft = 30;
+    _opponentTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || _gameEnded) { t.cancel(); return; }
+      setState(() => _opponentSecondsLeft--);
+      if (_opponentSecondsLeft <= 0) { t.cancel(); }
+    });
+  }
+
+  void _stopOpponentTimer() {
+    _opponentTimer?.cancel();
+    _opponentTimer = null;
+  }
+
+  void _resumeTimersAfterReturn() {
+    if (_gameEnded || _activeGameId == null || _currentGame == null) return;
+    final game = _currentGame!;
+    if (_currentUser == null) return;
+    final isMyTurn = game.isPlayerTurn(_currentUser!.uid);
+    if (isMyTurn) {
+      _stopOpponentTimer();
+      final myHand = game.getHand(_myPlayerNumber);
+      final state = game.gameState;
+      if (!state.canPlayAny(myHand) && state.boneyard.isEmpty) {
+        if (!_autoPassPending) {
+          _autoPassPending = true;
+          Future.delayed(const Duration(milliseconds: 800), () {
+            _autoPassPending = false;
+            if (mounted && !_gameEnded) _passTurn();
+          });
+        }
+      } else {
+        _startTurnTimer();
+      }
+    } else {
+      _stopTurnTimer();
+      _startOpponentTimer();
+    }
   }
 
   Future<void> _autoPlayOrPass() async {
@@ -1046,6 +1162,31 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
           title: Text(S.of(context).dominoFriends, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            if (!inGame && widget.matchType == 'Apuesta')
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${_userDiamonds ?? 0}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.diamond, color: Colors.white, size: 16),
+                      SizedBox(
+                        width: 32, height: 32,
+                        child: IconButton(
+                          icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
+                          padding: EdgeInsets.zero,
+                          onPressed: _showDiamondPurchaseDialog,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (inGame)
               IconButton(
                 icon: Stack(
@@ -2014,6 +2155,24 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (_passedPlayerNum == opp.playerNum)
+                        Center(
+                          child: TweenAnimationBuilder<double>(
+                            key: ValueKey('pass_${opp.playerNum}_${DateTime.now().millisecondsSinceEpoch ~/ 2000}'),
+                            tween: Tween(begin: 0.0, end: 1.0),
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutBack,
+                            builder: (_, v, child) => Opacity(opacity: v.clamp(0.0, 1.0), child: Transform.scale(scale: v.clamp(0.0, 1.0), child: child)),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade800,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(S.of(context).passed, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ),
                       Row(
                         children: [
                           Icon(Icons.person_outline, color: Colors.white70, size: 16),
@@ -2043,6 +2202,19 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                               style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ),
+                          if (opp.isActive && _opponentTimer != null) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '⏱$_opponentSecondsLeft"',
+                              style: TextStyle(
+                                color: _opponentSecondsLeft <= 10
+                                    ? Colors.red[300]
+                                    : Colors.orange[300],
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 6),

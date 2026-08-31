@@ -1018,10 +1018,9 @@ exports.distributeDominoPaseGameRewards = onDocumentUpdated(
           return;
         }
 
-        // Pase formulas: requiredBalance = betAmount, commission = ceil(requiredBalance * nPlayers * 0.10)
         const requiredBalance = betAmount;
         const commissionAmt = currentGameData.gameSettings?.commissionAmount
-          || Math.ceil(requiredBalance * numberOfPlayers * 0.10);
+          || Math.ceil(requiredBalance * numberOfPlayers * 0.20);
         const totalPot = currentGameData.totalPot || (requiredBalance * numberOfPlayers);
         const winnerPrize = totalPot - commissionAmt;
 
@@ -1099,7 +1098,7 @@ exports.distributeDominoPaseGameRewards = onDocumentUpdated(
             betAmount,
             requiredBalance,
             currencyType: 'diamonds',
-            commissionRate: 0.10,
+            commissionRate: 0.20,
             reason: gameJustAbandoned ? 'abandoned' : 'win',
             passNet,
             settlement: rawSettlement,

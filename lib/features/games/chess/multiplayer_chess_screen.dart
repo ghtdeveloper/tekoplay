@@ -16,6 +16,8 @@ import '../../../core/utils/game_result.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/interstitial_ad_helper.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../core/service/payment_service.dart';
+import '../../coins/diamond_purchase_dialog.dart';
 
 class MultiplayerChessScreen extends StatefulWidget {
   final String gameId;
@@ -360,6 +362,50 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         _userDiamonds = 0;
         _userCoins = 0;
       });
+    }
+  }
+
+  void _showDiamondPurchaseDialog() {
+    showDiamondPurchaseDialog(
+      context,
+      onPurchase: (diamondAmount, price) {
+        _processDiamondPurchase(diamondAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processDiamondPurchase(int diamonds, double price) async {
+    final diamondsLabel = S.of(context).diamonds;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
+    try {
+      final paymentService = PaymentService();
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).googlePayNotAvailable), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      final result = await paymentService.makePayment(
+        label: '$diamonds $diamondsLabel',
+        amount: price,
+        productId: 'diamonds_$diamonds',
+      );
+      if (result != null && result['success'] == true) {
+        await AuthService().addDiamonds(diamonds);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successMsg +$diamonds $diamondsLabel'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error en compra: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -1422,6 +1468,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   Widget _buildCurrencyDisplay() {
     final currentBalance = _getCurrentBalance() ?? 0;
+    final isBet = widget.matchType == S.of(context).bet;
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1435,10 +1482,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         children: [
           Icon(
             _getCurrencyIcon(),
-            color:
-            widget.matchType == S.of(context).bet
-                ? Colors.amber
-                : Colors.blue,
+            color: isBet ? Colors.amber : Colors.blue,
             size: 16,
           ),
           SizedBox(width: 6),
@@ -1450,6 +1494,17 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
               fontSize: 14,
             ),
           ),
+          if (isBet) ...[
+            const SizedBox(width: 2),
+            SizedBox(
+              width: 32, height: 32,
+              child: IconButton(
+                icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
+                padding: EdgeInsets.zero,
+                onPressed: _showDiamondPurchaseDialog,
+              ),
+            ),
+          ],
         ],
       ),
     );

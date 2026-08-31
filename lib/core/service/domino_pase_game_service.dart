@@ -15,7 +15,7 @@ class DominoPaseGameService {
 
   static int requiredBalance(int betAmount) => betAmount;
   static int commission(int betAmount, int nPlayers) =>
-      (requiredBalance(betAmount) * nPlayers * 0.10).ceil();
+      (requiredBalance(betAmount) * nPlayers * 0.20).ceil();
   static int passValue(int betAmount) => (betAmount * 0.10).ceil();
 
   Future<Map<String, dynamic>?> createGame({
@@ -151,21 +151,6 @@ class DominoPaseGameService {
       if (pid != null && !abandoned.contains(pid)) return next;
     }
     return game.nextTurnAfter(current);
-  }
-
-  String _previousActiveTurn(DominoGameMatch game, String current) {
-    final abandoned = List<String>.from(
-        game.gameSettings?['abandonedPlayers'] ?? []);
-    final nPlayers = game.numberOfPlayers;
-    var prev = current;
-    for (int i = 0; i < nPlayers; i++) {
-      final num = int.parse(prev.replaceAll('player', ''));
-      final prevNum = ((num - 2) % nPlayers) + 1;
-      prev = 'player$prevNum';
-      final pid = game.playerIdOf(prevNum);
-      if (pid != null && !abandoned.contains(pid)) return prev;
-    }
-    return current;
   }
 
   int _activePlayerCount(DominoGameMatch game) {
@@ -342,6 +327,7 @@ class DominoPaseGameService {
           updates['gameState.player${p}Hand'] = hands[p];
         }
         updates['gameState.consecutivePasses'] = 0;
+        updates['gameSettings.lastTilePlayerNum'] = playerNum;
         if (game.gameState.chain.isEmpty) {
           updates['gameState.openingTileId'] = tileId;
         }
@@ -387,21 +373,21 @@ class DominoPaseGameService {
             game.gameSettings?['abandonedPlayers'] ?? []);
         final activePlayers = _activePlayerCount(game);
 
-        final prevTurn = _previousActiveTurn(game, game.currentTurn);
-        final prevNum = int.parse(prevTurn.replaceAll('player', ''));
+        final lastTilePlayerNum = game.gameSettings?['lastTilePlayerNum'] as int? ?? 0;
+        if (lastTilePlayerNum > 0 && lastTilePlayerNum != pNum) {
+          final receiverKey = 'player$lastTilePlayerNum';
+          final passerKey = 'player$pNum';
 
-        final prevKey = 'player$prevNum';
-        final passerKey = 'player$pNum';
+          final receiverData =
+              Map<String, dynamic>.from(payments[receiverKey] ?? {'received': 0, 'paid': 0});
+          receiverData['received'] = (receiverData['received'] as int? ?? 0) + pValue;
+          payments[receiverKey] = receiverData;
 
-        final prevData =
-            Map<String, dynamic>.from(payments[prevKey] ?? {'received': 0, 'paid': 0});
-        prevData['received'] = (prevData['received'] as int? ?? 0) + pValue;
-        payments[prevKey] = prevData;
-
-        final passerData =
-            Map<String, dynamic>.from(payments[passerKey] ?? {'received': 0, 'paid': 0});
-        passerData['paid'] = (passerData['paid'] as int? ?? 0) + pValue;
-        payments[passerKey] = passerData;
+          final passerData =
+              Map<String, dynamic>.from(payments[passerKey] ?? {'received': 0, 'paid': 0});
+          passerData['paid'] = (passerData['paid'] as int? ?? 0) + pValue;
+          payments[passerKey] = passerData;
+        }
 
         final newPasses = game.gameState.consecutivePasses + 1;
         final Map<String, dynamic> updates = {

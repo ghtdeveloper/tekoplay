@@ -205,16 +205,11 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawStartingSquares(Canvas canvas, double squareSize) {
-    final borderPaint = Paint()
-      ..color = Colors.black
+    final safeBorderPaint = Paint()
+      ..color = const Color(0xFFE65100)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
 
-    // Casillas de salida: primer paso del camino exterior de cada color
-    // Verde (casa arriba-izq): sale por col=6, row=1 → primera casilla al bajar
-    // Rojo  (casa abajo-izq):  sale por col=1, row=8 → primera casilla al ir derecha
-    // Azul  (casa abajo-der):  sale por col=8, row=13→ primera casilla al subir
-    // Amarillo (casa arriba-der): sale por col=13,row=6→ primera casilla al ir izquierda
     const startingSquares = [
       (col: 6,  row: 1,  color: Color(0xFF00C853)),
       (col: 1,  row: 8,  color: Color(0xFFFF5252)),
@@ -230,24 +225,29 @@ class LudoBoardPainter extends CustomPainter {
       canvas.drawCircle(center, squareSize * 0.33, Paint()..color = Colors.white..style = PaintingStyle.fill);
       canvas.drawCircle(center, squareSize * 0.33, Paint()..color = sq.color..style = PaintingStyle.stroke..strokeWidth = 2.5);
       canvas.drawCircle(center, squareSize * 0.10, Paint()..color = sq.color..style = PaintingStyle.fill);
-      canvas.drawRect(rect, borderPaint);
+      canvas.drawRect(rect, safeBorderPaint);
     }
   }
 
   void _drawSafeStars(Canvas canvas, double squareSize) {
-    // Casillas seguras adicionales (estrellas) en el camino exterior
     final safeSquares = [
-      Offset(6, 5),   // camino verde, 5 pasos desde salida
-      Offset(5, 8),   // camino rojo, 5 pasos desde salida
-      Offset(8, 9),   // camino azul, 5 pasos desde salida
-      Offset(9, 6),   // camino amarillo, 5 pasos desde salida
+      Offset(6, 5),
+      Offset(5, 8),
+      Offset(8, 9),
+      Offset(9, 6),
       Offset(2, 6),
       Offset(12, 8),
       Offset(6, 12),
       Offset(8, 2),
     ];
 
+    final safeBgPaint = Paint()..color = const Color(0xFFFFE0B2)..style = PaintingStyle.fill;
+    final safeBorderPaint = Paint()..color = const Color(0xFFE65100)..style = PaintingStyle.stroke..strokeWidth = 2.5;
+
     for (final pos in safeSquares) {
+      final rect = Rect.fromLTWH(pos.dx * squareSize, pos.dy * squareSize, squareSize, squareSize);
+      canvas.drawRect(rect, safeBgPaint);
+      canvas.drawRect(rect, safeBorderPaint);
       _drawStar(
         canvas,
         Offset((pos.dx + 0.5) * squareSize, (pos.dy + 0.5) * squareSize),

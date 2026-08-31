@@ -22,6 +22,8 @@ import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/interstitial_ad_helper.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../core/service/payment_service.dart';
+import '../../coins/diamond_purchase_dialog.dart';
 
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;
@@ -424,6 +426,33 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          if (widget.matchType == S.of(context).bet)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${_userDiamonds ?? 0}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.diamond, color: Colors.white, size: 16),
+                    SizedBox(
+                      width: 32, height: 32,
+                      child: IconButton(
+                        icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        onPressed: _showDiamondPurchaseDialog,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -3481,6 +3510,50 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         return _buildGameScreen();
       case OnlineGameState.betNegotiation:
         throw UnimplementedError();
+    }
+  }
+
+  void _showDiamondPurchaseDialog() {
+    showDiamondPurchaseDialog(
+      context,
+      onPurchase: (diamondAmount, price) {
+        _processDiamondPurchase(diamondAmount, price);
+      },
+    );
+  }
+
+  Future<void> _processDiamondPurchase(int diamonds, double price) async {
+    final diamondsLabel = S.of(context).diamonds;
+    final successMsg = S.of(context).purchaseSuccessful;
+    final errorMsg = S.of(context).paymentProcessingError;
+    try {
+      final paymentService = PaymentService();
+      final canPay = await paymentService.canMakePayments();
+      if (!canPay) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).googlePayNotAvailable), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      final result = await paymentService.makePayment(
+        label: '$diamonds $diamondsLabel',
+        amount: price,
+        productId: 'diamonds_$diamonds',
+      );
+      if (result != null && result['success'] == true) {
+        await AuthService().addDiamonds(diamonds);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successMsg +$diamonds $diamondsLabel'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error en compra: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+      );
     }
   }
 
