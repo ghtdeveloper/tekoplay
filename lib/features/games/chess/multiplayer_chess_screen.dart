@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
@@ -18,15 +19,19 @@ import '../../adds/interstitial_ad_helper.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import '../../../core/service/payment_service.dart';
 import '../../coins/diamond_purchase_dialog.dart';
+import '../common/withdrawal_widget.dart';
+import '../common/withdraw_dialog.dart';
+
+enum _FriendChessState { setup, waitingRoom, gameActive }
 
 class MultiplayerChessScreen extends StatefulWidget {
-  final String gameId;
+  final String? gameId;
   final bool isHost;
   final String matchType;
 
   const MultiplayerChessScreen({
     super.key,
-    required this.gameId,
+    this.gameId,
     this.isHost = false,
     required this.matchType,
   });
@@ -60,7 +65,15 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
   int? _userCoins;
   int? _userDiamonds;
+  int? _withdrawableDiamonds;
   int? _selectedBetAmount;
+
+  _FriendChessState _screenState = _FriendChessState.setup;
+  String? _activeGameId;
+  StreamSubscription<MultiplayerGameMatch?>? _waitingSubscription;
+  StreamSubscription<DocumentSnapshot>? _balanceSubscription;
+
+  static const List<int> _betOptions = [10, 20, 50, 100, 250, 500, 1000, 5000, 10000];
 
   bool _hasUserExitedGame = false;
   int? _myRanking;
@@ -85,11 +98,19 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _gameStartTime = DateTime.now();
-    _loadUserCurrency();
-    _loadPlayerRankings();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
-    _enableWakeLock();
+
+    if (widget.gameId != null) {
+      _activeGameId = widget.gameId;
+      _screenState = _FriendChessState.gameActive;
+      _gameStartTime = DateTime.now();
+      _loadPlayerRankings();
+      _enableWakeLock();
+    } else {
+      _screenState = _FriendChessState.setup;
+      _setupBalanceListener();
+    }
+    _loadUserCurrency();
   }
 
   Future<void> _enableWakeLock() async {
@@ -114,8 +135,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
 
     if (!_localizationsReady) {
       _loadUserCurrency();
-      _loadPlayerRankings();
-      _initializeGame();
+      if (_screenState == _FriendChessState.gameActive && _activeGameId != null) {
+        _loadPlayerRankings();
+        _initializeGame();
+      }
       _localizationsReady = true;
     }
   }
@@ -177,7 +200,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _hasUserExitedGame = true;
 
       await _gameService.abandonGame(
-        gameId: widget.gameId,
+        gameId: _activeGameId!,
         playerId: currentUser!.uid,
       );
 
@@ -351,6 +374,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         setState(() {
           _userDiamonds = userDoc.diamonds;
           _userCoins = userDoc.coins;
+          _withdrawableDiamonds = userDoc.diamondsEarned;
         });
       }
     } catch (e) {
@@ -361,6 +385,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       setState(() {
         _userDiamonds = 0;
         _userCoins = 0;
+        _withdrawableDiamonds = 0;
       });
     }
   }
@@ -419,8 +444,204 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
         : Icons.monetization_on;
   }
 
-  int? _getCurrentBalance() {
-    return widget.matchType == S.of(context).bet ? _userDiamonds : _userCoins;
+  void _setupBalanceListener() {
+    if (currentUser == null) return;
+    _balanceSubscription?.cancel();
+    _balanceSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser!.uid)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists && mounted) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _userDiamonds = data['diamonds'] ?? 0;
+          _userCoins = data['coins'] ?? 0;
+          _withdrawableDiamonds = data['diamondsEarned'] ?? 0;
+        });
+      }
+    });
+  }
+
+  void _startWaitingRoom(String gameId) {
+    _activeGameId = gameId;
+    setState(() => _screenState = _FriendChessState.waitingRoom);
+
+    _waitingSubscription = _gameService
+        .getGameStream(gameId)
+        .listen((game) {
+      if (!mounted || game == null) return;
+      setState(() => _currentGame = game);
+
+      if (game.isActive && game.guestId != null && _screenState == _FriendChessState.waitingRoom) {
+        _waitingSubscription?.cancel();
+        _waitingSubscription = null;
+        _gameStartTime = DateTime.now();
+        _enableWakeLock();
+        _loadPlayerRankings();
+        setState(() => _screenState = _FriendChessState.gameActive);
+        _initializeGame();
+      }
+    });
+  }
+
+  Future<void> _createAndInvite({required String email, int? betAmount}) async {
+    if (currentUser == null || !mounted) return;
+
+    final isBet = widget.matchType == S.of(context).bet;
+    final currencyType = isBet ? 'diamonds' : 'coins';
+    final effectiveBet = betAmount ?? _selectedBetAmount;
+
+    String? gameId = _activeGameId;
+
+    gameId ??= await _gameService.createGame(
+        hostId: currentUser!.uid,
+        hostName: currentUser!.displayName ?? 'Jugador',
+        hostPhotoUrl: currentUser!.photoURL,
+        gameType: 'Ajedrez',
+        currencyType: currencyType,
+        betAmount: effectiveBet,
+      );
+
+    if (gameId == null || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(S.of(context).errorCreatingRoom),
+            backgroundColor: Colors.red));
+      }
+      return;
+    }
+
+    final error = await GameInvitationService().createInvitation(
+      fromUserId: currentUser!.uid,
+      fromUserName: currentUser!.displayName ?? 'Jugador',
+      toUserEmail: email,
+      gameType: 'Ajedrez',
+      betAmount: effectiveBet,
+      currencyType: currencyType,
+      existingGameId: gameId,
+    );
+
+    if (!mounted) return;
+
+    if (error != null) {
+      if (_activeGameId == null) {
+        FirebaseFirestore.instance.collection('multiplayer_games').doc(gameId).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (_activeGameId == null) {
+      if (isBet && betAmount != null) setState(() => _selectedBetAmount = betAmount);
+      _startWaitingRoom(gameId);
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(S.of(context).invitationSentWaiting),
+          backgroundColor: Colors.green));
+    }
+  }
+
+  void _showFriendInviteDialog() {
+    if (currentUser == null) return;
+
+    final emailController = TextEditingController();
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          final isValid = emailController.text.trim().isNotEmpty;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(S.of(ctx).inviteFriend,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: isLoading ? null : () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    S.of(ctx).enterFriendEmail,
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    enabled: !isLoading,
+                    keyboardType: TextInputType.emailAddress,
+                    autofocus: true,
+                    onChanged: (_) => setDlg(() {}),
+                    decoration: InputDecoration(
+                      labelText: S.of(ctx).friendEmailLabel,
+                      hintText: 'ejemplo@email.com',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: const ui.Color(0xFFEC7A34), width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: (isLoading || !isValid)
+                          ? null
+                          : () async {
+                              setDlg(() => isLoading = true);
+                              Navigator.of(ctx).pop();
+                              await _createAndInvite(
+                                email: emailController.text.trim(),
+                              );
+                            },
+                      icon: isLoading
+                          ? const SizedBox(width: 16, height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send),
+                      label: Text(
+                        isLoading ? S.of(ctx).sending : S.of(ctx).sendInvitation,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const ui.Color(0xFFEC7A34), foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -484,8 +705,10 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _showErrorAndExit(S.of(context).userNotFound);
       return;
     }
+    final gid = _activeGameId;
+    if (gid == null) return;
     _gameSubscription = _gameService
-        .getGameStream(widget.gameId)
+        .getGameStream(gid)
         .listen(
           (game) {
         if (game == null) {
@@ -883,7 +1106,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       _initialMoveTimer?.cancel();
 
       final success = await _gameService.abandonGame(
-        gameId: widget.gameId,
+        gameId: _activeGameId!,
         playerId: currentUser!.uid,
       );
 
@@ -947,7 +1170,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       final newFen = controller.getFen();
 
       final success = await _gameService.makeMove(
-        gameId: widget.gameId,
+        gameId: _activeGameId!,
         playerId: currentUser!.uid,
         from: "player",
         to: "move",
@@ -1008,7 +1231,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _initialMoveTimer?.cancel();
     try {
       await _gameService.finishGame(
-        gameId: widget.gameId,
+        gameId: _activeGameId!,
         result: result,
         winnerId: winnerId,
       );
@@ -1078,7 +1301,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           'gameMode': 'multiplayer',
           'isRanked': _currentGame?.isRanked ?? false,
           'betAmount': _selectedBetAmount,
-          'gameId': widget.gameId,
+          'gameId': _activeGameId!,
           'matchType': widget.matchType,
           'quotasPaid': _currentGame?.quotasCollected ?? false,
         },
@@ -1467,60 +1690,122 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
   }
 
   Widget _buildCurrencyDisplay() {
-    final currentBalance = _getCurrentBalance() ?? 0;
     final isBet = widget.matchType == S.of(context).bet;
+    final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
 
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            _getCurrencyIcon(),
-            color: isBet ? Colors.amber : Colors.blue,
-            size: 16,
-          ),
-          SizedBox(width: 6),
-          Text(
-            '$currentBalance',
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            '$balance',
             style: TextStyle(
-              color: Colors.white,
+              fontSize: 15,
               fontWeight: FontWeight.bold,
-              fontSize: 14,
+              color: Colors.white,
             ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
-          if (isBet) ...[
-            const SizedBox(width: 2),
-            SizedBox(
-              width: 32, height: 32,
-              child: IconButton(
-                icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
-                padding: EdgeInsets.zero,
-                onPressed: _showDiamondPurchaseDialog,
-              ),
-            ),
-          ],
+        ),
+        SizedBox(width: 4),
+        if (widget.matchType == S.of(context).fun)
+          Image.asset(
+            'assets/images/coin.png',
+            height: 24,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.monetization_on, color: Colors.blue, size: 24);
+            },
+          )
+        else if (isBet)
+          Image.asset(
+            'assets/images/diamond.png',
+            height: 24,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.diamond, color: Colors.amber, size: 24);
+            },
+          ),
+        SizedBox(width: 2),
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: IconButton(
+            icon: Icon(Icons.add_circle, color: Colors.white, size: 20),
+            padding: EdgeInsets.zero,
+            onPressed: _showDiamondPurchaseDialog,
+          ),
+        ),
+        if (isBet && (_withdrawableDiamonds ?? 0) > 0) ...[
+          SizedBox(width: 4),
+          WithdrawalCounterWidget(
+            withdrawableAmount: _withdrawableDiamonds ?? 0,
+            onWithdraw: _showWithdrawalDialog,
+          ),
         ],
-      ),
+      ],
     );
+  }
+
+  void _showWithdrawalDialog() {
+    if (currentUser == null ||
+        _withdrawableDiamonds == null ||
+        _withdrawableDiamonds! <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(S.of(context).noWithdrawableDiamonds),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return WithdrawalDialog(
+          withdrawableAmount: _withdrawableDiamonds!,
+          onWithdraw: (amount) => _processWithdrawal(amount),
+        );
+      },
+    );
+  }
+
+  Future<void> _processWithdrawal(int amount) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(S.of(context).withdrawalProcessed(amount)),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error en retiro: $e');
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al procesar el retiro'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
     _playerTimer?.cancel();
     _initialMoveTimer?.cancel();
+    _waitingSubscription?.cancel();
+    _balanceSubscription?.cancel();
 
     if (!_gameEnded &&
         !_hasUserExitedGame &&
         _currentGame != null &&
-        _currentGame!.isActive) {
+        _currentGame!.isActive &&
+        _activeGameId != null) {
       _gameService
-          .abandonGame(gameId: widget.gameId, playerId: currentUser!.uid)
+          .abandonGame(gameId: _activeGameId!, playerId: currentUser!.uid)
           .catchError((e){
         if (kDebugMode) {
           print('Error en abandono desde dispose: $e');
@@ -1536,8 +1821,310 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     super.dispose();
   }
 
+  Widget _buildSetupScaffold() {
+    final isBet = widget.matchType == S.of(context).bet;
+    final balance = isBet ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
+
+    return Scaffold(
+      backgroundColor: const ui.Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: const ui.Color(0xFFEC7A34),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(S.of(context).playWithFriend, style: const TextStyle(color: Colors.white)),
+        elevation: 2,
+        actions: [
+          if (isBet)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${_userDiamonds ?? 0}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.diamond, color: Colors.white, size: 16),
+                    SizedBox(
+                      width: 32, height: 32,
+                      child: IconButton(
+                        icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        onPressed: _showDiamondPurchaseDialog,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [const ui.Color(0xFFEC7A34), const ui.Color(0xFFd4622a)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Center(child: Text('♟️', style: TextStyle(fontSize: 28))),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(S.of(context).playWithFriend,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(S.of(context).inviteFriend,
+                            style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            if (isBet) ...[
+              const SizedBox(height: 28),
+              Text(S.of(context).howMuchBet,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text(S.of(context).selectYourBet,
+                  style: const TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: _betOptions.map((amount) {
+                    final isSelected = _selectedBetAmount == amount;
+                    final canAfford = balance >= amount;
+                    return GestureDetector(
+                      onTap: canAfford ? () => setState(() => _selectedBetAmount = amount) : null,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.amber.shade600
+                              : (canAfford ? Colors.white : Colors.grey.shade200),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected ? Colors.amber.shade700 : Colors.grey.shade300,
+                            width: isSelected ? 2 : 1,
+                          ),
+                          boxShadow: isSelected
+                              ? [BoxShadow(color: Colors.amber.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2))]
+                              : [],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.diamond,
+                                color: isSelected ? Colors.white : (canAfford ? Colors.amber.shade600 : Colors.grey.shade400),
+                                size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              amount.toString(),
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : (canAfford ? Colors.black87 : Colors.grey.shade500),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(isBet ? Icons.diamond : Icons.monetization_on,
+                      color: isBet ? Colors.blue : Colors.amber, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${S.of(context).youHave}: ${isBet ? '${_userDiamonds ?? 0} ${S.of(context).diamonds}' : '${_userCoins ?? 0} ${S.of(context).coins}'}',
+                    style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (isBet && _selectedBetAmount == null)
+                    ? null
+                    : () => _showFriendInviteDialog(),
+                icon: const Icon(Icons.person_add, size: 22),
+                label: Text(S.of(context).inviteFriend,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const ui.Color(0xFFEC7A34), foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 4,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const BannerAdWidget(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaitingRoomScaffold() {
+    return Scaffold(
+      backgroundColor: const ui.Color(0xFFF5F5F5),
+      appBar: AppBar(
+        backgroundColor: const ui.Color(0xFFEC7A34),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(S.of(context).waitingOpponent, style: const TextStyle(color: Colors.white)),
+        elevation: 2,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10)],
+                ),
+                child: Column(
+                  children: [
+                    const Text('♟️', style: TextStyle(fontSize: 48)),
+                    const SizedBox(height: 12),
+                    Text(S.of(context).waitingOpponent,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(
+                      S.of(context).waitingForOpponentJoin,
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (_selectedBetAmount != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade200),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.diamond, color: Colors.amber.shade600, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              S.of(context).betDisplay(_selectedBetAmount ?? 0, S.of(context).diamonds),
+                              style: TextStyle(
+                                color: Colors.amber.shade800,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (_activeGameId != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        '${S.of(context).gameCode}: ${_activeGameId!.substring(0, 8)}',
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _showFriendInviteDialog(),
+                    icon: const Icon(Icons.person_add, size: 18),
+                    label: Text(S.of(context).inviteFriend),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const ui.Color(0xFFEC7A34), foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      if (_activeGameId != null) {
+                        await _gameService.cancelGame(_activeGameId!, currentUser!.uid);
+                      }
+                      if (mounted) Navigator.of(context).pop();
+                    },
+                    icon: const Icon(Icons.close, size: 18),
+                    label: Text(S.of(context).cancel),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red, foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_screenState == _FriendChessState.setup) return _buildSetupScaffold();
+    if (_screenState == _FriendChessState.waitingRoom) return _buildWaitingRoomScaffold();
+
     if (_currentGame == null) {
       return Scaffold(
         backgroundColor: const ui.Color(0xFFEC7A34),
@@ -1589,7 +2176,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
               ),
               SizedBox(height: 16),
               Text(
-                '${S.of(context).gameCode}: ${widget.gameId.substring(0, 8)}',
+                '${S.of(context).gameCode}: ${_activeGameId!.substring(0, 8)}',
                 style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
               if (_selectedBetAmount != null) ...[
@@ -1624,7 +2211,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                 onPressed: () async {
                   final navigator = Navigator.of(context);
                   final cancelled = await _gameService.cancelGame(
-                    widget.gameId,
+                    _activeGameId!,
                     currentUser!.uid,
                   );
                   if (cancelled) {
@@ -1736,7 +2323,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
             ),
             GameChatWidget(
               key: _chatKey,
-              gameId: widget.gameId,
+              gameId: _activeGameId!,
               collectionName: 'multiplayer_games',
               currentUserId: currentUser?.uid ?? '',
               currentUserName: currentUser?.displayName ?? 'Jugador',

@@ -1649,14 +1649,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     }
   }
 
-  bool _isSafePosition(int position) {
-    const safePositions = {0, 4, 8, 13, 17, 21, 26, 30, 34, 39, 43, 47};
-    return safePositions.contains(position);
-  }
-
-
   bool _isSafeForColor(int position, String color) {
-    return _isSafePosition(position);
+    const starPositions = {4, 8, 17, 21, 30, 34, 43, 47};
+    if (starPositions.contains(position)) return true;
+    if (position == _getStartPosition(color)) return true;
+    return false;
   }
 
   bool _checkVictory(String color) {

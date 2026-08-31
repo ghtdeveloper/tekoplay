@@ -95,6 +95,84 @@ class GameQuotaService {
     }
   }
 
+  Future<Map<String, dynamic>> collectMultiPlayerQuotas({
+    required String gameId,
+    required List<String> playerIds,
+    required int quotaAmount,
+    required String currencyType,
+    String collectionName = 'ludo_games',
+  }) async {
+    try {
+      final realIds = playerIds.where((id) => !id.startsWith('bot_')).toList();
+      if (realIds.length < 2) {
+        return {'success': false, 'error': 'Menos de 2 jugadores reales'};
+      }
+
+      return await _firestore.runTransaction((transaction) async {
+        final gameRef = _firestore.collection(collectionName).doc(gameId);
+        final gameDoc = await transaction.get(gameRef);
+
+        final gameData = gameDoc.data();
+        if (gameData != null && gameData['quotasCollected'] == true) {
+          return {
+            'success': true,
+            'alreadyCollected': true,
+            'totalPot': gameData['totalPot'] ?? quotaAmount * realIds.length,
+          };
+        }
+
+        final playerDocs = <String, DocumentSnapshot>{};
+        for (final pid in realIds) {
+          final doc = await transaction.get(
+            _firestore.collection('users').doc(pid),
+          );
+          if (!doc.exists) {
+            throw Exception('Usuario $pid no encontrado');
+          }
+          playerDocs[pid] = doc;
+        }
+
+        final field = currencyType == 'coins' ? 'coins' : 'diamonds';
+        for (final pid in realIds) {
+          final data = playerDocs[pid]!.data() as Map<String, dynamic>;
+          final balance = data[field] ?? 0;
+          if (balance < quotaAmount) {
+            throw Exception('Jugador $pid no tiene fondos suficientes');
+          }
+        }
+
+        for (final pid in realIds) {
+          final data = playerDocs[pid]!.data() as Map<String, dynamic>;
+          final balance = data[field] ?? 0;
+          final newBalance = balance - quotaAmount;
+          transaction.update(playerDocs[pid]!.reference, {field: newBalance});
+        }
+
+        final totalPot = quotaAmount * realIds.length;
+        transaction.update(gameRef, {
+          'totalPot': totalPot,
+          'quotasCollected': true,
+          'currencyType': currencyType,
+          'quotasCollectedAt': FieldValue.serverTimestamp(),
+        });
+
+        return {
+          'success': true,
+          'totalPot': totalPot,
+          'realPlayerCount': realIds.length,
+        };
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('collectMultiPlayerQuotas error: $e');
+      }
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   Map<String, int> calculateDistribution({
     required int totalPot,
     required String winnerId,

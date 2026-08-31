@@ -1635,7 +1635,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
 
   bool _isSafeForColor(int pos, String color) {
-    return const {0, 4, 8, 13, 17, 21, 26, 30, 34, 39, 43, 47}.contains(pos);
+    const starPositions = {4, 8, 17, 21, 30, 34, 43, 47};
+    if (starPositions.contains(pos)) return true;
+    if (pos == _getStartPosition(color)) return true;
+    return false;
   }
 
   Offset? _getPieceScreenPos(LudoPiece piece, String color, double sq) {

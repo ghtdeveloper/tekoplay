@@ -746,7 +746,7 @@ exports.distributeLudoGameRewards = onDocumentUpdated(
         }
 
         // Victoria normal — ganador recibe el pot menos comisión
-        const totalPot = betAmount * realPlayerCount;
+        const totalPot = currentGameData.totalPot || (betAmount * realPlayerCount);
         const commissionRate = isBetMode ? 0.10 : 0.30;
         const winnerPrize = Math.floor(totalPot * (1 - commissionRate));
         const houseCommission = totalPot - winnerPrize;

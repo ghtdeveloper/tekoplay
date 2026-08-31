@@ -91,6 +91,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   int? _selectedPieceId;
   final List<int> _validMovePositions = [];
   bool _bonusSelectionActive = false;
+  bool _localMoveInProgress = false;
   bool _bonusHadDouble = false;
   int _bonusRemainingDie = 0;
   int _bonusRemainingDieNumber = 0;
@@ -397,15 +398,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final turnChangedToMe = newTurn != prevTurn && newTurn == 'player$_myPlayerNumber';
     final isMyTurnNow = newTurn == 'player$_myPlayerNumber';
 
+    final acceptRemoteState = (!isMyTurnNow && !_localMoveInProgress) || turnChangedToMe || game.isFinished || game.isAbandoned;
     setState(() {
-      _gameState = game.gameState;
-      _currentTurn = newTurn;
-      if (!isMyTurnNow || turnChangedToMe) {
+      if (acceptRemoteState) {
+        _gameState = game.gameState;
         _dice1Value = game.dice1;
         _dice2Value = game.dice2;
         _hasUsedDice1 = game.hasUsedDice1;
         _hasUsedDice2 = game.hasUsedDice2;
       }
+      _currentTurn = newTurn;
     });
 
     if (isMyTurnNow && !_bonusSelectionActive) _calculateMovablePieces();
@@ -930,6 +932,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   void _executePieceMove(String color, int pieceId, int diceValue, int diceNumber) {
     if ((color != _myColor && !_botColors.contains(color)) || _gameEnded) return;
     if (color == _myColor) _turnTimer?.cancel();
+    _localMoveInProgress = true;
 
     final pieces = _gameState.getPiecesByColor(color);
     if (pieceId >= pieces.length) return;
@@ -1092,6 +1095,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   void _executeBonusMove(int pieceId, int bonusPos) {
     _bonusSelectionActive = false;
+    _localMoveInProgress = true;
     final pieces = _gameState.getPiecesByColor(_myColor);
     if (pieceId >= pieces.length) return;
     final piece = pieces[pieceId];
@@ -1137,7 +1141,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   Future<void> _syncGameState({required bool advanceTurn}) async {
-    if (!mounted) return;
+    if (!mounted) { _localMoveInProgress = false; return; }
     try {
       final updates = <String, dynamic>{
         'gameState': _gameState.toMap(),
@@ -1163,6 +1167,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     } catch (e) {
       if (kDebugMode) print('Error syncing game state: $e');
     }
+    _localMoveInProgress = false;
   }
 
   String _getNextTurn() {
@@ -1298,7 +1303,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   }
 
   bool _isSafeForColor(int pos, String color) {
-    return const {0, 4, 8, 13, 17, 21, 26, 30, 34, 39, 43, 47}.contains(pos);
+    const starPositions = {4, 8, 17, 21, 30, 34, 43, 47};
+    if (starPositions.contains(pos)) return true;
+    if (pos == _getStartPosition(color)) return true;
+    return false;
   }
 
   Offset? _getPieceScreenPosition(LudoPiece piece, String color, double sq) {
@@ -1516,6 +1524,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   Future<void> _doBotMoves(String botColor, bool hadDouble) async {
     if (!mounted || _gameEnded) return;
+    _localMoveInProgress = true;
 
     _calculateMovablePieces(botColor);
 
@@ -1549,15 +1558,13 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     bool captured = false;
-    final isBarrierBreak = newPos < 52 && wasHome && newPos == _getStartPosition(botColor);
-    if (isBarrierBreak) {
+    final isExitingHome = newPos < 52 && wasHome && newPos == _getStartPosition(botColor);
+    if (isExitingHome) {
       for (final ec in _activePlayers) {
         if (ec == botColor) continue;
         final enemyHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos).toList();
-        if (enemyHere.length >= 2) {
-          enemyHere.last.position = -1; captured = true;
-        }
+        for (final ep in enemyHere) { ep.position = -1; captured = true; }
       }
     } else if (newPos < 52 && !_isSafeForColor(newPos, botColor)) {
       for (final ec in _activePlayers) {

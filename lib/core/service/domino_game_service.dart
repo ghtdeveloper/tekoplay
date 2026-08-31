@@ -339,7 +339,7 @@ class DominoGameService {
 
           updates['quotasCollected'] = true;
           updates['quotasCollectedAt'] = FieldValue.serverTimestamp();
-          updates['totalPot'] = betAmount * game.numberOfPlayers;
+          updates['totalPot'] = betAmount * realPlayerIds.length;
         }
 
 

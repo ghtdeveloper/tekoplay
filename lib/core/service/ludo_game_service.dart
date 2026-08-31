@@ -143,26 +143,46 @@ class LudoGameService {
 
       final isBetGame = (game.betAmount ?? 0) > 0 && newPlayerCount >= expectedPlayers;
       if (isBetGame) {
+        final updatedDoc = await gameRef.get();
+        final updatedGame = LudoGameMatch.fromFirestore(updatedDoc);
+        final allPlayerIds = <String>[
+          updatedGame.hostId,
+          if (updatedGame.guest2Id != null) updatedGame.guest2Id!,
+          if (updatedGame.guest3Id != null) updatedGame.guest3Id!,
+          if (updatedGame.guest4Id != null) updatedGame.guest4Id!,
+        ];
+
         final quotaService = GameQuotaService();
-        final result = await quotaService.collectQuotas(
+        final result = await quotaService.collectMultiPlayerQuotas(
           gameId: gameId,
-          hostId: game.hostId,
-          guestId: playerId,
+          playerIds: allPlayerIds,
           quotaAmount: game.betAmount!,
           currencyType: game.currencyType,
-          collectionName: _gamesCollection,
         );
 
         if (result['success'] != true) {
-          await gameRef.update({
-            'guest2Id': null,
-            'guest2Name': null,
-            'guest2PhotoUrl': null,
-            'player2Quota': null,
+          final rollback = <String, dynamic>{
             'status': 'waiting',
             'startedAt': null,
-          });
-          if (kDebugMode) print('💥 Fallo al cobrar cuotas Ludo: ${result['error']}');
+          };
+          if (playerNumber == 2) {
+            rollback['guest2Id'] = null;
+            rollback['guest2Name'] = null;
+            rollback['guest2PhotoUrl'] = null;
+            rollback['player2Quota'] = null;
+          } else if (playerNumber == 3) {
+            rollback['guest3Id'] = null;
+            rollback['guest3Name'] = null;
+            rollback['guest3PhotoUrl'] = null;
+            rollback['player3Quota'] = null;
+          } else if (playerNumber == 4) {
+            rollback['guest4Id'] = null;
+            rollback['guest4Name'] = null;
+            rollback['guest4PhotoUrl'] = null;
+            rollback['player4Quota'] = null;
+          }
+          await gameRef.update(rollback);
+          if (kDebugMode) print('Fallo al cobrar cuotas Ludo: ${result['error']}');
           return false;
         }
       }
@@ -220,10 +240,35 @@ class LudoGameService {
       }
 
       await gameRef.update(updates);
-      if (kDebugMode) print('🤖 Bots añadidos al juego $gameId, partida iniciada');
+
+      final isBetGame = (game.betAmount ?? 0) > 0;
+      if (isBetGame) {
+        final updatedDoc = await gameRef.get();
+        final updatedGame = LudoGameMatch.fromFirestore(updatedDoc);
+        final allPlayerIds = <String>[
+          updatedGame.hostId,
+          if (updatedGame.guest2Id != null) updatedGame.guest2Id!,
+          if (updatedGame.guest3Id != null) updatedGame.guest3Id!,
+          if (updatedGame.guest4Id != null) updatedGame.guest4Id!,
+        ];
+
+        final quotaService = GameQuotaService();
+        final result = await quotaService.collectMultiPlayerQuotas(
+          gameId: gameId,
+          playerIds: allPlayerIds,
+          quotaAmount: game.betAmount!,
+          currencyType: game.currencyType,
+        );
+
+        if (result['success'] != true) {
+          if (kDebugMode) print('Fallo al cobrar cuotas en fillBotsAndStart: ${result['error']}');
+        }
+      }
+
+      if (kDebugMode) print('Bots añadidos al juego $gameId, partida iniciada');
       return true;
     } catch (e) {
-      if (kDebugMode) print('💥 Error añadiendo bots: $e');
+      if (kDebugMode) print('Error añadiendo bots: $e');
       return false;
     }
   }

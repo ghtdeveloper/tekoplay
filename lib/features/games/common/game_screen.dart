@@ -994,145 +994,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showUserOptionsDialog(BuildContext context) {
-    if (_currentUser == null) return;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-
-              _buildUserAvatar(),
-              const SizedBox(height: 12),
-
-              Text(
-                _currentUser!.displayName ?? S.of(context).anonymous,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              if (_currentUser!.email != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  _currentUser!.email!,
-                  style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-                ),
-              ],
-
-              const SizedBox(height: 24),
-
-              _buildOptionTile(
-                icon: Icons.leaderboard_rounded,
-                label: S.of(context).ranking,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => RankingScreen()),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 10),
-
-              _buildOptionTile(
-                icon: Icons.history_rounded,
-                label: S.of(context).gameStats,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => GameHistoryScreen()),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildOptionTile({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEC7A34).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: const Color(0xFFEC7A34), size: 22),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded,
-                  color: Colors.grey[400], size: 22),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildUserNameSection() {
     final displayName =
         _currentUser?.displayName ??
         _anonymousPlayerName ??
         S.of(context).anonymous;
-    final isInteractive = _currentUser != null;
 
     return GestureDetector(
-      onTap: isInteractive
-          ? () => _showUserOptionsDialog(context)
-          : () => _showAnonymousUserDialog(context),
+      onTap: _currentUser == null
+          ? () => _showAnonymousUserDialog(context)
+          : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
@@ -1165,11 +1036,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (isInteractive) ...[
-              const SizedBox(width: 6),
-              Icon(Icons.keyboard_arrow_down_rounded,
-                  color: Colors.white.withValues(alpha: 0.8), size: 20),
-            ] else if (_isAnonymousMode) ...[
+            if (_isAnonymousMode) ...[
               const SizedBox(width: 6),
               Icon(Icons.info_outline,
                   color: Colors.white.withValues(alpha: 0.7), size: 16),
@@ -1377,10 +1244,49 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               ),
 
               Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 0,
+                      right: 16,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 40,
+                            height: 36,
+                            child: IconButton(
+                              icon: const Icon(Icons.leaderboard_rounded, color: Colors.white, size: 20),
+                              padding: EdgeInsets.zero,
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => RankingScreen()),
+                                );
+                              },
+                            ),
+                          ),
+                          SizedBox(
+                            width: 40,
+                            height: 36,
+                            child: IconButton(
+                              icon: const Icon(Icons.history_rounded, color: Colors.white, size: 20),
+                              padding: EdgeInsets.zero,
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => GameHistoryScreen()),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                       TweenAnimationBuilder<double>(
                         tween: Tween(begin: 0.0, end: 1.0),
                         duration: const Duration(milliseconds: 600),
@@ -1465,6 +1371,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       _buildUserNameSection(),
                     ],
                   ),
+                ),
+                  ],
                 ),
               ),
 
@@ -1931,321 +1839,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       return;
     }
 
-    _validateUserFundsForInvitation().then((hasEnoughFunds) {
-      if (!hasEnoughFunds) {
-        return;
-      }
-      if (!context.mounted) return;
-
-      final TextEditingController emailController = TextEditingController();
-      final TextEditingController betAmountController = TextEditingController();
-      bool isLoading = false;
-      String? betAmountError;
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, setState) {
-              void validateBetAmount(String value) {
-                if (matchType != S.of(context).bet) return;
-
-                setState(() {
-                  if (value.isEmpty) {
-                    betAmountError = 'Por favor ingresa un monto';
-                  } else {
-                    final amount = int.tryParse(value);
-                    if (amount == null) {
-                      betAmountError = 'Por favor ingresa un número válido';
-                    } else if (amount < 1) {
-                      betAmountError = 'El monto debe ser mayor a 0';
-                    } else if (amount > (_userDiamonds ?? 0)) {
-                      betAmountError =
-                          '${S.of(context).insufficientFunds}. ${S.of(context).youHave}: ${_userDiamonds ?? 0}';
-                    } else {
-                      betAmountError = null;
-                    }
-                  }
-                });
-              }
-
-              bool isFormValid =
-                  emailController.text.trim().isNotEmpty &&
-                  (matchType != S.of(context).bet ||
-                      (betAmountController.text.isNotEmpty &&
-                          betAmountError == null));
-
-              return Dialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                backgroundColor: Colors.white,
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              S.of(context).playWithFriend,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.close),
-                              onPressed:
-                                  isLoading
-                                      ? null
-                                      : () => Navigator.of(context).pop(),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-
-                        Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                matchType == S.of(context).bet
-                                    ? Icons.diamond
-                                    : Icons.monetization_on,
-                                color:
-                                    matchType == S.of(context).bet
-                                        ? Colors.amber
-                                        : Colors.blue,
-                                size: 16,
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                '${S.of(context).youHave}: ${matchType == S.of(context).bet ? (_userDiamonds ?? 0) : (_userCoins ?? 0)} ${matchType == S.of(context).bet ? 'diamantes' : 'monedas'}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green[800],
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        SizedBox(height: 20),
-                        TextField(
-                          controller: emailController,
-                          enabled: !isLoading,
-                          keyboardType: TextInputType.emailAddress,
-                          onChanged: (value) {
-                            setState(() {});
-                          },
-                          decoration: InputDecoration(
-                            labelText: S.of(context).opponentEmail,
-                            hintText: 'ejemplo@email.com',
-                            prefixIcon: Icon(Icons.email),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-
-                        if (matchType == S.of(context).bet) ...[
-                          SizedBox(height: 16),
-                          TextField(
-                            controller: betAmountController,
-                            enabled: !isLoading,
-                            keyboardType: TextInputType.number,
-                            onChanged: (value) {
-                              validateBetAmount(value);
-                            },
-                            decoration: InputDecoration(
-                              labelText: S.of(context).betAmountDiamonds,
-                              hintText: S.of(context).enterAmount,
-                              prefixIcon: Icon(
-                                Icons.diamond,
-                                color: Colors.amber,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              errorText: betAmountError,
-                              helperText:
-                                  S.of(context).availableDiamondsCount(_userDiamonds ?? 0),
-                              helperStyle: TextStyle(fontSize: 11),
-                            ),
-                          ),
-
-                          SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            children:
-                                [10, 50, 100, 250, 500].map((amount) {
-                                  final canSelect =
-                                      amount <= (_userDiamonds ?? 0);
-                                  return ActionChip(
-                                    label: Text('$amount'),
-                                    onPressed:
-                                        !isLoading && canSelect
-                                            ? () {
-                                              betAmountController.text =
-                                                  amount.toString();
-                                              validateBetAmount(
-                                                amount.toString(),
-                                              );
-                                            }
-                                            : null,
-                                    backgroundColor:
-                                        canSelect
-                                            ? Colors.amber.withValues(
-                                              alpha: 0.2,
-                                            )
-                                            : Colors.grey.withValues(
-                                              alpha: 0.2,
-                                            ),
-                                    labelStyle: TextStyle(
-                                      color:
-                                          canSelect
-                                              ? Colors.amber[800]
-                                              : Colors.grey,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  );
-                                }).toList(),
-                          ),
-                        ],
-
-                        SizedBox(height: 20),
-
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed:
-                                (isLoading || !isFormValid)
-                                    ? null
-                                    : () async {
-                                      final isBetMode = matchType == S.of(context).bet;
-                                      final successMsg = S.of(context).successfulSentInvitation;
-                                      final stillHasEnoughFunds =
-                                          await _validateUserFundsForInvitation();
-                                      if (!stillHasEnoughFunds) {
-                                        if (!context.mounted) return;
-                                        Navigator.of(context).pop();
-                                        return;
-                                      }
-                                      if (!context.mounted) return;
-                                      if (isBetMode) {
-                                        final betAmount = int.tryParse(
-                                          betAmountController.text.trim(),
-                                        );
-                                        if (betAmount == null ||
-                                            betAmount < 1 ||
-                                            betAmount > (_userDiamonds ?? 0)) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                S.of(context).invalidBetAmount,
-                                              ),
-                                              backgroundColor: Colors.red,
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                      }
-
-                                      setState(() => isLoading = true);
-
-                                      final error =
-                                          await GameInvitationService()
-                                              .createInvitation(
-                                                fromUserId: _currentUser!.uid,
-                                                fromUserName:
-                                                    _currentUser!.displayName ??
-                                                    S.of(context).user,
-                                                toUserEmail:
-                                                    emailController.text.trim(),
-                                                gameType: gameType,
-                                                betAmount: isBetMode
-                                                        ? int.parse(
-                                                          betAmountController
-                                                              .text
-                                                              .trim(),
-                                                        )
-                                                        : null,
-                                                currencyType:
-                                                    _getCurrencyName(),
-                                              );
-
-                                      setState(() => isLoading = false);
-
-                                      if (!context.mounted) return;
-                                      if (error == null) {
-                                        Navigator.of(context).pop();
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(successMsg),
-                                            backgroundColor: Colors.green,
-                                          ),
-                                        );
-                                      } else {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(error),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      }
-                                    },
-                            icon:
-                                isLoading
-                                    ? SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                    : Icon(Icons.send),
-                            label: Text(
-                              isLoading
-                                  ? S.of(context).sending
-                                  : S.of(context).sentInvitation,
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEC7A34),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: EdgeInsets.symmetric(vertical: 14),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      );
-    });
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MultiplayerChessScreen(matchType: matchType),
+      ),
+    );
   }
 
   void _showTutorial(BuildContext context) {
