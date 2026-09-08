@@ -1256,20 +1256,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             width: 40,
                             height: 36,
                             child: IconButton(
-                              icon: const Icon(Icons.leaderboard_rounded, color: Colors.white, size: 20),
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => RankingScreen()),
-                                );
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: 40,
-                            height: 36,
-                            child: IconButton(
                               icon: const Icon(Icons.history_rounded, color: Colors.white, size: 20),
                               padding: EdgeInsets.zero,
                               onPressed: () {

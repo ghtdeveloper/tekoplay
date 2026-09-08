@@ -25,13 +25,13 @@ class GameStats {
   static int getInitialPoints(GameTypeModel gameType) {
     switch (gameType) {
       case GameTypeModel.chess:
-        return 1000;
+        return 0;
       case GameTypeModel.domino:
-        return 1000;
+        return 0;
       case GameTypeModel.ludo:
-        return 1000;
+        return 0;
       case GameTypeModel.dominoPase:
-        return 1000;
+        return 0;
     }
   }
 

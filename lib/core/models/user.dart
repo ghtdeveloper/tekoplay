@@ -119,7 +119,7 @@ class UserModel {
   UserModel updateAfterMatch(GameMatch match) {
     final currentStats = getGameStats(match.gameType);
     final updatedStats = currentStats.copyWith(
-      points: currentStats.points + match.pointsEarned,
+      points: (currentStats.points + match.pointsEarned).clamp(0, double.infinity).toInt(),
       gamesPlayed: currentStats.gamesPlayed + 1,
       wins:
           match.result == GameResultModel.win
