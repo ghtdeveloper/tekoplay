@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
-import 'package:tekoplay/features/games/common/ranking_screen.dart';
 import 'package:tekoplay/features/games/common/withdraw_dialog.dart';
 import 'package:tekoplay/features/games/common/withdrawal_widget.dart';
 import 'package:tekoplay/features/games/ludo/ludo_tutorial_screen.dart';
