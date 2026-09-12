@@ -30,6 +30,7 @@ class _TekoplayAppState extends State<TekoplayApp> {
   Future<void> _loadLocale() async {
     final prefs = await SharedPreferences.getInstance();
     final code = prefs.getString('languageCode') ?? 'es';
+    if (!mounted) return;
     setState(() {
       _locale = Locale(code);
     });

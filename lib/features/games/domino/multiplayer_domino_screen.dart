@@ -1234,8 +1234,8 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                 currentUserId: _currentUser?.uid ?? '',
                 currentUserName: _currentUser?.displayName ?? 'Jugador',
                 showFloatingBubbles: false,
-                onUnreadCountChanged: (count) {
-                  if (mounted) setState(() => _unreadChatCount = count);
+                onUnreadCountChanged: (unreadCount) {
+                  if (mounted) setState(() => _unreadChatCount = unreadCount);
                 },
                 onNewMessageFromOther: (senderId, _) {
                   if (!mounted) return;

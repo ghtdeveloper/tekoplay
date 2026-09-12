@@ -832,6 +832,7 @@ class _MultiplayerDominoPaseScreenState
       boneyard: game.gameState.boneyard,
       tiles: game.gameState.tiles,
       consecutivePasses: 0,
+      openingTileId: game.gameState.openingTileId ?? (game.gameState.chain.isEmpty ? tileId : null),
     );
 
     return DominoGameMatch(
@@ -922,9 +923,69 @@ class _MultiplayerDominoPaseScreenState
       final dur = game.startedAt != null
           ? DateTime.now().difference(game.startedAt!).inMinutes
           : 1;
-      final opponentName = _myPlayerNumber == 1
-          ? (game.guestName ?? 'Oponente')
-          : game.hostName;
+
+      final opponents = <String>[];
+      final nPlayers = game.numberOfPlayers;
+      for (int p = 1; p <= nPlayers; p++) {
+        if (p == _myPlayerNumber) continue;
+        final name = game.playerNameOf(p);
+        if (name.isNotEmpty) opponents.add(name);
+      }
+      final opponentName = opponents.isEmpty ? 'Oponente' : opponents.join(', ');
+
+      final betAmount = game.betAmount ?? 0;
+      final required = DominoPaseGameService.requiredBalance(betAmount);
+      final commissionAmt = game.gameSettings?['commissionAmount'] as int? ??
+          DominoPaseGameService.commission(betAmount, nPlayers);
+      final totalPot = required * nPlayers;
+      final winnerPrize = (game.gameSettings?['winnerPrize'] as num?)?.toInt() ??
+          (game.gameSettings?['settlement']?['winnerPrize'] as num?)?.toInt() ??
+          (game.gameSettings?['distribution']?['winnerPrize'] as num?)?.toInt() ??
+          (totalPot - commissionAmt);
+
+      int myPassNet = 0;
+      final settings = game.gameSettings ?? {};
+      final addData = settings['additionalData'];
+      if (addData is Map && addData['passNet'] != null) {
+        myPassNet = (addData['passNet'] as num).toInt();
+      } else if (settings['passNet'] != null) {
+        final rawNet = settings['passNet'];
+        if (rawNet is Map) {
+          final netMap = Map<String, dynamic>.from(rawNet);
+          if (netMap.containsKey(_currentUser!.uid)) {
+            myPassNet = (netMap[_currentUser!.uid] as num).toInt();
+          } else if (netMap.containsKey('player$_myPlayerNumber')) {
+            myPassNet = (netMap['player$_myPlayerNumber'] as num).toInt();
+          } else if (iWon && netMap.containsKey('ganador')) {
+            myPassNet = (netMap['ganador'] as num).toInt();
+          } else if (!iWon && netMap.containsKey('perdedor')) {
+            myPassNet = (netMap['perdedor'] as num).toInt();
+          }
+        } else if (rawNet is num) {
+          myPassNet = rawNet.toInt();
+        }
+      } else {
+        final payments = Map<String, dynamic>.from(settings['passPayments'] ?? {});
+        final myPayments = (payments['player$_myPlayerNumber'] ?? payments[_currentUser!.uid]) as Map<String, dynamic>?;
+        if (myPayments != null) {
+          if (myPayments.containsKey('net')) {
+            myPassNet = (myPayments['net'] as num).toInt();
+          } else {
+            final myReceived = (myPayments['received'] as int?) ?? 0;
+            final myPaid = (myPayments['paid'] as int?) ?? 0;
+            myPassNet = myReceived - myPaid;
+          }
+        }
+      }
+
+      final netDiamonds = (addData is Map && addData['netAmount'] != null)
+          ? (addData['netAmount'] as num).toInt()
+          : (settings['netAmount'] != null)
+              ? (settings['netAmount'] as num).toInt()
+              : (game.quotasCollected
+                  ? (iWon ? (winnerPrize + myPassNet) : (-required + myPassNet))
+                  : 0);
+
       await _firestoreService.recordGameMatch(
         userId: uid,
         gameType: GameTypeModel.dominoPase,
@@ -937,6 +998,8 @@ class _MultiplayerDominoPaseScreenState
           'mode': 'multiplayer',
           'betAmount': game.betAmount,
           'currencyType': 'diamonds',
+          'netAmount': netDiamonds,
+          'passNet': myPassNet,
         },
       );
     } catch (e) {
@@ -2337,18 +2400,53 @@ class _MultiplayerDominoPaseScreenState
         game.gameSettings?['commissionAmount'] as int? ??
             DominoPaseGameService.commission(betAmount, nPlayers);
     final totalPot = required * nPlayers;
-    final winnerPrize = totalPot - commissionAmt;
+    final winnerPrize = (game.gameSettings?['winnerPrize'] as num?)?.toInt() ??
+        (game.gameSettings?['settlement']?['winnerPrize'] as num?)?.toInt() ??
+        (game.gameSettings?['distribution']?['winnerPrize'] as num?)?.toInt() ??
+        (totalPot - commissionAmt);
 
-    final payments = Map<String, dynamic>.from(
-        game.gameSettings?['passPayments'] ?? {});
-    final myPayments =
-        payments['player$_myPlayerNumber'] as Map<String, dynamic>?;
-    final myPassNet = ((myPayments?['received'] as int?) ?? 0) -
-        ((myPayments?['paid'] as int?) ?? 0);
+    int myPassNet = 0;
+    final settings = game.gameSettings ?? {};
+    final addData = settings['additionalData'];
+    if (addData is Map && addData['passNet'] != null) {
+      myPassNet = (addData['passNet'] as num).toInt();
+    } else if (settings['passNet'] != null) {
+      final rawNet = settings['passNet'];
+      if (rawNet is Map) {
+        final netMap = Map<String, dynamic>.from(rawNet);
+        if (netMap.containsKey(_currentUser!.uid)) {
+          myPassNet = (netMap[_currentUser!.uid] as num).toInt();
+        } else if (netMap.containsKey('player$_myPlayerNumber')) {
+          myPassNet = (netMap['player$_myPlayerNumber'] as num).toInt();
+        } else if (iWon && netMap.containsKey('ganador')) {
+          myPassNet = (netMap['ganador'] as num).toInt();
+        } else if (!iWon && netMap.containsKey('perdedor')) {
+          myPassNet = (netMap['perdedor'] as num).toInt();
+        }
+      } else if (rawNet is num) {
+        myPassNet = rawNet.toInt();
+      }
+    } else {
+      final payments = Map<String, dynamic>.from(settings['passPayments'] ?? {});
+      final myPayments = (payments['player$_myPlayerNumber'] ?? payments[_currentUser!.uid]) as Map<String, dynamic>?;
+      if (myPayments != null) {
+        if (myPayments.containsKey('net')) {
+          myPassNet = (myPayments['net'] as num).toInt();
+        } else {
+          final myReceived = (myPayments['received'] as int?) ?? 0;
+          final myPaid = (myPayments['paid'] as int?) ?? 0;
+          myPassNet = myReceived - myPaid;
+        }
+      }
+    }
 
-    final totalResult = game.quotasCollected
-        ? (iWon ? (winnerPrize + myPassNet) : (-required + myPassNet))
-        : 0;
+    final totalResult = (addData is Map && addData['netAmount'] != null)
+        ? (addData['netAmount'] as num).toInt()
+        : (settings['netAmount'] != null)
+            ? (settings['netAmount'] as num).toInt()
+            : (game.quotasCollected
+                ? (iWon ? (winnerPrize + myPassNet) : (-required + myPassNet))
+                : 0);
 
     final playerTiles =
         <({String name, int pips, int tileCount})>[];

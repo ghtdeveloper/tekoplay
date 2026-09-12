@@ -462,7 +462,98 @@ class DominoPaseGameService {
   }
 
   Future<bool> distributeRewards({required String gameId}) async {
-    return true;
+    try {
+      final gameRef = _firestore.collection(_collection).doc(gameId);
+
+      return await _firestore.runTransaction<bool>((transaction) async {
+        final doc = await transaction.get(gameRef);
+        if (!doc.exists) return false;
+
+        final game = DominoGameMatch.fromFirestore(doc);
+        if (!game.isFinished) return false;
+        if (game.rewardsDistributed) return true;
+
+        final betAmount = game.betAmount ?? 0;
+        final nPlayers = game.numberOfPlayers;
+        final required = requiredBalance(betAmount);
+        final commissionAmt = game.gameSettings?['commissionAmount'] as int? ??
+            commission(betAmount, nPlayers);
+        final totalPot = required * nPlayers;
+        final winnerPrize = totalPot - commissionAmt;
+
+        final settings = game.gameSettings ?? {};
+        final payments = Map<String, dynamic>.from(settings['passPayments'] ?? {});
+        final rawPassNetMap = settings['passNet'];
+        final addData = settings['additionalData'];
+        final winnerId = game.winnerId;
+
+        for (int p = 1; p <= nPlayers; p++) {
+          final pid = game.playerIdOf(p);
+          if (pid == null || pid.isEmpty || pid.startsWith('bot_')) continue;
+
+          int myPassNet = 0;
+          final isWinner = pid == winnerId;
+          if (addData is Map && addData['passNet'] != null && isWinner) {
+            myPassNet = (addData['passNet'] as num).toInt();
+          } else if (rawPassNetMap is Map) {
+            final netMap = Map<String, dynamic>.from(rawPassNetMap);
+            if (netMap.containsKey(pid)) {
+              myPassNet = (netMap[pid] as num).toInt();
+            } else if (netMap.containsKey('player$p')) {
+              myPassNet = (netMap['player$p'] as num).toInt();
+            } else if (isWinner && netMap.containsKey('ganador')) {
+              myPassNet = (netMap['ganador'] as num).toInt();
+            } else if (!isWinner && netMap.containsKey('perdedor')) {
+              myPassNet = (netMap['perdedor'] as num).toInt();
+            }
+          } else if (rawPassNetMap is num) {
+            myPassNet = rawPassNetMap.toInt();
+          } else {
+            final myPayments = (payments['player$p'] ?? payments[pid]) as Map<String, dynamic>?;
+            if (myPayments != null) {
+              if (myPayments.containsKey('net')) {
+                myPassNet = (myPayments['net'] as num).toInt();
+              } else {
+                final myReceived = (myPayments['received'] as int?) ?? 0;
+                final myPaid = (myPayments['paid'] as int?) ?? 0;
+                myPassNet = myReceived - myPaid;
+              }
+            }
+          }
+
+          final reward = isWinner ? (winnerPrize + myPassNet) : myPassNet;
+
+          final userRef = _firestore.collection('users').doc(pid);
+          final userDoc = await transaction.get(userRef);
+          if (userDoc.exists) {
+            final updates = <String, dynamic>{};
+
+            if (isWinner) {
+              updates['diamonds'] = FieldValue.increment(winnerPrize + myPassNet);
+            } else if (myPassNet != 0) {
+              updates['diamonds'] = FieldValue.increment(myPassNet);
+            }
+
+            if (reward > 0) {
+              updates['diamondsEarned'] = FieldValue.increment(reward);
+            }
+
+            if (updates.isNotEmpty) {
+              transaction.update(userRef, updates);
+            }
+          }
+        }
+
+        transaction.update(gameRef, {
+          'rewardsDistributed': true,
+          'rewardsDistributedAt': FieldValue.serverTimestamp(),
+        });
+        return true;
+      });
+    } catch (e) {
+      if (kDebugMode) print('Error distributing pase rewards: $e');
+      return false;
+    }
   }
 
   Future<bool> abandonGame({

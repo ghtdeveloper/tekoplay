@@ -171,32 +171,31 @@ class CoinPurchaseDialog extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(20),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.monetization_on,
-                  color: Colors.white,
-                  size: 24,
-                ),
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.monetization_on,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              S.of(context).coinStore,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
-              SizedBox(width: 12),
-              Text(
-                S.of(context).coinStore,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ],
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           IconButton(
             icon: Icon(Icons.close, color: Colors.white),

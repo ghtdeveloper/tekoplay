@@ -1,6 +1,6 @@
 enum GameTypeModel {
   chess('chess', 'Ajedrez'),
-  ludo('ludo', 'Ludo'),
+  ludo('ludo', 'Parchis'),
   domino('domino', 'Dominó'),
   dominoPase('domino_pase', 'Dominó Pase');
   const GameTypeModel(this.id, this.displayName);

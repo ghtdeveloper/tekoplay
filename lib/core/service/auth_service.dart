@@ -11,6 +11,10 @@ import 'anonymous_wallet_service.dart';
 import '../models/user.dart';
 
 class AuthService {
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirestoreService _firestoreService = FirestoreService();
@@ -18,6 +22,7 @@ class AuthService {
 
   String? _anonymousPlayerName;
   bool _isAnonymousMode = false;
+
 
   Future<User?> signInWithGoogle() async {
     try {
@@ -32,7 +37,6 @@ class AuthService {
       final userCredential = await _auth.signInWithCredential(credential);
       if (userCredential.user != null) {
         await _firestoreService.createOrGetUser(userCredential.user!);
-        // Transfer anonymous wallet if exists
         await _transferAnonymousWalletOnLogin(userCredential.user!.uid);
       }
       return userCredential.user;
@@ -54,7 +58,6 @@ class AuthService {
         final userCredential = await _auth.signInWithCredential(credential);
         if (userCredential.user != null) {
           await _firestoreService.createOrGetUser(userCredential.user!);
-          // Transfer anonymous wallet if exists
           await _transferAnonymousWalletOnLogin(userCredential.user!.uid);
         }
         return userCredential.user;
@@ -74,7 +77,6 @@ class AuthService {
 
   Future<String?> enableAnonymousMode() async {
     try {
-      // Initialize anonymous wallet
       await _walletService.initializeAnonymousWallet();
 
       _anonymousPlayerName ??= await _firestoreService.generateUniquePlayerName();
@@ -135,13 +137,10 @@ class AuthService {
         email: email,
         password: password,
       );
-      // Reload to get the latest emailVerified status from the server,
-      // since Firebase caches this value locally and it may be stale.
       await userCredential.user?.reload();
       final freshUser = _auth.currentUser;
       if (freshUser != null && freshUser.emailVerified) {
         await _firestoreService.createOrGetUser(freshUser);
-        // Transfer anonymous wallet if exists
         await _transferAnonymousWalletOnLogin(freshUser.uid);
         return freshUser;
       } else {
@@ -173,7 +172,6 @@ class AuthService {
 
       if (updatedUser != null && updatedUser.emailVerified) {
         await _firestoreService.createOrGetUser(updatedUser);
-        // Transfer anonymous wallet if exists
         await _transferAnonymousWalletOnLogin(updatedUser.uid);
         return true;
       }
@@ -269,9 +267,6 @@ class AuthService {
     return Stream.value(null);
   }
 
-  // WALLET MANAGEMENT METHODS - Updated to handle both anonymous and authenticated users
-
-  /// Get current user's coins (works for both anonymous and authenticated)
   Future<int> getCurrentUserCoins() async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -282,7 +277,6 @@ class AuthService {
     }
   }
 
-  /// Get current user's diamonds (works for both anonymous and authenticated)
   Future<int> getCurrentUserDiamonds() async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -293,7 +287,6 @@ class AuthService {
     }
   }
 
-  /// Update coins for current user (works for both anonymous and authenticated)
   Future<bool> updateCurrentUserCoins(int newCoins) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -303,7 +296,6 @@ class AuthService {
     }
   }
 
-  /// Update diamonds for current user (works for both anonymous and authenticated)
   Future<bool> updateCurrentUserDiamonds(int newDiamonds) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -313,7 +305,6 @@ class AuthService {
     }
   }
 
-  /// Add coins to current user (for purchases)
   Future<bool> addCoins(int coinsToAdd) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -323,7 +314,6 @@ class AuthService {
     }
   }
 
-  /// Add diamonds to current user (for purchases)
   Future<bool> addDiamonds(int diamondsToAdd) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -333,7 +323,6 @@ class AuthService {
     }
   }
 
-  /// Subtract coins from current user (for bets/costs)
   Future<bool> subtractCoins(int coinsToSubtract) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -345,7 +334,6 @@ class AuthService {
     }
   }
 
-  /// Subtract diamonds from current user (for bets/costs)
   Future<bool> subtractDiamonds(int diamondsToSubtract) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -357,7 +345,6 @@ class AuthService {
     }
   }
 
-  /// Check if user has enough coins
   Future<bool> hasEnoughCoins(int requiredCoins) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -368,7 +355,6 @@ class AuthService {
     }
   }
 
-  /// Check if user has enough diamonds
   Future<bool> hasEnoughDiamonds(int requiredDiamonds) async {
     final user = getCurrentUser();
     if (user == null || !await canAccessApp()) {
@@ -379,7 +365,6 @@ class AuthService {
     }
   }
 
-  // EXISTING METHODS - Updated to work with new wallet system
 
   Future<bool> updateUserCoins(int newCoins) async {
     return await updateCurrentUserCoins(newCoins);
@@ -558,14 +543,10 @@ class AuthService {
     };
   }
 
-  // PRIVATE HELPER METHODS
-
-  /// Transfer anonymous wallet to authenticated user on login
   Future<void> _transferAnonymousWalletOnLogin(String userId) async {
     try {
       final walletStatus = await _walletService.getAnonymousWalletStatus();
 
-      // Only transfer if there are resources and not previously transferred
       if (!walletStatus['hasTransferred'] &&
           (walletStatus['coins'] > 500 || walletStatus['diamonds'] > 0)) {
 
@@ -588,12 +569,10 @@ class AuthService {
     }
   }
 
-  /// Get anonymous wallet status (for debugging)
   Future<Map<String, dynamic>> getAnonymousWalletStatus() async {
     return await _walletService.getAnonymousWalletStatus();
   }
 
-  /// Reset transfer flag (for testing purposes)
   Future<void> resetAnonymousWalletTransfer() async {
     await _walletService.resetTransferFlag();
   }

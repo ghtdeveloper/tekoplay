@@ -22,18 +22,7 @@ class GameStats {
     DateTime? lastPlayed,
   }) : lastPlayed = lastPlayed ?? DateTime.now();
 
-  static int getInitialPoints(GameTypeModel gameType) {
-    switch (gameType) {
-      case GameTypeModel.chess:
-        return 0;
-      case GameTypeModel.domino:
-        return 0;
-      case GameTypeModel.ludo:
-        return 0;
-      case GameTypeModel.dominoPase:
-        return 0;
-    }
-  }
+  static int getInitialPoints(GameTypeModel gameType) => 0;
 
   factory GameStats.initial(GameTypeModel gameType) {
     return GameStats(
@@ -80,8 +69,6 @@ class GameStats {
     int? wins,
     int? losses,
     int? draws,
-    int? coinsEarned,
-    int? diamondsEarned,
     int? totalPlayTimeMinutes,
     DateTime? lastPlayed,
   }) {

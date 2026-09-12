@@ -607,6 +607,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _keepAliveTimer?.cancel();
     _gameSubscription?.cancel();
 
+    final yourTurnMsg = S.of(context).yourTurn;
     final isBet = _isBetMode;
     final cost = isBet ? (_selectedBetAmount ?? 25) : 100;
     if (_currentUser != null) {
@@ -662,7 +663,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     _enableWakeLock();
     _showRivalFoundBanner();
-    _showTurnBannerAnim(S.of(context).yourTurn, _getPlayerColor(_myColor));
+    _showTurnBannerAnim(yourTurnMsg, _getPlayerColor(_myColor));
     _startTurnTimer();
   }
 
@@ -728,6 +729,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (!_isMyTurn || _gameEnded || _isRollingDice || _bonusSelectionActive) return;
     if (_dice1Value != 0 || _dice2Value != 0) return;
 
+    final threeDoublesHomeMsg = S.of(context).threeDoublesHome;
+    final doubleHomeMsg = S.of(context).doubleHome;
+    final tripleDoubleMsg = S.of(context).tripleDouble;
+    final noValidMovesMsg = S.of(context).noValidMoves;
+
     final myPieces = _gameState.getPiecesByColor(_myColor);
     final allInHome = myPieces.every((p) => p.isHome);
     int d1 = 0, d2 = 0;
@@ -762,13 +768,13 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         if (_humanHomeDoubles >= 3) {
           _humanHomeDoubles = 0;
           _consecutiveDoubles = 0;
-          _showEventToast(S.of(context).threeDoublesHome);
+          _showEventToast(threeDoublesHomeMsg);
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; });
           _nextTurn();
           return;
         }
-        _showEventToast(S.of(context).doubleHome);
+        _showEventToast(doubleHomeMsg);
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() { _dice1Value = 0; _dice2Value = 0; });
         continue;
@@ -785,7 +791,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     if (_consecutiveDoubles >= 3) {
       setState(() { _isRollingDice = false; _consecutiveDoubles = 0; });
-      _showEventToast(S.of(context).tripleDouble);
+      _showEventToast(tripleDoubleMsg);
       _applyTripleDoublesPenalty(_myColor);
       await Future.delayed(const Duration(milliseconds: 1500));
       _nextTurn();
@@ -802,7 +808,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
     _calculateMovablePieces();
     if (_movablePieces.isEmpty) {
-      _showEventToast(S.of(context).noValidMoves);
+      _showEventToast(noValidMovesMsg);
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) _nextTurn();
     } else {

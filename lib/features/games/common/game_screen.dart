@@ -1253,9 +1253,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         children: [
                           SizedBox(
                             width: 40,
-                            height: 36,
+                            height: 40,
                             child: IconButton(
-                              icon: const Icon(Icons.history_rounded, color: Colors.white, size: 20),
+                              icon: const Icon(Icons.bar_chart, color: Colors.white, size: 30),
                               padding: EdgeInsets.zero,
                               onPressed: () {
                                 Navigator.push(

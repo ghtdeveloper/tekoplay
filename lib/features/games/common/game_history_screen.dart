@@ -417,6 +417,17 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
         break;
     }
 
+    final netAmount = match.additionalData?['netAmount'] as int?;
+    final currencyType = match.additionalData?['currencyType'] as String?;
+    final matchType = match.additionalData?['matchType'] as String?;
+    final mode = match.additionalData?['mode'] as String?;
+
+    final isDiamonds = currencyType == 'diamonds' || matchType == 'Apuesta' || matchType == 'Pase';
+    final isCoins = currencyType == 'coins' || matchType == 'Diversión' || matchType == 'Diversion' || matchType == 'Práctica' || matchType == 'Amistoso';
+
+    final int valToDisplay = netAmount ?? match.pointsEarned;
+    final String currencySymbol = isDiamonds ? '💎' : (isCoins ? '🪙' : '');
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
@@ -441,15 +452,32 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
           children: [
             getGameIcon(match.gameType, size: 20),
             const SizedBox(width: 8),
-            Text(
-              match.gameType.displayName,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: Colors.black87,
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  text: match.gameType.displayName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                  children: [
+                    if (matchType != null || mode != null)
+                      TextSpan(
+                        text: ' (${matchType ?? mode})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.normal,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                  ],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
@@ -471,7 +499,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 6),
-            if (match.opponentName != null)
+            if (match.opponentName != null && match.opponentName!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
@@ -480,44 +508,48 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
                     fontSize: 13,
                     color: Colors.grey[700],
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            Row(
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 2,
               children: [
-                Icon(Icons.access_time, size: 12, color: Colors.grey[400]),
-                const SizedBox(width: 3),
-                Text(
-                  '${match.durationMinutes} min',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.access_time, size: 12, color: Colors.grey[400]),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${match.durationMinutes} min',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 14),
-                Icon(Icons.calendar_today, size: 12, color: Colors.grey[400]),
-                const SizedBox(width: 3),
-                Text(
-                  DateFormat('dd/MM/yyyy HH:mm').format(match.playedAt),
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_today, size: 12, color: Colors.grey[400]),
+                    const SizedBox(width: 3),
+                    Text(
+                      DateFormat('dd/MM/yyyy HH:mm').format(match.playedAt),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                  ],
                 ),
               ],
             ),
           ],
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '${match.pointsEarned >= 0 ? '+' : ''}${match.pointsEarned}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: match.pointsEarned >= 0 ? Colors.green : Colors.red,
-                fontSize: 16,
-              ),
-            ),
-            Text(
-              'pts',
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-            ),
-          ],
+        trailing: Text(
+          '${valToDisplay >= 0 ? '+' : ''}$valToDisplay $currencySymbol'.trim(),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: valToDisplay >= 0 ? Colors.green : Colors.red,
+            fontSize: 15,
+          ),
         ),
       ),
     );

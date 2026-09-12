@@ -59,6 +59,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _checkEmailVerification() async {
+    if (_isEmailVerified) {
+      _emailVerificationTimer?.cancel();
+      _emailVerificationTimer = null;
+      return;
+    }
+
     final user = AuthService().getCurrentUser();
     if (user != null) {
       await user.reload();
@@ -81,7 +87,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               SnackBar(
                 content: Text(S.of(context).emailVerifiedSuccess),
                 backgroundColor: Colors.green,
-                duration: Duration(seconds: 4),
+                duration: const Duration(seconds: 4),
               ),
             );
           }

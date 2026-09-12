@@ -886,7 +886,7 @@ class SquareHighlightPainter extends CustomPainter {
 
           canvas.drawCircle(center, squareSize * 0.1, centerDot);
         }
-      } catch (e) {
+      } catch (_) {
       }
     }
   }

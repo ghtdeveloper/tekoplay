@@ -940,178 +940,210 @@ exports.distributeDominoGameRewards = onDocumentUpdated(
   }
 );
 
-// =============================================================================
-// DOMINO PASE — Distribute rewards with pass payment settlement
-// =============================================================================
-exports.distributeDominoPaseGameRewards = onDocumentUpdated(
-  {
-    document: 'domino_pase_games/{gameId}',
-    region: 'us-east1',
-  },
-  async (event) => {
-    const gameId = event.params.gameId;
-    const beforeData = event.data?.before.data();
-    const afterData  = event.data?.after.data();
+/// =============================================================================
+ // DOMINO PASE — Distribute rewards with pass payment settlement
+ // =============================================================================
+ exports.distributeDominoPaseGameRewards = onDocumentUpdated(
+   {
+     document: 'domino_pase_games/{gameId}',
+     region: 'us-east1',
+   },
+   async (event) => {
+     const gameId = event.params.gameId;
+     const beforeData = event.data?.before.data();
+     const afterData  = event.data?.after.data();
 
-    console.log(`\n🁣 [DominoPase ${gameId}] === INICIO FUNCIÓN ===`);
-    console.log(`📊 Status: "${beforeData?.status}" → "${afterData?.status}"`);
-    console.log(`💎 rewardsDistributed: ${afterData?.rewardsDistributed}`);
-    console.log(`💰 betAmount: ${afterData?.betAmount}`);
-    console.log(`🏆 winnerId: ${afterData?.winnerId}`);
+     console.log(`\n🁣 [DominoPase ${gameId}] === INICIO FUNCIÓN ===`);
+     console.log(`📊 Status: "${beforeData?.status}" → "${afterData?.status}"`);
+     console.log(`💎 rewardsDistributed: ${afterData?.rewardsDistributed}`);
+     console.log(`💰 betAmount: ${afterData?.betAmount}`);
+     console.log(`🏆 winnerId: ${afterData?.winnerId}`);
 
-    if (!beforeData || !afterData) return null;
+     if (!beforeData || !afterData) return null;
 
-    const gameJustFinished  = beforeData.status !== 'finished'  && afterData.status === 'finished';
-    const gameJustAbandoned = beforeData.status !== 'abandoned' && afterData.status === 'abandoned';
+     const gameJustFinished  = beforeData.status !== 'finished'  && afterData.status === 'finished';
+     const gameJustAbandoned = beforeData.status !== 'abandoned' && afterData.status === 'abandoned';
 
-    if (!gameJustFinished && !gameJustAbandoned) {
-      console.log(`⏭️ [DominoPase ${gameId}] Sin cambio a finished/abandoned (SALIENDO)\n`);
-      return null;
-    }
+     if (!gameJustFinished && !gameJustAbandoned) {
+       console.log(`⏭️ [DominoPase ${gameId}] Sin cambio a finished/abandoned (SALIENDO)\n`);
+       return null;
+     }
 
-    if (afterData.rewardsDistributed === true) {
-      console.log(`⚠️ [DominoPase ${gameId}] Recompensas ya distribuidas (SALIENDO)\n`);
-      return null;
-    }
+     if (afterData.rewardsDistributed === true) {
+       console.log(`⚠️ [DominoPase ${gameId}] Recompensas ya distribuidas (SALIENDO)\n`);
+       return null;
+     }
 
-    const betAmount = afterData.betAmount || 0;
-    if (betAmount === 0) {
-      console.log(`⏭️ [DominoPase ${gameId}] Sin apuesta (SALIENDO)\n`);
-      return null;
-    }
+     const betAmount = afterData.betAmount || 0;
+     if (betAmount === 0) {
+       console.log(`⏭️ [DominoPase ${gameId}] Sin apuesta (SALIENDO)\n`);
+       return null;
+     }
 
-    if (afterData.quotasCollected !== true) {
-      console.log(`⚠️ [DominoPase ${gameId}] quotasCollected !== true (SALIENDO)\n`);
-      return null;
-    }
+     if (afterData.quotasCollected !== true) {
+       console.log(`⚠️ [DominoPase ${gameId}] quotasCollected !== true (SALIENDO)\n`);
+       return null;
+     }
 
-    const numberOfPlayers = afterData.numberOfPlayers || 3;
-    const hostId   = afterData.hostId;
-    const guestId  = afterData.guestId;
-    const guest2Id = afterData.guest2Id || null;
-    const guest3Id = afterData.guest3Id || null;
-    const winnerId = afterData.winnerId;
-    const abandonedBy = afterData.abandonedBy;
+     const numberOfPlayers = afterData.numberOfPlayers || 3;
+     const hostId   = afterData.hostId;
+     const guestId  = afterData.guestId;
+     const guest2Id = afterData.guest2Id || null;
+     const guest3Id = afterData.guest3Id || null;
+     const winnerId = afterData.winnerId;
+     const abandonedBy = afterData.abandonedBy;
 
-    const allPlayerIds = [hostId, guestId, guest2Id, guest3Id].filter(id => !!id);
+     const allPlayerIds = [hostId, guestId, guest2Id, guest3Id].filter(id => !!id);
 
-    if (allPlayerIds.length === 0) {
-      console.log(`❌ [DominoPase ${gameId}] Sin jugadores (SALIENDO)\n`);
-      return null;
-    }
+     if (allPlayerIds.length === 0) {
+       console.log(`❌ [DominoPase ${gameId}] Sin jugadores (SALIENDO)\n`);
+       return null;
+     }
 
-    console.log(`\n🚀 [DominoPase ${gameId}] ¡PROCEDIENDO A DISTRIBUIR!`);
+     console.log(`\n🚀 [DominoPase ${gameId}] ¡PROCEDIENDO A DISTRIBUIR!`);
 
-    try {
-      await db.runTransaction(async (transaction) => {
-        const gameRef = db.collection('domino_pase_games').doc(gameId);
-        const gameDoc = await transaction.get(gameRef);
-        const currentGameData = gameDoc.data();
+     try {
+       await db.runTransaction(async (transaction) => {
+         const gameRef = db.collection('domino_pase_games').doc(gameId);
+         const gameDoc = await transaction.get(gameRef);
+         const currentGameData = gameDoc.data();
 
-        if (currentGameData?.rewardsDistributed === true) {
-          console.log(`⚠️ [DominoPase ${gameId}] Ya distribuido en transacción\n`);
-          return;
-        }
+         if (currentGameData?.rewardsDistributed === true) {
+           console.log(`⚠️ [DominoPase ${gameId}] Ya distribuido en transacción\n`);
+           return;
+         }
 
-        if (currentGameData?.quotasCollected !== true) {
-          console.log(`⚠️ [DominoPase ${gameId}] Cuotas no cobradas (transacción, SALIENDO)\n`);
-          return;
-        }
+         if (currentGameData?.quotasCollected !== true) {
+           console.log(`⚠️ [DominoPase ${gameId}] Cuotas no cobradas (transacción, SALIENDO)\n`);
+           return;
+         }
 
-        const requiredBalance = betAmount;
-        const commissionAmt = currentGameData.gameSettings?.commissionAmount
-          || Math.ceil(requiredBalance * numberOfPlayers * 0.20);
-        const totalPot = currentGameData.totalPot || (requiredBalance * numberOfPlayers);
-        const winnerPrize = totalPot - commissionAmt;
+         const requiredBalance = betAmount;
+         const commissionAmt = currentGameData.gameSettings?.commissionAmount
+           || Math.ceil(requiredBalance * numberOfPlayers * 0.20);
+         const totalPot = currentGameData.totalPot || (requiredBalance * numberOfPlayers);
+         const winnerPrize = totalPot - commissionAmt;
 
-        const effectiveWinnerId = gameJustAbandoned
-          ? (currentGameData.winnerId || (abandonedBy === hostId ? guestId : hostId))
-          : winnerId;
+         const effectiveWinnerId = gameJustAbandoned
+           ? (currentGameData.winnerId || (abandonedBy === hostId ? guestId : hostId))
+           : winnerId;
 
-        if (!effectiveWinnerId || !allPlayerIds.includes(effectiveWinnerId)) {
-          console.log(`⚠️ [DominoPase ${gameId}] Ganador no es jugador válido (SALIENDO)\n`);
-          return;
-        }
+         if (!effectiveWinnerId || !allPlayerIds.includes(effectiveWinnerId)) {
+           console.log(`⚠️ [DominoPase ${gameId}] Ganador no es jugador válido (SALIENDO)\n`);
+           return;
+         }
 
-        // Build player number mapping
-        const playerNumMap = {};
-        if (hostId)   playerNumMap['player1'] = hostId;
-        if (guestId)  playerNumMap['player2'] = guestId;
-        if (guest2Id) playerNumMap['player3'] = guest2Id;
-        if (guest3Id) playerNumMap['player4'] = guest3Id;
+         // Mapeo playerN → uid
+         const playerNumMap = {};
+         if (hostId)   playerNumMap['player1'] = hostId;
+         if (guestId)  playerNumMap['player2'] = guestId;
+         if (guest2Id) playerNumMap['player3'] = guest2Id;
+         if (guest3Id) playerNumMap['player4'] = guest3Id;
 
-        // Calculate pass payment net for each player
-        const passPayments = currentGameData.gameSettings?.passPayments || {};
-        const passNet = {};
-        for (const [key, pid] of Object.entries(playerNumMap)) {
-          const data = passPayments[key] || {};
-          const received = data.received || 0;
-          const paid = data.paid || 0;
-          passNet[pid] = received - paid;
-        }
+         // Fuentes de passNet (prioridad: passPayments → passNet map → additionalData)
+         const passPayments  = currentGameData.gameSettings?.passPayments || {};
+         const rawPassNetMap = currentGameData.gameSettings?.passNet
+                            || currentGameData.passNet
+                            || {};
+         const addData       = currentGameData.gameSettings?.additionalData || {};
 
-        // Calculate raw settlement: winner gets winnerPrize + passNet, losers get passNet only
-        const rawSettlement = {};
-        for (const pid of allPlayerIds) {
-          const base = pid === effectiveWinnerId ? winnerPrize : 0;
-          rawSettlement[pid] = base + (passNet[pid] || 0);
-        }
+         const passNet = {};
+         for (const [key, pid] of Object.entries(playerNumMap)) {
+           let value = 0;
 
-        // Clamp negatives to 0 and accumulate deficit
-        let deficit = 0;
-        for (const pid of allPlayerIds) {
-          if (rawSettlement[pid] < 0) {
-            deficit += -rawSettlement[pid];
-            rawSettlement[pid] = 0;
-          }
-        }
+           // 1. passPayments (received - paid o .net)
+           const data = passPayments[key] || passPayments[pid] || {};
+           if (data.net !== undefined) {
+             value = Number(data.net);
+           } else if (data.received !== undefined || data.paid !== undefined) {
+             value = Number(data.received || 0) - Number(data.paid || 0);
+           }
+           // 2. Mapa passNet por uid o playerN
+           else if (typeof rawPassNetMap === 'object' && rawPassNetMap !== null) {
+             if (rawPassNetMap[pid] !== undefined) {
+               value = Number(rawPassNetMap[pid]);
+             } else if (rawPassNetMap[key] !== undefined) {
+               value = Number(rawPassNetMap[key]);
+             }
+           }
+           // 3. additionalData.passNet solo para el ganador (si viene del cliente)
+           else if (addData.passNet !== undefined && pid === effectiveWinnerId) {
+             value = Number(addData.passNet);
+           }
 
-        // Subtract deficit from winner to prevent over-distribution
-        if (deficit > 0 && rawSettlement[effectiveWinnerId] !== undefined) {
-          rawSettlement[effectiveWinnerId] = Math.max(0, rawSettlement[effectiveWinnerId] - deficit);
-        }
+           passNet[pid] = Number.isFinite(value) ? value : 0;
+         }
 
-        console.log(`💵 [DominoPase] bet:${betAmount} | required:${requiredBalance} | players:${numberOfPlayers} | totalPot:${totalPot} | winnerPrize:${winnerPrize} | commission:${commissionAmt}`);
-        console.log(`📊 [DominoPase] passNet:`, JSON.stringify(passNet));
-        console.log(`📊 [DominoPase] settlement:`, JSON.stringify(rawSettlement));
+         // Asegurar entrada para todos
+         for (const pid of allPlayerIds) {
+           if (passNet[pid] === undefined) {
+             passNet[pid] = 0;
+           }
+         }
 
-        // Distribute to each player (diamonds only in Pase mode)
-        // All rewards go to diamondsEarned only (diamonds = purchases only)
-        for (const pid of allPlayerIds) {
-          const reward = rawSettlement[pid] || 0;
-          if (reward > 0) {
-            const userRef = db.collection('users').doc(pid);
-            transaction.update(userRef, {
-              diamondsEarned: admin.firestore.FieldValue.increment(reward),
-            });
-          }
-        }
+         // netAmount = (esGanador ? winnerPrize : 0) + passNet
+         // NO se clampean negativos.
+         const settlement = {};
+         for (const pid of allPlayerIds) {
+           const base = (pid === effectiveWinnerId) ? winnerPrize : 0;
+           settlement[pid] = base + (passNet[pid] || 0);
+         }
 
-        transaction.update(gameRef, {
-          rewardsDistributed: true,
-          rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
-          distribution: {
-            winnerId: effectiveWinnerId,
-            winnerPrize,
-            houseCommission: commissionAmt,
-            totalPot,
-            betAmount,
-            requiredBalance,
-            currencyType: 'diamonds',
-            commissionRate: 0.20,
-            reason: gameJustAbandoned ? 'abandoned' : 'win',
-            passNet,
-            settlement: rawSettlement,
-          },
-        });
+         console.log(`💵 [DominoPase] bet:${betAmount} | required:${requiredBalance} | players:${numberOfPlayers}`);
+         console.log(`   totalPot:${totalPot} | winnerPrize:${winnerPrize} | commission:${commissionAmt}`);
+         console.log(`📊 [DominoPase] passNet:`, JSON.stringify(passNet));
+         console.log(`📊 [DominoPase] settlement (netAmount):`, JSON.stringify(settlement));
 
-        console.log(`✅ [DominoPase ${gameId}] Distribución completada\n`);
-      });
+         // Persistencia:
+         // - netAmount > 0  → diamondsEarned += netAmount  (ganancias)
+         // - netAmount < 0  → diamonds     += netAmount  (pérdidas se descuentan solo de diamonds)
+         // - netAmount = 0  → no se toca nada
+         // diamonds NUNCA se incrementa por ganancias (solo compras / descuentos de pérdida).
+         for (const pid of allPlayerIds) {
+           const netAmount = settlement[pid] || 0;
+           if (netAmount === 0) continue;
 
-      return null;
-    } catch (error) {
-      console.error(`\n❌ [DominoPase ${gameId}] ERROR:`, error);
-      throw error;
-    }
-  }
-);
+           const userRef = db.collection('users').doc(pid);
+
+           if (netAmount > 0) {
+             transaction.update(userRef, {
+               diamondsEarned: admin.firestore.FieldValue.increment(netAmount),
+             });
+             console.log(`   💎 ${pid}: diamondsEarned +${netAmount}`);
+           } else {
+             // netAmount negativo → descontar de diamonds
+             transaction.update(userRef, {
+               diamonds: admin.firestore.FieldValue.increment(netAmount),
+             });
+             console.log(`   💎 ${pid}: diamonds ${netAmount}`);
+           }
+         }
+
+         transaction.update(gameRef, {
+           rewardsDistributed: true,
+           rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+           distribution: {
+             winnerId: effectiveWinnerId,
+             winnerPrize,
+             houseCommission: commissionAmt,
+             totalPot,
+             betAmount,
+             requiredBalance,
+             currencyType: 'diamonds',
+             commissionRate: 0.20,
+             reason: gameJustAbandoned ? 'abandoned' : 'win',
+             passNet,
+             settlement, // netAmount por jugador
+           },
+         });
+
+         console.log(`✅ [DominoPase ${gameId}] Distribución completada\n`);
+       });
+
+       return null;
+     } catch (error) {
+       console.error(`\n❌ [DominoPase ${gameId}] ERROR:`, error);
+       throw error;
+     }
+   }
+ );

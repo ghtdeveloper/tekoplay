@@ -621,6 +621,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (!_isMyTurn || _gameEnded || _isRollingDice || _bonusSelectionActive) return;
     if (_dice1Value != 0 || _dice2Value != 0) return;
 
+    final threeDoublesHomeMsg = S.of(context).threeDoublesHome;
+    final doubleHomeMsg = S.of(context).doubleHome;
+    final tripleDoubleMsg = S.of(context).tripleDouble;
+    final noValidMovesMsg = S.of(context).noValidMoves;
+
     final myPieces = _gameState.getPiecesByColor(_myColor);
     final allInHome = myPieces.every((p) => p.isHome);
     int d1 = 0, d2 = 0;
@@ -656,13 +661,13 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         if (_humanHomeDoubles >= 3) {
           _humanHomeDoubles = 0;
           _consecutiveDoubles = 0;
-          _showEventToast(S.of(context).threeDoublesHome);
+          _showEventToast(threeDoublesHomeMsg);
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; });
           await _advanceTurn();
           return;
         }
-        _showEventToast(S.of(context).doubleHome);
+        _showEventToast(doubleHomeMsg);
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() { _dice1Value = 0; _dice2Value = 0; });
         continue;
@@ -682,7 +687,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         _isRollingDice = false;
         _consecutiveDoubles = 0;
       });
-      _showEventToast(S.of(context).tripleDouble);
+      _showEventToast(tripleDoubleMsg);
       await _applyTripleDoublesPenalty();
       return;
     }
@@ -701,7 +706,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     _calculateMovablePieces();
     if (_movablePieces.isEmpty) {
-      _showEventToast(S.of(context).noValidMoves);
+      _showEventToast(noValidMovesMsg);
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) await _advanceTurn();
     } else {

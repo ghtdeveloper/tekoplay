@@ -851,6 +851,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   Future<void> _startBotGame() async {
+    final betMatchType = S.of(context).bet;
     if (_currentGame != null && _currentGame!.status != 'waiting') {
       if (kDebugMode) {
         print('⚠️ _startBotGame cancelado: Ya hay _currentGame activo');
@@ -891,8 +892,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       print('🤖 Iniciando juego contra BOT');
     }
 
-    if (!context.mounted) return;
-    final betMatchType = S.of(context).bet;
     final botProfile = await BotNameService.pickUnseenProfile(_random);
     _botIsWeak = widget.matchType == betMatchType &&
         await BotNameService.shouldBotPlayWeak();
@@ -1132,6 +1131,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
   Future<String?> _findOrCreateGame(int userRanking) async {
     final isBet = widget.matchType == S.of(context).bet;
+    final userLabel = S.of(context).user;
     try {
       final waitingGames = await OnlineMatchmakingChessService()
           .findActiveWaitingGames(
@@ -1153,7 +1153,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         final success = await MultiplayerGameService().joinGame(
           game.id,
           currentUser!.uid,
-          currentUser!.displayName ?? S.of(context).user,
+          currentUser!.displayName ?? userLabel,
           currentUser!.photoURL,
         );
 
@@ -1163,7 +1163,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             .createOnlineGame(
               currencyType: _getCurrencyName(),
               hostId: currentUser!.uid,
-              hostName: currentUser!.displayName ?? S.of(context).user,
+              hostName: currentUser!.displayName ?? userLabel,
               hostPhotoUrl: currentUser!.photoURL,
               gameType: 'Ajedrez',
               timeMinutes: _selectedTimeMinutes,

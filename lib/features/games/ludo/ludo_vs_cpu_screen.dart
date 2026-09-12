@@ -321,6 +321,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       _hasUsedDice2 = false;
     });
 
+    final threeDoublesHomeMsg = S.of(context).threeDoublesHome;
+    final doubleHomeMsg = S.of(context).doubleHome;
+    final noValidMovesMsg = S.of(context).noValidMoves;
+
     final humanPieces = _gameState.getPiecesByColor(_currentPlayer);
     final allInHome = humanPieces.every((p) => p.isHome);
     int d1r = 0, d2r = 0;
@@ -350,13 +354,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         if (_humanHomeDoubles >= 3) {
           _humanHomeDoubles = 0;
           _consecutiveDoubles = 0;
-          _showEventToast(S.of(context).threeDoublesHome);
+          _showEventToast(threeDoublesHomeMsg);
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
           _nextTurn();
           return;
         }
-        _showEventToast(S.of(context).doubleHome);
+        _showEventToast(doubleHomeMsg);
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
         continue;
@@ -390,7 +394,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     _calculateMovablePieces();
 
     if (_movablePieces.isEmpty) {
-      _showEventToast(S.of(context).noValidMoves);
+      _showEventToast(noValidMovesMsg);
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!_gameEnded && mounted) _nextTurn();
     } else {
