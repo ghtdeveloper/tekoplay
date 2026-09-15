@@ -839,7 +839,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (_dice1Value == 0 && _dice2Value == 0 && !_bonusSelectionActive) return;
 
     final sq = _boardSize / 15;
-    final tapR = sq * 0.7;
     final pieces = _gameState.getPiecesByColor(_myColor);
 
     if (_bonusSelectionActive) {
@@ -870,13 +869,23 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     if (_movablePieces.isEmpty) return;
+    int? closestPieceId;
+    double closestDistance = double.infinity;
+    final pieceTapRadius = sq * 0.85;
+
     for (int i = 0; i < pieces.length; i++) {
       if (!_movablePieces.any((m) => m['pieceId'] == i)) continue;
       final pos = _getPieceScreenPosition(pieces[i], _myColor, sq);
-      if (pos != null && (local - pos).distance < tapR) {
-        _showMoveSelectionDialog(i);
-        return;
+      if (pos != null) {
+        final dist = (local - pos).distance;
+        if (dist < pieceTapRadius && dist < closestDistance) {
+          closestDistance = dist;
+          closestPieceId = i;
+        }
       }
+    }
+    if (closestPieceId != null) {
+      _showMoveSelectionDialog(closestPieceId);
     }
   }
 
@@ -988,9 +997,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       return;
     }
 
+    final justFinished = newPos == 57;
     final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
 
-    if (captured) {
+    if (captured || justFinished) {
       final remainingDie = !_hasUsedDice1 ? _dice1Value : (!_hasUsedDice2 ? _dice2Value : 0);
       final remainingNum = !_hasUsedDice1 ? 1 : (!_hasUsedDice2 ? 2 : 0);
       _bonusRemainingDie = hadDouble ? 0 : remainingDie;
@@ -998,7 +1008,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _dice1Value = 0; _dice2Value = 0;
       _hasUsedDice1 = false; _hasUsedDice2 = false;
       _movablePieces.clear();
-      _prepareCaptureBonus(color, piece, hadDouble);
+      if (captured) {
+        _prepareCaptureBonus(color, piece, hadDouble);
+      } else {
+        _prepareFinishBonus(color, hadDouble);
+      }
       _syncGameState(advanceTurn: false);
       return;
     }
@@ -1037,6 +1051,19 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     if (_pendingBonusMoves.isEmpty) {
+      if (_bonusRemainingDie > 0) {
+        if (_bonusRemainingDieNumber == 1) {
+          _dice1Value = _bonusRemainingDie; _dice2Value = 0;
+          _hasUsedDice1 = false; _hasUsedDice2 = true;
+        } else {
+          _dice1Value = 0; _dice2Value = _bonusRemainingDie;
+          _hasUsedDice1 = true; _hasUsedDice2 = false;
+        }
+        _bonusRemainingDie = 0;
+        _bonusRemainingDieNumber = 0;
+        _syncGameState(advanceTurn: false);
+        return;
+      }
       if (hadDouble) {
         _syncGameState(advanceTurn: false);
       } else {
@@ -1048,9 +1075,12 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _bonusHadDouble = hadDouble;
 
     if (_botColors.contains(color)) {
+      final sp = _getStartPosition(color);
       final best = _pendingBonusMoves.reduce((a, b) {
-        final stA = _stepsFromStart((a['piece'] as LudoPiece).position, _getStartPosition(color));
-        final stB = _stepsFromStart((b['piece'] as LudoPiece).position, _getStartPosition(color));
+        final posA = (a['piece'] as LudoPiece).position;
+        final posB = (b['piece'] as LudoPiece).position;
+        final stA = posA >= 52 ? 51 + (posA - 52) : _stepsFromStart(posA, sp);
+        final stB = posB >= 52 ? 51 + (posB - 52) : _stepsFromStart(posB, sp);
         return stA >= stB ? a : b;
       });
       _showEventToast('¡Bot capturó! +20 casillas', color: Colors.green);
@@ -1093,6 +1123,96 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     _movablePieces = _pendingBonusMoves.map((m) => {
       ...m, 'diceValue': 20, 'diceNumber': 0,
+    }).toList();
+    setState(() {});
+    _startTurnTimer();
+  }
+
+  void _prepareFinishBonus(String color, bool hadDouble) {
+    final allPieces = _gameState.getPiecesByColor(color);
+    _pendingBonusMoves.clear();
+
+    for (int i = 0; i < allPieces.length; i++) {
+      final p = allPieces[i];
+      if (p.isFinished || p.isHome) continue;
+      final bp = _calculateFinishBonusPosition(p, color);
+      if (bp == null) continue;
+      _pendingBonusMoves.add({'pieceId': i, 'piece': p, 'bonusPos': bp});
+    }
+
+    if (_pendingBonusMoves.isEmpty) {
+      if (_bonusRemainingDie > 0) {
+        if (_bonusRemainingDieNumber == 1) {
+          _dice1Value = _bonusRemainingDie; _dice2Value = 0;
+          _hasUsedDice1 = false; _hasUsedDice2 = true;
+        } else {
+          _dice1Value = 0; _dice2Value = _bonusRemainingDie;
+          _hasUsedDice1 = true; _hasUsedDice2 = false;
+        }
+        _bonusRemainingDie = 0;
+        _bonusRemainingDieNumber = 0;
+        _syncGameState(advanceTurn: false);
+        return;
+      }
+      if (hadDouble) {
+        _syncGameState(advanceTurn: false);
+      } else {
+        _syncGameState(advanceTurn: true);
+      }
+      return;
+    }
+
+    _bonusHadDouble = hadDouble;
+
+    if (_botColors.contains(color)) {
+      final sp = _getStartPosition(color);
+      final best = _pendingBonusMoves.reduce((a, b) {
+        final posA = (a['piece'] as LudoPiece).position;
+        final posB = (b['piece'] as LudoPiece).position;
+        final stA = posA >= 52 ? 51 + (posA - 52) : _stepsFromStart(posA, sp);
+        final stB = posB >= 52 ? 51 + (posB - 52) : _stepsFromStart(posB, sp);
+        return stA >= stB ? a : b;
+      });
+      _showEventToast('¡Bot completó ficha! +10 casillas', color: Colors.green);
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        if (!mounted || _gameEnded) return;
+        _pendingBonusMoves.clear();
+        final pieces = _gameState.getPiecesByColor(color);
+        final pid = best['pieceId'] as int;
+        if (pid < pieces.length) {
+          pieces[pid].position = best['bonusPos'] as int;
+          if (best['bonusPos'] == 57) pieces[pid].isFinished = true;
+        }
+        setState(() {});
+        if (_bonusRemainingDie > 0) {
+          if (_bonusRemainingDieNumber == 1) {
+            _dice1Value = _bonusRemainingDie; _dice2Value = 0;
+            _hasUsedDice1 = false; _hasUsedDice2 = true;
+          } else {
+            _dice1Value = 0; _dice2Value = _bonusRemainingDie;
+            _hasUsedDice1 = true; _hasUsedDice2 = false;
+          }
+          _bonusRemainingDie = 0;
+          _bonusRemainingDieNumber = 0;
+          _syncGameState(advanceTurn: false);
+          _scheduleMultiplayerBotMove(color);
+          return;
+        }
+        if (hadDouble) {
+          _syncGameState(advanceTurn: false);
+          _scheduleMultiplayerBotMove(color);
+        } else {
+          _syncGameState(advanceTurn: true);
+        }
+      });
+      return;
+    }
+
+    _bonusSelectionActive = true;
+    _showEventToast('¡Llegaste a la meta! Elige una ficha para el bonus +10', color: Colors.green);
+
+    _movablePieces = _pendingBonusMoves.map((m) => {
+      ...m, 'diceValue': 10, 'diceNumber': 0,
     }).toList();
     setState(() {});
     _startTurnTimer();
@@ -1188,18 +1308,24 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   int? _calculateNewPosition(LudoPiece piece, int diceValue, String color) {
     if (piece.isHome) return _getStartPosition(color);
+
     if (piece.position >= 52) {
-      final np = piece.position + diceValue;
-      return np > 57 ? null : np;
+      final newPos = piece.position + diceValue;
+      if (newPos > 57) return null;
+      return newPos;
     }
-    final sp = _getStartPosition(color);
-    final steps = _stepsFromStart(piece.position, sp);
-    final ns = steps + diceValue;
-    if (ns >= 51) {
-      final into = ns - 51;
-      return into > 5 ? null : 52 + into;
+
+    final startPos = _getStartPosition(color);
+    final stepsFromStart = _stepsFromStart(piece.position, startPos);
+    final newSteps = stepsFromStart + diceValue;
+
+    if (newSteps >= 52) {
+      final stepsIntoStretch = newSteps - 52;
+      if (stepsIntoStretch > 5) return null;
+      return 52 + stepsIntoStretch;
     }
-    return (sp + ns) % 52;
+
+    return (startPos + newSteps) % 52;
   }
 
   int _stepsFromStart(int pos, int start) {
@@ -1212,7 +1338,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final sp = _getStartPosition(color);
     for (int step = 1; step < diceValue; step++) {
       final ns = _stepsFromStart(piece.position, sp) + step;
-      if (ns >= 51) break;
+      if (ns >= 52) break;
       final pos = (sp + ns) % 52;
       if (_isAnyBarrierAt(pos)) return true;
     }
@@ -1272,26 +1398,36 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     return true;
   }
 
-  int? _calculateCaptureBonusPosition(LudoPiece piece, String color) {
+  int? _calculateBonusPosition(LudoPiece piece, String color, int bonusSteps) {
     if (piece.isFinished || piece.isHome) return null;
-    if (piece.position >= 52) return null;
     final sp = _getStartPosition(color);
-    final currentSteps = _stepsFromStart(piece.position, sp);
-    for (int bonus = 1; bonus <= 20; bonus++) {
+    final currentSteps = piece.position >= 52
+        ? piece.position
+        : _stepsFromStart(piece.position, sp);
+
+    for (int bonus = 1; bonus <= bonusSteps; bonus++) {
       final ns = currentSteps + bonus;
       final int candidatePos;
-      if (ns >= 51) {
-        final into = ns - 51;
+      if (ns >= 52) {
+        final into = ns - 52;
         if (into > 5) return null;
         candidatePos = 52 + into;
       } else {
         candidatePos = (sp + ns) % 52;
       }
       if (candidatePos < 52 && _isAnyBarrierAt(candidatePos)) return null;
-      if (candidatePos == 57 && bonus < 20) return null;
-      if (bonus == 20) return candidatePos;
+      if (candidatePos == 57 && bonus < bonusSteps) return null;
+      if (bonus == bonusSteps) return candidatePos;
     }
     return null;
+  }
+
+  int? _calculateCaptureBonusPosition(LudoPiece piece, String color) {
+    return _calculateBonusPosition(piece, color, 20);
+  }
+
+  int? _calculateFinishBonusPosition(LudoPiece piece, String color) {
+    return _calculateBonusPosition(piece, color, 10);
   }
 
   bool _checkVictory(String color) =>
@@ -1309,8 +1445,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   bool _isSafeForColor(int pos, String color) {
     const starPositions = {4, 8, 17, 21, 30, 34, 43, 47};
+    const allStartPositions = {0, 13, 26, 39};
     if (starPositions.contains(pos)) return true;
-    if (pos == _getStartPosition(color)) return true;
+    if (allStartPositions.contains(pos)) return true;
     return false;
   }
 
@@ -1326,10 +1463,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   Offset _getHomeStretchPos(String color, int pos, double sq) {
     final si = pos - 52;
     switch (color) {
-      case 'green':  return Offset(7.5 * sq, (1.0 + si) * sq);
-      case 'red':    return Offset((1.0 + si) * sq, 7.5 * sq);
-      case 'blue':   return Offset(7.5 * sq, (13.0 - si) * sq);
-      case 'yellow': return Offset((13.0 - si) * sq, 7.5 * sq);
+      case 'green':  return Offset(7.5 * sq, (1.5 + si) * sq);
+      case 'red':    return Offset((1.5 + si) * sq, 7.5 * sq);
+      case 'blue':   return Offset(7.5 * sq, (13.5 - si) * sq);
+      case 'yellow': return Offset((13.5 - si) * sq, 7.5 * sq);
       default:       return Offset(7.5 * sq, 7.5 * sq);
     }
   }

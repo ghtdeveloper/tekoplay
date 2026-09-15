@@ -1241,8 +1241,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () async {
-              _isPausedForNavigation = true;
-              await _audioPlayer.pause();
               if (!context.mounted) return;
               final _ = await Navigator.push(
                 context,
@@ -1255,8 +1253,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ),
               );
               _loadCurrentUser();
-              _isPausedForNavigation = false;
-              await _resumeMusic();
+              await _loadAndApplyVolume();
             },
           ),
         ],

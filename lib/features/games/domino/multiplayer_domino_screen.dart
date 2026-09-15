@@ -954,6 +954,8 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     }
     hands[playerNum]!.remove(tileId);
 
+    final openingId = game.gameState.openingTileId ?? (game.gameState.chain.isEmpty ? tileId : null);
+
     final newState = DominoGameState(
       chain: chain,
       leftOpen: newLeftOpen,
@@ -970,6 +972,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       player4Score: game.gameState.player4Score,
       roundNumber: game.gameState.roundNumber,
       consecutivePasses: 0,
+      openingTileId: openingId,
     );
 
     return DominoGameMatch(

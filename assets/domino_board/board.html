@@ -184,15 +184,22 @@ const PIP={0:[],1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],
   6:[[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]};
 function drawP(l,r,cx,cy,ang,s){
   const dbl=l===r;
-  const w=TW*s,h=TH*s,pr=Math.max(2,TW*s*.07);
+  const w=TW*s,h=TH*s,pr=Math.max(2.5,TW*s*.09);
+  const rad=Math.max(3,5*s);
   ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);
-  ctx.fillStyle=dbl?'#FFFBEE':'#F5F5DC';
-  ctx.strokeStyle=dbl?'#2255AA':'#444';
-  ctx.lineWidth=Math.max(1,s*(dbl?2.5:1.5));
-  ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,2*s);ctx.fill();ctx.stroke();
-  ctx.beginPath();ctx.moveTo(-w/2+4,0);ctx.lineTo(w/2-4,0);
-  ctx.strokeStyle='#888';ctx.lineWidth=Math.max(.5,s*.8);ctx.stroke();
-  ctx.fillStyle='#111';const cell=w*.28;
+  // shadow
+  ctx.shadowColor='rgba(0,0,0,0.35)';ctx.shadowBlur=4*s;ctx.shadowOffsetY=2*s;
+  // tile body
+  ctx.fillStyle=dbl?'#FFFEF8':'#FFFFFF';
+  ctx.strokeStyle=dbl?'#1A4DA0':'#555';
+  ctx.lineWidth=Math.max(1,s*(dbl?2.5:1.8));
+  ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,rad);ctx.fill();ctx.stroke();
+  ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+  // divider line
+  ctx.beginPath();ctx.moveTo(-w/2+3*s,0);ctx.lineTo(w/2-3*s,0);
+  ctx.strokeStyle='#999';ctx.lineWidth=Math.max(1,s*1.2);ctx.stroke();
+  // pips
+  ctx.fillStyle='#1A1A1A';const cell=w*.28;
   for(const[val,by]of[[l,-h/4],[r,h/4]])
     for(const[px,py]of(PIP[val]||[])){
       ctx.beginPath();ctx.arc(px*cell,py*cell+by,pr,0,Math.PI*2);ctx.fill();}
@@ -221,8 +228,12 @@ function drawHint(hx,hy,value,isLeft){
 
 // ── Render ────────────────────────────────────────────────────────────────
 function render(){
+  const dpr=window.devicePixelRatio||1;
   const W=window.innerWidth,H=window.innerHeight;
-  cv.width=W;cv.height=H;ctx.clearRect(0,0,W,H);
+  cv.width=W*dpr;cv.height=H*dpr;
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
   drawWoodBg(W,H);
   if(!chain.length){_hPos=null;return;}
   const pos=layout(chain);
@@ -230,12 +241,8 @@ function render(){
 
   let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
   for(const p of pos){
-    // drawA for bounding box: sprite frame is portrait (fw=TW=99, fh=TH=188),
-    // rendered with ang=p.a. The rotated extents are computed via standard formula.
     const drawA=p.a;
     const cosA=Math.abs(Math.cos(drawA)),sinA=Math.abs(Math.sin(drawA));
-    // hw = half-width in world X; hh = half-height in world Y
-    // sprite local: fw=TW along screen-X before rotation, fh=TH along screen-Y
     const hw=(TW/2)*cosA+(TH/2)*sinA;
     const hh=(TW/2)*sinA+(TH/2)*cosA;
     mnX=Math.min(mnX,p.cx-hw); mxX=Math.max(mxX,p.cx+hw);
@@ -244,7 +251,7 @@ function render(){
 
   // PAD large enough to fit hint circles on all sides
   const PADX=HR+16,PADY=HR+16;
-  const s=Math.min((W-2*PADX)/(mxX-mnX),(H-2*PADY)/(mxY-mnY),0.44);
+  const s=Math.min((W-2*PADX)/(mxX-mnX),(H-2*PADY)/(mxY-mnY),0.55);
   const ox=W/2-(mxX+mnX)/2*s;
   const oy=H/2-(mxY+mnY)/2*s;
 

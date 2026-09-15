@@ -605,8 +605,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final stepsFromStart = _stepsFromStart(piece.position, startPos);
     final newSteps = stepsFromStart + diceValue;
 
-    if (newSteps > 50) {
-      final stepsIntoStretch = newSteps - 51;
+    if (newSteps >= 52) {
+      final stepsIntoStretch = newSteps - 52;
       if (stepsIntoStretch > 5) return null;
       return 52 + stepsIntoStretch;
     }
@@ -627,7 +627,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     for (int step = 1; step < diceValue; step++) {
       final newSteps = stepsFromStart + step;
-      if (newSteps > 51) break;
+      if (newSteps > 52) break;
       final checkPos = (startPos + newSteps) % 52;
       if (_isAnyBarrierAt(checkPos)) return true;
     }
@@ -699,15 +699,25 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     if (_totalDiceValue == 0 || _movablePieces.isEmpty) return;
 
+    int? closestPieceId;
+    double closestDistance = double.infinity;
+    final pieceTapRadius = squareSize * 0.85;
+
     for (int i = 0; i < yellowPieces.length; i++) {
       final piece = yellowPieces[i];
       if (!_movablePieces.any((m) => m['pieceId'] == i)) continue;
 
       final piecePos = _getPieceScreenPosition(piece, 'yellow', squareSize);
-      if (piecePos != null && (localPosition - piecePos).distance < tapRadius) {
-        _showMovementSelectionDialog(i);
-        return;
+      if (piecePos != null) {
+        final dist = (localPosition - piecePos).distance;
+        if (dist < pieceTapRadius && dist < closestDistance) {
+          closestDistance = dist;
+          closestPieceId = i;
+        }
       }
+    }
+    if (closestPieceId != null) {
+      _showMovementSelectionDialog(closestPieceId);
     }
   }
 
@@ -1599,8 +1609,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     for (int bonus = 1; bonus <= 20; bonus++) {
       final ns = currentSteps + bonus;
       final int candidatePos;
-      if (ns >= 51) {
-        final into = ns - 51;
+      if (ns >= 52) {
+        final into = ns - 52;
         if (into > 5) return null;
         candidatePos = 52 + into;
       } else {
@@ -1655,8 +1665,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
   bool _isSafeForColor(int position, String color) {
     const starPositions = {4, 8, 17, 21, 30, 34, 43, 47};
+    const allStartPositions = {0, 13, 26, 39};
     if (starPositions.contains(position)) return true;
-    if (position == _getStartPosition(color)) return true;
+    if (allStartPositions.contains(position)) return true;
     return false;
   }
 
