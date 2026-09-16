@@ -374,7 +374,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
         if (_selectedBetAmount != null && g.betAmount != _selectedBetAmount) return false;
         return true;
       }).toList();
-      // Prefer games closest to being full (most players first)
       eligible.sort((a, b) => b.currentPlayerCount.compareTo(a.currentPlayerCount));
 
       if (eligible.isNotEmpty && !_navigated) {
@@ -1015,7 +1014,11 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     if (_isOpponentThinking) return;
     setState(() => _isOpponentThinking = true);
     _botMoveTimer?.cancel();
-    _botMoveTimer = Timer(Duration(milliseconds: 800 + _random.nextInt(600)), () {
+    final isBet = _currencyType == 'diamonds';
+    final delay = isBet
+        ? Duration(milliseconds: 3500 + _random.nextInt(1000))
+        : Duration(milliseconds: 800 + _random.nextInt(600));
+    _botMoveTimer = Timer(delay, () {
       if (!mounted) return;
       _makeBotMove(game);
     });
@@ -1529,18 +1532,31 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       final opponentName = _myPlayerNumber == 1
           ? (game.guestName ?? 'Oponente')
           : game.hostName;
+      final betAmt = game.betAmount ?? 0;
+      final isDiamonds = game.currencyType == 'diamonds';
+      final commission = isDiamonds ? 0.10 : 0.30;
+      final int prize = betAmt > 0
+          ? ((betAmt * game.numberOfPlayers) * (1 - commission)).floor()
+          : 0;
+      final int netAmount = betAmt > 0
+          ? (iWon ? prize : -betAmt)
+          : 0;
+
       await _firestoreService.recordGameMatch(
         userId: uid,
         gameType: GameTypeModel.domino,
         result: result,
-        pointsEarned: iWon ? 20 : -5,
+        netEarnings: netAmount,
         durationMinutes: dur > 0 ? dur : 1,
         opponentName: opponentName,
         additionalData: {
           'matchType': widget.matchType,
           'mode': 'online',
-          'betAmount': game.betAmount,
+          'betAmount': betAmt,
+          'gameCost': betAmt,
+          'netAmount': netAmount,
           'currencyType': game.currencyType,
+          'numberOfPlayers': game.numberOfPlayers,
         },
       );
     } catch (e) {

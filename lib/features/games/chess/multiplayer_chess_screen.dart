@@ -473,6 +473,20 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
       if (!mounted || game == null) return;
       setState(() => _currentGame = game);
 
+      if (game.status == 'cancelled' && _screenState == _FriendChessState.waitingRoom) {
+        _waitingSubscription?.cancel();
+        _waitingSubscription = null;
+        setState(() => _gameEnded = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.of(context).gameHasBeenCancelled),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
+
       if (game.isActive && game.guestId != null && _screenState == _FriendChessState.waitingRoom) {
         _waitingSubscription?.cancel();
         _waitingSubscription = null;
@@ -849,7 +863,6 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           }
         }
       } else {
-        // Ya no es mi turno
         if (kDebugMode) {
           print('⏸️ No es tu turno - Esperando movimiento del oponente');
         }
@@ -1272,37 +1285,41 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     if (currentUser == null || _gameStartTime == null || _currentGame == null) return;
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
-      int pointsEarned = 0;
-
-      switch (result) {
-        case GameResultModel.win:
-          pointsEarned = 15;
-          break;
-        case GameResultModel.loss:
-          pointsEarned = -5;
-          break;
-        case GameResultModel.draw:
-          pointsEarned = 5;
-          break;
-      }
-
-      if (_currentGame?.isRanked == true) {
-        pointsEarned = (pointsEarned * 1.5).round();
+      final betAmt = _selectedBetAmount ?? 0;
+      final isBet = widget.matchType == S.of(context).bet;
+      final isDiamonds = isBet;
+      final commission = isDiamonds ? 0.10 : 0.30;
+      int netAmount = 0;
+      if (betAmt > 0) {
+        switch (result) {
+          case GameResultModel.win:
+            netAmount = (betAmt * 2 * (1 - commission)).floor();
+            break;
+          case GameResultModel.loss:
+            netAmount = -betAmt;
+            break;
+          case GameResultModel.draw:
+            netAmount = 0;
+            break;
+        }
       }
 
       await _firestoreService.recordGameMatch(
         userId: currentUser!.uid,
         gameType: GameTypeModel.chess,
         result: result,
-        pointsEarned: pointsEarned,
+        netEarnings: netAmount,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
         opponentName: _opponentName ?? 'Jugador desconocido',
         additionalData: {
           'gameMode': 'multiplayer',
           'isRanked': _currentGame?.isRanked ?? false,
-          'betAmount': _selectedBetAmount,
+          'betAmount': betAmt,
+          'gameCost': betAmt,
+          'netAmount': netAmount,
           'gameId': _activeGameId!,
           'matchType': widget.matchType,
+          'currencyType': isDiamonds ? 'diamonds' : 'coins',
           'quotasPaid': _currentGame?.quotasCollected ?? false,
         },
       );
@@ -1799,19 +1816,22 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
     _waitingSubscription?.cancel();
     _balanceSubscription?.cancel();
 
-    if (!_gameEnded &&
-        !_hasUserExitedGame &&
-        _currentGame != null &&
-        _currentGame!.isActive &&
-        _activeGameId != null) {
-      _gameService
-          .abandonGame(gameId: _activeGameId!, playerId: currentUser!.uid)
-          .catchError((e){
-        if (kDebugMode) {
-          print('Error en abandono desde dispose: $e');
-        }
-        return false;
-      });
+    if (!_gameEnded && !_hasUserExitedGame && _activeGameId != null && _currentGame != null) {
+      if (_currentGame!.isActive) {
+        _gameService
+            .abandonGame(gameId: _activeGameId!, playerId: currentUser!.uid)
+            .catchError((e) {
+          if (kDebugMode) print('Error en abandono desde dispose: $e');
+          return false;
+        });
+      } else if (_currentGame!.status == 'waiting') {
+        _gameService
+            .cancelGame(_activeGameId!, currentUser!.uid)
+            .catchError((e) {
+          if (kDebugMode) print('Error cancelando juego desde dispose: $e');
+          return false;
+        });
+      }
     }
     WidgetsBinding.instance.removeObserver(this);
     _gameSubscription?.cancel();

@@ -280,6 +280,12 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       DeviceOrientation.portraitDown,
     ]);
     WidgetsBinding.instance.removeObserver(this);
+    if (_activeGameId != null && _currentGame != null && _currentGame!.status == 'waiting') {
+      FirebaseFirestore.instance.collection('domino_games').doc(_activeGameId!).update({
+        'status': 'cancelled',
+        'finishedAt': FieldValue.serverTimestamp(),
+      }).catchError((_) {});
+    }
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
     _waitingSubscription?.cancel();
@@ -588,7 +594,11 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     if (_isOpponentThinking) return;
     setState(() => _isOpponentThinking = true);
     _botMoveTimer?.cancel();
-    _botMoveTimer = Timer(Duration(milliseconds: 800 + _random.nextInt(600)), () {
+    final isBet = widget.matchType == 'Apuesta';
+    final delay = isBet
+        ? Duration(milliseconds: 3500 + _random.nextInt(1000))
+        : Duration(milliseconds: 800 + _random.nextInt(600));
+    _botMoveTimer = Timer(delay, () {
       if (!mounted) return;
       _makeBotMove(game);
     });
@@ -1099,18 +1109,31 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       final opponentName = _myPlayerNumber == 1
           ? (game.guestName ?? 'Oponente')
           : game.hostName;
+      final betAmt = game.betAmount ?? 0;
+      final isDiamonds = game.currencyType == 'diamonds';
+      final commission = isDiamonds ? 0.10 : 0.30;
+      final int prize = betAmt > 0
+          ? ((betAmt * game.numberOfPlayers) * (1 - commission)).floor()
+          : 0;
+      final int netAmount = betAmt > 0
+          ? (iWon ? prize : -betAmt)
+          : 0;
+
       await _firestoreService.recordGameMatch(
         userId: uid,
         gameType: GameTypeModel.domino,
         result: result,
-        pointsEarned: iWon ? 20 : -5,
+        netEarnings: netAmount,
         durationMinutes: dur > 0 ? dur : 1,
         opponentName: opponentName,
         additionalData: {
           'matchType': widget.matchType,
           'mode': 'multiplayer',
-          'betAmount': game.betAmount,
+          'betAmount': betAmt,
+          'gameCost': betAmt,
+          'netAmount': netAmount,
           'currencyType': game.currencyType,
+          'numberOfPlayers': game.numberOfPlayers,
         },
       );
     } catch (e) {
@@ -1644,6 +1667,18 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       if (!mounted) return;
       if (game == null) return;
       setState(() => _currentGame = game);
+      if (game.status == 'cancelled') {
+        _waitingTimer?.cancel();
+        _waitingSubscription?.cancel();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.of(context).gameHasBeenCancelled),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
       if (game.isActive) {
         _waitingTimer?.cancel();
         _waitingSubscription?.cancel();

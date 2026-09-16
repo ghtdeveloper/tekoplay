@@ -275,7 +275,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
               }
             });
           }
-          // Reanudar el timer después de ajustar los tiempos
           _startPlayerTimer();
         }
         _backgroundedAt = null;
@@ -284,7 +283,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _disableWakeLock();
         if (_gameStarted && !_gameEnded && _firstMoveDone && _selectedTimeMinutes != null) {
           _backgroundedAt = DateTime.now();
-          _playerTimer?.cancel(); // Pausa el reloj para evitar doble conteo
+          _playerTimer?.cancel();
         }
         break;
       case AppLifecycleState.detached:
@@ -2408,7 +2407,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
-      int pointsEarned = 0;
+      int netAmount = 0;
 
       if (_selectedBetAmount == null) {
         throw Exception('No hay cantidad apostada definida');
@@ -2435,17 +2434,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         print('isPlayingAgainstBot: $_isPlayingAgainstBot');
       }
 
-      switch (result) {
-        case GameResultModel.win:
-          pointsEarned = 15;
-          break;
-        case GameResultModel.loss:
-          pointsEarned = -5;
-          break;
-        case GameResultModel.draw:
-          pointsEarned = 5;
-          break;
-      }
+      netAmount = currencyChange;
 
       if (_isPlayingAgainstBot && currencyChange != 0) {
         final userData = await _firestoreService.getUser(currentUser!.uid);
@@ -2471,7 +2460,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         userId: currentUser!.uid,
         gameType: GameTypeModel.chess,
         result: result,
-        pointsEarned: pointsEarned,
+        netEarnings: netAmount,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
         opponentName:
             _opponentName ??
@@ -2487,7 +2476,8 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
           'playerColor': _myColor == PlayerColor.white ? 'white' : 'black',
           'finalFEN': controller.getFen(),
           'betAmount': _selectedBetAmount,
-          'expectedCurrencyChange': currencyChange,
+          'gameCost': _selectedBetAmount,
+          'netAmount': currencyChange,
           'currencyType': isBetMode ? 'diamonds' : 'coins',
           'isPlayingAgainstBot': _isPlayingAgainstBot,
           'isOnlineMatchmaking': !_isPlayingAgainstBot,

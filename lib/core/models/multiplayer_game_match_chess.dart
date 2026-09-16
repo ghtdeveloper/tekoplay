@@ -481,7 +481,6 @@ class GameInvitationService {
           final existingGameId = invitationData['existingGameId'] as String?;
           final numberOfPlayers = (invitationData['numberOfPlayers'] as int?) ?? 2;
           if (existingGameId != null) {
-            // Game already created by host — just join it
             final joined = await LudoGameService().joinGame(
               gameId: existingGameId,
               playerId: invitationData['toUserId'],
@@ -489,7 +488,6 @@ class GameInvitationService {
             );
             gameId = joined ? existingGameId : null;
           } else {
-            // Legacy flow: create game then join
             gameId = await LudoGameService().createGame(
               hostId: invitationData['fromUserId'],
               hostName: invitationData['fromUserName'],
@@ -540,6 +538,39 @@ class GameInvitationService {
           'status': 'declined',
           'respondedAt': FieldValue.serverTimestamp(),
         });
+
+        final existingGameId = invitationData['existingGameId'] as String?;
+        if (existingGameId != null) {
+          final gameType = invitationData['gameType'] as String? ?? '';
+          final isLudo = gameType.toLowerCase().contains('ludo') ||
+              gameType.toLowerCase().contains('parch');
+          final isDominoPase = gameType == 'DominoPase';
+          final isDomino = !isDominoPase && gameType.toLowerCase().contains('domin');
+
+          final String collection;
+          if (isDominoPase) {
+            collection = 'domino_pase_games';
+          } else if (isDomino) {
+            collection = 'domino_games';
+          } else if (isLudo) {
+            collection = 'ludo_games';
+          } else {
+            collection = 'multiplayer_games';
+          }
+
+          final gameRef = _firestore.collection(collection).doc(existingGameId);
+          final gameDoc = await gameRef.get();
+          if (gameDoc.exists) {
+            final status = gameDoc.data()?['status'] as String?;
+            if (status == 'waiting') {
+              await gameRef.update({
+                'status': 'cancelled',
+                'finishedAt': FieldValue.serverTimestamp(),
+                'reason': 'invitation_declined',
+              });
+            }
+          }
+        }
 
         return {'success': true, 'declined': true};
       }

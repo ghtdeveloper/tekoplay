@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/ludo_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
@@ -139,6 +140,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   final Random _random = Random();
 
+  final List<_CaptureEffect> _captureEffects = [];
+
   static const List<_Coord> _boardPath = [
     _Coord(6, 1), _Coord(6, 2), _Coord(6, 3), _Coord(6, 4), _Coord(6, 5),
     _Coord(5, 6), _Coord(4, 6), _Coord(3, 6), _Coord(2, 6), _Coord(1, 6), _Coord(0, 6),
@@ -202,6 +205,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     _ownMsgBubbleTimer?.cancel();
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
+    for (final e in _captureEffects) { e.controller.dispose(); }
+    _captureEffects.clear();
     _pulseController.dispose();
     _diceAnimController.dispose();
     _toastController.dispose();
@@ -676,7 +681,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         content: Row(children: [
           Text(_opponentEmoji, style: const TextStyle(fontSize: 20)),
           const SizedBox(width: 10),
-          Text('¡$_opponentName se unió a la partida!',
+          Text(S.of(context).playerJoinedGame(_opponentName),
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ]),
       ),
@@ -925,6 +930,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (newPos == null || !_canLandOn(color, newPos, piece)) return;
 
     bool captured = false;
+    bool capturedMyPiece = false;
     final isExitingHome = newPos < 52 && piece.isHome && newPos == _getStartPosition(color);
     if (isExitingHome) {
       for (final ec in _activePlayers) {
@@ -935,6 +941,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         for (final ep in enemyPiecesHere) {
           ep.position = -1;
           captured = true;
+          if (ec == _myColor) capturedMyPiece = true;
         }
       }
     } else if (newPos < 52 && !_isSafeForColor(newPos, color)) {
@@ -945,8 +952,17 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             .toList();
         for (final ep in enemyPiecesHere) {
           ep.position = -1; captured = true;
+          if (ec == _myColor) capturedMyPiece = true;
         }
       }
+    }
+
+    if (captured && newPos < 52) {
+      _triggerCaptureEffect(newPos, _getPlayerColor(color));
+    }
+    if (capturedMyPiece && color != _myColor) {
+      final botName = _botNames[color] ?? _opponentName;
+      _showEventToast('$botName ${S.of(context).capturedYourPiece}', color: Colors.red.shade700);
     }
 
     piece.position = newPos;
@@ -991,7 +1007,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (color == _myColor) {
         _startTurnTimer();
       } else {
-        Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)), _executeBotBestMove);
+        Future.delayed(Duration(milliseconds: 1000 + _random.nextInt(300)), _executeBotBestMove);
       }
       return;
     }
@@ -1042,7 +1058,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           if (color == _myColor) {
             _startTurnTimer();
           } else {
-            Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)), _executeBotBestMove);
+            Future.delayed(Duration(milliseconds: 1000 + _random.nextInt(300)), _executeBotBestMove);
           }
           return;
         }
@@ -1066,7 +1082,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (color == _myColor) {
       if (_pendingBonusMoves.length == 1) {
         final m = _pendingBonusMoves.first;
-        _showEventToast('¡Capturaste! +20 casillas', color: Colors.green);
+        _showEventToast(S.of(context).capturedChoosePiece(20), color: Colors.green);
         Future.delayed(const Duration(milliseconds: 600), () {
           if (!mounted || _gameEnded) return;
           _executeBonusMove(color, m['pieceId'] as int, m['bonusPos'] as int, hadDouble);
@@ -1075,7 +1091,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         _bonusSelectionActive = true;
         _movablePieces = _pendingBonusMoves.map((m) => {...m, 'diceValue': 20, 'diceNumber': 0}).toList();
         setState(() {});
-        _showEventToast('¡Capturaste! Elige ficha para +20', color: Colors.green);
+        _showEventToast(S.of(context).capturedChoosePiece(20), color: Colors.green);
         _startTurnTimer();
       }
     } else {
@@ -1122,7 +1138,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           if (color == _myColor) {
             _startTurnTimer();
           } else {
-            Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)), _executeBotBestMove);
+            Future.delayed(Duration(milliseconds: 1000 + _random.nextInt(300)), _executeBotBestMove);
           }
           return;
         }
@@ -1146,7 +1162,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (color == _myColor) {
       if (_pendingBonusMoves.length == 1) {
         final m = _pendingBonusMoves.first;
-        _showEventToast('¡Llegaste a la meta! +10 casillas', color: Colors.green);
+        _showEventToast(S.of(context).finishedBonusN(10), color: Colors.green);
         Future.delayed(const Duration(milliseconds: 600), () {
           if (!mounted || _gameEnded) return;
           _executeBonusMove(color, m['pieceId'] as int, m['bonusPos'] as int, hadDouble);
@@ -1155,7 +1171,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         _bonusSelectionActive = true;
         _movablePieces = _pendingBonusMoves.map((m) => {...m, 'diceValue': 10, 'diceNumber': 0}).toList();
         setState(() {});
-        _showEventToast('¡Llegaste a la meta! Elige ficha para +10', color: Colors.green);
+        _showEventToast(S.of(context).finishedChoosePiece(10), color: Colors.green);
         _startTurnTimer();
       }
     } else {
@@ -1179,6 +1195,29 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final pieces = _gameState.getPiecesByColor(color);
     if (pieceId >= pieces.length) return;
     final piece = pieces[pieceId];
+
+    // Check for captures at bonus destination
+    bool bonusCaptured = false;
+    if (bonusPos < 52 && !_isSafeForColor(bonusPos, color)) {
+      for (final ec in _activePlayers) {
+        if (ec == color) continue;
+        final enemyPiecesHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == bonusPos)
+            .toList();
+        for (final ep in enemyPiecesHere) {
+          ep.position = -1;
+          bonusCaptured = true;
+          if (ec == _myColor && color != _myColor) {
+            final botName = _botNames[color] ?? _opponentName;
+            _showEventToast('$botName ${S.of(context).capturedYourPiece}', color: Colors.red.shade700);
+          }
+        }
+      }
+    }
+    if (bonusCaptured) {
+      _triggerCaptureEffect(bonusPos, _getPlayerColor(color));
+    }
+
     piece.position = bonusPos;
     if (bonusPos == 57) piece.isFinished = true;
     _pendingBonusMoves.clear();
@@ -1188,6 +1227,12 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (_checkVictory(color)) {
       _clearBotExecution();
       _endGame(color);
+      return;
+    }
+
+    // Bonus capture triggers another +20 bonus (Parchís rules)
+    if (bonusCaptured) {
+      _prepareCaptureBonus(color, hadDouble);
       return;
     }
 
@@ -1206,7 +1251,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         if (color == _myColor) {
           _startTurnTimer();
         } else {
-          Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)), _executeBotBestMove);
+          Future.delayed(Duration(milliseconds: 1000 + _random.nextInt(300)), _executeBotBestMove);
         }
         return;
       }
@@ -1245,10 +1290,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _startTurnTimer();
     } else {
       _showTurnBannerAnim(
-        'Turno de ${_botNames[next] ?? _opponentName}',
+        S.of(context).turnOfPlayer(_botNames[next] ?? _opponentName),
         _getPlayerColor(next),
       );
-      Future.delayed(const Duration(milliseconds: 2800), _scheduleBotMove);
+      Future.delayed(const Duration(milliseconds: 1200), _scheduleBotMove);
     }
   }
 
@@ -1375,7 +1420,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _movablePieces.clear();
       if (_isBotTurn) _nextTurn();
     });
-    final thinkTime = 2600 + _random.nextInt(800);
+    final thinkTime = 1200 + _random.nextInt(400);
     Future.delayed(Duration(milliseconds: thinkTime), () {
       _executeBotTurn();
     });
@@ -1503,6 +1548,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
   Future<void> _executeBotTurn() async {
     if (_gameEnded || !mounted || _isMyTurn) { _clearBotExecution(); return; }
+    final s = S.of(context);
     final bc = _currentPlayer;
 
     final botPieces = _gameState.getPiecesByColor(bc);
@@ -1525,14 +1571,14 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         if ((_botHomeDoubles[bc] ?? 0) >= 3) {
           _botHomeDoubles[bc] = 0;
           _consecutiveDoubles = 0;
-          _showEventToast('$_currentBotName: tres dobles en casa, pierde turno');
+          _showEventToast(s.botTripleDoublesHome(_currentBotName));
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; });
           _clearBotExecution();
           _nextTurn();
           return;
         }
-        _showEventToast('$_currentBotName: doble en casa, vuelve a tirar');
+        _showEventToast(s.botDoubleHomeReroll(_currentBotName));
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() { _dice1Value = 0; _dice2Value = 0; });
         continue;
@@ -1551,7 +1597,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _consecutiveDoubles = 0;
       _applyTripleDoublesPenalty(bc);
       setState(() {});
-      _showEventToast('$_currentBotName perdió el turno (3 dobles)');
+      _showEventToast(s.botLostTurnTriple(_currentBotName));
       await Future.delayed(const Duration(milliseconds: 1500));
       _clearBotExecution();
       _nextTurn();
@@ -1563,12 +1609,12 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       _hasUsedDice1 = false; _hasUsedDice2 = false;
     });
 
-    await Future.delayed(Duration(milliseconds: 4200 + _random.nextInt(800)));
+    await Future.delayed(Duration(milliseconds: 1800 + _random.nextInt(400)));
 
     _calculateMovablePieces();
 
     if (_movablePieces.isEmpty) {
-      _showEventToast('$_currentBotName no tiene movimientos');
+      _showEventToast(s.botNoMoves(_currentBotName));
       await Future.delayed(const Duration(milliseconds: 1200));
       setState(() { _dice1Value = 0; _dice2Value = 0; });
       _clearBotExecution();
@@ -1626,7 +1672,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       if (better) { bestScore = score; bestMove = move; }
     }
     bestMove ??= _movablePieces.first;
-    await Future.delayed(Duration(milliseconds: 2400 + _random.nextInt(400)));
+    await Future.delayed(Duration(milliseconds: 1000 + _random.nextInt(300)));
 
     if (mounted && !_gameEnded) {
       _executePieceMove(
@@ -1650,8 +1696,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final stepsFromStart = _stepsFromStart(piece.position, startPos);
     final newSteps = stepsFromStart + diceValue;
 
-    if (newSteps >= 52) {
-      final stepsIntoStretch = newSteps - 52;
+    if (newSteps >= 51) {
+      final stepsIntoStretch = newSteps - 51;
       if (stepsIntoStretch > 5) return null;
       return 52 + stepsIntoStretch;
     }
@@ -1668,7 +1714,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final sp = _getStartPosition(color);
     for (int step = 1; step < dv; step++) {
       final ns = _stepsFromStart(piece.position, sp) + step;
-      if (ns >= 52) break;
+      if (ns >= 51) break;
       final pos = (sp + ns) % 52;
       if (_isAnyBarrierAt(pos)) return true;
     }
@@ -1736,8 +1782,12 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     for (int bonus = 1; bonus <= bonusSteps; bonus++) {
       final ns = currentSteps + bonus;
       final int candidatePos;
-      if (ns >= 52) {
-        final into = ns - 52;
+      if (piece.position >= 52) {
+        // Already in home stretch — simple addition
+        candidatePos = piece.position + bonus;
+        if (candidatePos > 57) return null;
+      } else if (ns >= 51) {
+        final into = ns - 51;
         if (into > 5) return null;
         candidatePos = 52 + into;
       } else {
@@ -1867,14 +1917,39 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     if (_gameStartTime == null || _currentUser == null) return;
     try {
       final dur = DateTime.now().difference(_gameStartTime!).inMinutes;
+      final isBet = _isBetMode;
+      final betAmt = isBet ? (_selectedBetAmount ?? 25) : 100;
+      final hasBots = _botColors.isNotEmpty;
+      final int playerCount = _activePlayers.length;
+      final commission = isBet ? 0.10 : 0.30;
+      final int prize = hasBots
+          ? (isBet ? (betAmt + (betAmt * 0.7).ceil()) : (betAmt * 2))
+          : (betAmt * playerCount * (1 - commission)).floor();
+      final int netAmount = result == GameResultModel.win ? prize : -betAmt;
+
+      // Build opponent names list
+      final allBotNames = _botNames.values.toList();
+      final opponentLabel = allBotNames.isNotEmpty
+          ? allBotNames.join(', ')
+          : _opponentName;
+
       await _firestoreService.recordGameMatch(
         userId: _currentUser!.uid,
         gameType: GameTypeModel.ludo,
         result: result,
-        pointsEarned: result == GameResultModel.win ? 20 : -5,
+        netEarnings: netAmount,
         durationMinutes: dur > 0 ? dur : 1,
-        opponentName: _opponentName,
-        additionalData: {'matchType': widget.matchType, 'playerColor': _myColor, 'vsBot': true},
+        opponentName: opponentLabel,
+        additionalData: {
+          'matchType': widget.matchType,
+          'playerColor': _myColor,
+          'vsBot': hasBots,
+          'betAmount': betAmt,
+          'gameCost': betAmt,
+          'netAmount': netAmount,
+          'currencyType': isBet ? 'diamonds' : 'coins',
+          'numberOfPlayers': playerCount,
+        },
       );
     } catch (_) {}
   }
@@ -1890,7 +1965,6 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
         : (isBet
             ? (betAmt * playerCount * 0.9).floor()
             : (betAmt * playerCount * 0.7).floor());
-    final netGain = totalPrize - betAmt;
     showDialog(
       context: context, barrierDismissible: false,
       builder: (ctx) => Dialog(
@@ -1922,26 +1996,33 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               Text(opponentLabel,
                   style: const TextStyle(color: Colors.black87, fontSize: 16),
                   textAlign: TextAlign.center),
-              if (isWin && isBet) ...[
+              ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
+                    color: isWin ? Colors.blue.shade50 : Colors.red.shade50,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.shade200),
+                    border: Border.all(
+                      color: isWin ? Colors.blue.shade200 : Colors.red.shade200,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.diamond, color: Colors.blue, size: 20),
+                      Icon(isBet ? Icons.diamond : Icons.monetization_on,
+                          color: isWin ? Colors.blue : Colors.red, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        '+$netGain 💎 ganados',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade800,
-                          fontSize: 15,
+                      Flexible(
+                        child: Text(
+                          isWin
+                              ? '+$totalPrize ${isBet ? S.of(ctx).diamonds : S.of(ctx).coins} ${S.of(ctx).earned}'
+                              : '-$betAmt ${isBet ? S.of(ctx).diamonds : S.of(ctx).coins}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isWin ? Colors.blue.shade800 : Colors.red.shade800,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ],
@@ -2037,6 +2118,112 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     });
   }
 
+  void _triggerCaptureEffect(int boardPosition, Color pieceColor) {
+    if (!mounted || _boardSize == 0) return;
+    HapticFeedback.mediumImpact();
+    final sq = _boardSize / 15;
+    Offset? screenPos;
+    if (boardPosition >= 0 && boardPosition < _boardPath.length) {
+      final c = _boardPath[boardPosition];
+      screenPos = Offset((c.col + 0.5) * sq, (c.row + 0.5) * sq);
+    }
+    if (screenPos == null) return;
+
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    final effect = _CaptureEffect(
+      position: screenPos,
+      color: pieceColor,
+      controller: controller,
+    );
+    setState(() => _captureEffects.add(effect));
+    controller.forward().then((_) {
+      if (mounted) {
+        controller.dispose();
+        setState(() => _captureEffects.remove(effect));
+      }
+    });
+  }
+
+  Widget _buildCaptureEffects(double boardSize) {
+    if (_captureEffects.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      width: boardSize,
+      height: boardSize,
+      child: Stack(
+        children: _captureEffects.map((e) {
+          return AnimatedBuilder(
+            animation: e.controller,
+            builder: (_, __) {
+              final t = e.controller.value;
+              final ringScale = 0.5 + t * 2.0;
+              final ringOpacity = (1.0 - t).clamp(0.0, 1.0);
+              final burstScale = 0.2 + t * 1.5;
+              final burstOpacity = t < 0.3 ? t / 0.3 : (1.0 - t) / 0.7;
+              final sq = boardSize / 15;
+              final r = sq * 0.4;
+
+              return Stack(
+                children: [
+                  // Expanding ring
+                  Positioned(
+                    left: e.position.dx - r * ringScale,
+                    top: e.position.dy - r * ringScale,
+                    child: Opacity(
+                      opacity: ringOpacity,
+                      child: Container(
+                        width: r * 2 * ringScale,
+                        height: r * 2 * ringScale,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.red.shade700,
+                            width: 3.0 * (1.0 - t * 0.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Inner flash
+                  Positioned(
+                    left: e.position.dx - r * burstScale,
+                    top: e.position.dy - r * burstScale,
+                    child: Opacity(
+                      opacity: burstOpacity.clamp(0.0, 1.0),
+                      child: Container(
+                        width: r * 2 * burstScale,
+                        height: r * 2 * burstScale,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: e.color.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Burst icon
+                  if (t < 0.6)
+                    Positioned(
+                      left: e.position.dx - 12,
+                      top: e.position.dy - 12,
+                      child: Opacity(
+                        opacity: (1.0 - t / 0.6).clamp(0.0, 1.0),
+                        child: Transform.scale(
+                          scale: 0.6 + t * 1.2,
+                          child: const Text('💥', style: TextStyle(fontSize: 20)),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   void _showTurnBannerAnim(String text, Color color) {
     if (!mounted) return;
     setState(() {
@@ -2065,7 +2252,44 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
   }
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: _gameEnded || _screenState != _LudoOnlineState.gameActive,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(S.of(ctx).abandonGame),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.warning, color: Colors.orange, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  S.of(ctx).abandonWarningBet,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(S.of(ctx).cancel, style: const TextStyle(color: Colors.green)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: Text(S.of(ctx).abandonGame),
+              ),
+            ],
+          ),
+        );
+        if (confirm == true && mounted) {
+          _endGame(_botColors.isNotEmpty ? _botColors.first : _activePlayers.first);
+        }
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFFEC7A34),
@@ -2185,6 +2409,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             ),
         ],
       ),
+    ),
     );
   }
 
@@ -2206,68 +2431,73 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
       children: [
         Column(
           children: [
-            LayoutBuilder(
-              builder: (ctx, constraints) {
-                final sz = constraints.maxWidth - 16;
-                _boardSize = sz;
-                return SizedBox(
-                  height: sz + 16,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: GestureDetector(
-                      onTapUp: (d) => _handleBoardTap(d.localPosition),
-                      child: AnimatedBuilder(
-                        animation: Listenable.merge([_pulseController, _diceRotation]),
-                        builder: (ctx, _) {
-                          final movableKeys = <String>{};
-                          if (_isMyTurn && !_bonusSelectionActive) {
-                            for (final m in _movablePieces) {
-                              movableKeys.add('$_myColor-${m['pieceId']}');
+            _buildPlayersInfo(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: LayoutBuilder(
+                  builder: (ctx, constraints) {
+                    final sz = constraints.maxWidth < constraints.maxHeight
+                        ? constraints.maxWidth
+                        : constraints.maxHeight;
+                    _boardSize = sz;
+                    return Center(
+                      child: GestureDetector(
+                        onTapUp: (d) => _handleBoardTap(d.localPosition),
+                        child: AnimatedBuilder(
+                          animation: Listenable.merge([_pulseController, _diceRotation]),
+                          builder: (ctx, _) {
+                            final movableKeys = <String>{};
+                            if (_isMyTurn && !_bonusSelectionActive) {
+                              for (final m in _movablePieces) {
+                                movableKeys.add('$_myColor-${m['pieceId']}');
+                              }
                             }
-                          }
-                          if (_bonusSelectionActive) {
-                            for (final m in _pendingBonusMoves) {
-                              movableKeys.add('$_myColor-${m['pieceId']}');
+                            if (_bonusSelectionActive) {
+                              for (final m in _pendingBonusMoves) {
+                                movableKeys.add('$_myColor-${m['pieceId']}');
+                              }
                             }
-                          }
-                          return Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Container(
-                                width: sz, height: sz,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.35),
-                                      blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: CustomPaint(
-                                    painter: LudoBoardPainter(
-                                      gameState: _gameState,
-                                      highlightedPieceColor: _isMyTurn ? _myColor : null,
-                                      highlightedPieceId: _selectedPieceId,
-                                      validMovePositions: _validMovePositions,
-                                      pulseValue: _pulseController.value,
-                                      movableKeys: movableKeys,
+                            return Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Container(
+                                  width: sz, height: sz,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.35),
+                                        blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: CustomPaint(
+                                      painter: LudoBoardPainter(
+                                        gameState: _gameState,
+                                        highlightedPieceColor: _isMyTurn ? _myColor : null,
+                                        highlightedPieceId: _selectedPieceId,
+                                        validMovePositions: _validMovePositions,
+                                        pulseValue: _pulseController.value,
+                                        movableKeys: movableKeys,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              _buildBoardPlayerLabels(sz),
-                              _buildBoardChatBubbles(sz),
-                            ],
-                          );
-                        },
+                                _buildCaptureEffects(sz),
+                                _buildBoardPlayerLabels(sz),
+                                _buildBoardChatBubbles(sz),
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ),
             ),
             _buildChatWidget(),
             _buildGameControls(),
@@ -2326,6 +2556,99 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildPlayersInfo() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        children: _activePlayers.expand((color) {
+          final isMe = color == _myColor;
+          final isActive = color == _currentPlayer;
+          final playerColor = _getPlayerColor(color);
+          final pieces = _gameState.getPiecesByColor(color);
+          final finishedCount = pieces.where((p) => p.isFinished).length;
+          final name = isMe ? 'Yo' : (_botNames[color] ?? _opponentName).split(' ').first;
+          final textColor = isActive
+              ? (color == 'yellow' ? const Color(0xFFB8960E) : playerColor)
+              : Colors.black87;
+          final countColor = isActive
+              ? (color == 'yellow' ? const Color(0xFFB8960E) : playerColor)
+              : Colors.black54;
+          final isFirst = color == _activePlayers.first;
+
+          return [
+            if (!isFirst) const SizedBox(width: 6),
+            Expanded(child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            decoration: BoxDecoration(
+              color: isActive ? playerColor.withValues(alpha: 0.12) : Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isActive ? playerColor : Colors.grey.shade300, width: isActive ? 2.5 : 1),
+              boxShadow: isActive
+                  ? [BoxShadow(color: playerColor.withValues(alpha: 0.3), blurRadius: 8, spreadRadius: 1)]
+                  : [],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10, height: 10,
+                      decoration: BoxDecoration(
+                        color: playerColor, shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: playerColor.withValues(alpha: 0.5), blurRadius: 4)],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(
+                      name,
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: isActive ? FontWeight.w900 : FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    )),
+                    if (isActive) ...[
+                      const SizedBox(width: 3),
+                      Container(width: 6, height: 6, decoration: BoxDecoration(color: playerColor, shape: BoxShape.circle)),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: 50,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: finishedCount / 4,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation<Color>(playerColor),
+                      minHeight: 6,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$finishedCount/4',
+                  style: TextStyle(color: countColor, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          )),
+          ];
+        }).toList(),
+      ),
     );
   }
 
@@ -2749,8 +3072,8 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
           Text(S.of(context).howManyPlayers,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          const Text('Elige el número de jugadores para la partida',
-              style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+          Text(S.of(context).choosePlayerCountForGame,
+              style: const TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
           const SizedBox(height: 20),
 
           Row(
@@ -2779,7 +3102,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                       children: [
                         Text(_getCountIcon(n), style: const TextStyle(fontSize: 28)),
                         const SizedBox(height: 6),
-                        Text('$n jugadores',
+                        Text(S.of(context).nPlayersLabel(n),
                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
                                 color: sel ? Colors.white : Colors.black87),
                             textAlign: TextAlign.center),
@@ -2811,7 +3134,10 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                       color: _isBetMode ? Colors.blue : Colors.amber, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Tu balance: ${_isBetMode ? '${_userDiamonds ?? 0} diamantes' : '${_userCoins ?? 0} monedas'}',
+                    S.of(context).yourBalanceAmount(
+                      _isBetMode ? '${_userDiamonds ?? 0}' : '${_userCoins ?? 0}',
+                      _isBetMode ? S.of(context).diamonds : S.of(context).coins,
+                    ),
                     style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -2918,15 +3244,15 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
               ),
             ),
             const SizedBox(height: 4),
-            Text('$_selectedPlayerCount jugadores · buscando...',
+            Text(S.of(context).searchingNPlayers(_selectedPlayerCount),
                 style: const TextStyle(fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 12),
             Text(
               _matchmakingSeconds < 10
-                  ? 'Conectando con otros jugadores...'
+                  ? S.of(context).connectingWithPlayers
                   : _matchmakingSeconds < 50
-                      ? '¡Ya casi! Ampliando búsqueda...'
-                      : 'Completando con bots...',
+                      ? S.of(context).almostExpandingSearch
+                      : S.of(context).completingWithBots,
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 40),
@@ -2970,7 +3296,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                   Text(S.of(context).waitingRoom,
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('$joined / $_selectedPlayerCount jugadores',
+                  Text(S.of(context).joinedOfTotal(joined, _selectedPlayerCount),
                       style: const TextStyle(fontSize: 16, color: Color(0xFFEC7A34), fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   ClipRRect(
@@ -2988,11 +3314,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                     const SizedBox(width: 24, height: 24,
                         child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFEC7A34))),
                     const SizedBox(height: 6),
-                    Text('Esperando $remaining ${remaining == 1 ? 'jugador más' : 'jugadores más'}...',
+                    Text(S.of(context).waitingMorePlayers(remaining),
                         style: const TextStyle(color: Colors.grey, fontSize: 13)),
                     const SizedBox(height: 4),
                     Text(
-                      'Iniciando en ${(60 - _matchmakingSeconds).clamp(0, 60)}"',
+                      S.of(context).startingInSeconds((60 - _matchmakingSeconds).clamp(0, 60)),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: _matchmakingSeconds >= 50 ? FontWeight.bold : FontWeight.normal,
@@ -3010,7 +3336,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             if (_activeGameId != null) ...[
               const SizedBox(height: 16),
               Text(
-                'Código: ${_activeGameId!.substring(0, 8).toUpperCase()}',
+                S.of(context).codeLabelValue(_activeGameId!.substring(0, 8).toUpperCase()),
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.black45),
               ),
             ],
@@ -3052,7 +3378,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
     final assigned = game != null
         ? [game.player1Color, game.player2Color, game.player3Color, game.player4Color]
         : playerColors;
-    final colorNames = {'green': 'Verde', 'red': 'Rojo', 'blue': 'Azul', 'yellow': 'Amarillo'};
+    final colorNames = {'green': S.of(context).colorGreen, 'red': S.of(context).colorRed, 'blue': S.of(context).colorBlue, 'yellow': S.of(context).colorYellow};
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -3133,11 +3459,11 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
             setDlg(() {
               final n = int.tryParse(v);
               if (v.isEmpty) {
-                betError = 'Ingresa un monto';
+                betError = S.of(context).enterBetAmountHint;
               } else if (n == null || n < 1) {
-                betError = 'Monto inválido';
+                betError = S.of(context).invalidAmountError;
               } else if (n > balance) {
-                betError = 'Saldo insuficiente (tienes $balance)';
+                betError = S.of(context).insufficientBalanceAmount(balance);
               } else {
                 betError = null;
               }
@@ -3182,7 +3508,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Tu saldo: $balance ${isBet ? 'diamantes' : 'monedas'}',
+                            S.of(context).yourSaldoAmount(balance, isBet ? S.of(context).diamonds : S.of(context).coins),
                             style: TextStyle(
                                 color: Colors.green.shade800,
                                 fontWeight: FontWeight.bold,
@@ -3203,7 +3529,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                         children: [
                           const Text('🎲', style: TextStyle(fontSize: 18)),
                           const SizedBox(width: 8),
-                          Text('$_selectedPlayerCount jugadores',
+                          Text(S.of(context).nPlayersLabel(_selectedPlayerCount),
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 14)),
                         ],
@@ -3438,4 +3764,15 @@ class _Coord {
   final int col;
   final int row;
   const _Coord(this.col, this.row);
+}
+
+class _CaptureEffect {
+  final Offset position;
+  final Color color;
+  final AnimationController controller;
+  const _CaptureEffect({
+    required this.position,
+    required this.color,
+    required this.controller,
+  });
 }

@@ -1139,7 +1139,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
         userId: uid,
         gameType: GameTypeModel.dominoPase,
         result: result,
-        pointsEarned: iWon ? 20 : -5,
+        netEarnings: netDiamonds,
         durationMinutes: dur > 0 ? dur : 1,
         opponentName: opponentName,
         additionalData: {

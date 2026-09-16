@@ -910,18 +910,23 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
         }
       }
 
+      final int netAmount = playerWon
+          ? (gameCost * 2 * 0.9).floor()
+          : -gameCost;
+
       await _firestoreService.recordGameMatch(
         userId: _currentUser!.uid,
         gameType: GameTypeModel.domino,
         result: playerWon ? GameResultModel.win : GameResultModel.loss,
-        pointsEarned: playerWon ? 20 : -5,
+        netEarnings: netAmount,
         durationMinutes: 10,
-        opponentName: 'CPU (${widget.selectedDifficulty})',
+        opponentName: 'CPU',
         additionalData: {
           'playerScore': _ctrl.playerScore,
           'cpuScore': _ctrl.cpuScore,
           'matchType': widget.matchType,
           'gameCost': gameCost,
+          'netAmount': netAmount,
           'currencyType': isBet ? 'diamonds' : 'coins',
         },
       );

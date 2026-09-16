@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/ludo_game_match.dart';
 import '../../../core/utils/game_result.dart';
@@ -42,6 +43,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   bool _gameEnded = false;
   final Random _random = Random();
   final Map<String, int> _missedFive = {};
+  final Map<String, int> _cpuTurnCycle = {};
   int _humanHomeDoubles = 0;
   int _cpuHomeDoubles = 0;
 
@@ -65,6 +67,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     return 6;
   }
 
+  int _rollCpuDiceBad() {
+    return 1 + _random.nextInt(6);
+  }
+
   int _rollCpuDiceNoDouble(int exclude) {
     int v;
     do { v = _rollCpuDice(); } while (v == exclude);
@@ -73,6 +79,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
   DateTime? _gameStartTime;
   double _boardSize = 0;
+
+  final List<_CaptureEffect> _captureEffects = [];
 
   String? _selectedPieceColor;
   int? _selectedPieceId;
@@ -199,6 +207,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     _disableWakeLock();
     _moveTimer?.cancel();
     _afkRollTimer?.cancel();
+    for (final e in _captureEffects) { e.controller.dispose(); }
+    _captureEffects.clear();
     _diceAnimationController.dispose();
     _pulseController.dispose();
     _bounceController.dispose();
@@ -423,6 +433,106 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     });
   }
 
+  void _triggerCaptureEffect(int boardPosition, Color pieceColor) {
+    if (!mounted || _boardSize == 0) return;
+    HapticFeedback.mediumImpact();
+    final sq = _boardSize / 15;
+    Offset? screenPos;
+    if (boardPosition >= 0 && boardPosition < _boardPath.length) {
+      final c = _boardPath[boardPosition];
+      screenPos = Offset((c.col + 0.5) * sq, (c.row + 0.5) * sq);
+    }
+    if (screenPos == null) return;
+
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    final effect = _CaptureEffect(
+      position: screenPos,
+      color: pieceColor,
+      controller: controller,
+    );
+    setState(() => _captureEffects.add(effect));
+    controller.forward().then((_) {
+      if (mounted) {
+        controller.dispose();
+        setState(() => _captureEffects.remove(effect));
+      }
+    });
+  }
+
+  Widget _buildCaptureEffects(double boardSize) {
+    if (_captureEffects.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      width: boardSize,
+      height: boardSize,
+      child: Stack(
+        children: _captureEffects.map((e) {
+          return AnimatedBuilder(
+            animation: e.controller,
+            builder: (_, __) {
+              final t = e.controller.value;
+              final ringScale = 0.5 + t * 2.0;
+              final ringOpacity = (1.0 - t).clamp(0.0, 1.0);
+              final burstScale = 0.2 + t * 1.5;
+              final burstOpacity = t < 0.3 ? t / 0.3 : (1.0 - t) / 0.7;
+              final sq = boardSize / 15;
+              final r = sq * 0.4;
+
+              return Stack(
+                children: [
+                  Positioned(
+                    left: e.position.dx - r * ringScale,
+                    top: e.position.dy - r * ringScale,
+                    child: Opacity(
+                      opacity: ringOpacity,
+                      child: Container(
+                        width: r * 2 * ringScale,
+                        height: r * 2 * ringScale,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.red.shade700, width: 3.0 * (1.0 - t * 0.5)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: e.position.dx - r * burstScale,
+                    top: e.position.dy - r * burstScale,
+                    child: Opacity(
+                      opacity: burstOpacity.clamp(0.0, 1.0),
+                      child: Container(
+                        width: r * 2 * burstScale,
+                        height: r * 2 * burstScale,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: e.color.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (t < 0.6)
+                    Positioned(
+                      left: e.position.dx - 12,
+                      top: e.position.dy - 12,
+                      child: Opacity(
+                        opacity: (1.0 - t / 0.6).clamp(0.0, 1.0),
+                        child: Transform.scale(
+                          scale: 0.6 + t * 1.2,
+                          child: const Text('💥', style: TextStyle(fontSize: 20)),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   void _showTurnBanner(String color) {
     final isHuman = color == 'yellow';
     setState(() {
@@ -605,8 +715,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final stepsFromStart = _stepsFromStart(piece.position, startPos);
     final newSteps = stepsFromStart + diceValue;
 
-    if (newSteps >= 52) {
-      final stepsIntoStretch = newSteps - 52;
+    if (newSteps >= 51) {
+      final stepsIntoStretch = newSteps - 51;
       if (stepsIntoStretch > 5) return null;
       return 52 + stepsIntoStretch;
     }
@@ -627,7 +737,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
     for (int step = 1; step < diceValue; step++) {
       final newSteps = stepsFromStart + step;
-      if (newSteps > 52) break;
+      if (newSteps >= 51) break;
       final checkPos = (startPos + newSteps) % 52;
       if (_isAnyBarrierAt(checkPos)) return true;
     }
@@ -661,7 +771,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   bool _canLandOn(String color, int newPos, LudoPiece movingPiece) {
     if (newPos >= 52) return true;
 
-    // Regla especial: salida de casa con barrera enemiga en tu casilla de salida → permitido (rompe barrera)
     if (movingPiece.isHome && newPos == _getStartPosition(color) && _isEnemyBarrierAt(newPos, color)) {
       return true;
     }
@@ -728,6 +837,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final p = opt['piece'] as LudoPiece;
     final bonusPos = opt['bonusPos'] as int;
     final hadDouble = _bonusHadDouble;
+    final bonusSteps = (opt['diceValue'] as int?) ?? 20;
     final isSafe = bonusPos >= 52 || _isSafeForColor(bonusPos, 'yellow');
     final willCapture = bonusPos < 52 && !_isSafeForColor(bonusPos, 'yellow') &&
         _activePlayers.any((ec) => ec != 'yellow' &&
@@ -748,8 +858,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('🎯 Bonus +20 casillas',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFEC7A34))),
+              Text('${bonusSteps == 10 ? '🏁' : '🎯'} ${S.of(context).bonusNSteps(bonusSteps)}',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFEC7A34))),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -776,11 +886,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Ficha ${pieceId + 1}  •  Casilla ${p.position} → $bonusPos',
+                          Text(S.of(context).pieceNSquareFromTo(pieceId + 1, p.position, bonusPos),
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(height: 2),
                           Text(
-                            willCapture ? '🔥 ¡Comerá otra ficha!' : isSafe ? '⭐ Casilla segura' : '➡ Avanza +20',
+                            willCapture ? S.of(context).willCaptureAnother : isSafe ? S.of(context).safeSquare : S.of(context).advanceNSteps(bonusSteps),
                             style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 11),
                           ),
                         ],
@@ -800,7 +910,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                         side: BorderSide(color: Colors.grey.shade300),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: const Text('Cancelar'),
+                      child: Text(S.of(context).cancel),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -819,7 +929,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: const Text('Mover', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(S.of(context).moveButton, style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -856,7 +966,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                options.length == 1 ? 'Mover ficha' : 'Selecciona tu movimiento',
+                options.length == 1 ? S.of(context).movePiece : S.of(context).selectYourMove,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFEC7A34)),
               ),
               const SizedBox(height: 20),
@@ -883,7 +993,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                           _buildDialogDice(diceValue),
                           const SizedBox(width: 12),
                           Text(
-                            options.length == 1 ? 'Mover $diceValue casillas' : 'Dado $diceNumber: $diceValue',
+                            options.length == 1 ? S.of(context).moveNSquares(diceValue) : S.of(context).diceNValue(diceNumber, diceValue),
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -1016,6 +1126,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       }
     }
 
+    if (captured && newPosition < 52) {
+      _triggerCaptureEffect(newPosition, _getPlayerColor(color));
+    }
+
     setState(() {
       piece.position = newPosition;
       if (newPosition == 57) piece.isFinished = true;
@@ -1032,9 +1146,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       return;
     }
 
+    final justFinished = newPosition == 57;
     final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
 
-    if (captured) {
+    if (captured || justFinished) {
       final remainingDie = !_hasUsedDice1 ? _dice1Value : (!_hasUsedDice2 ? _dice2Value : 0);
       final remainingNum = !_hasUsedDice1 ? 1 : (!_hasUsedDice2 ? 2 : 0);
       _bonusRemainingDie = hadDouble ? 0 : remainingDie;
@@ -1044,7 +1159,11 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         _movablePieces.clear();
         _hasUsedDice1 = false; _hasUsedDice2 = false;
       });
-      _applyCaptureBonusWithSelection(color, piece, hadDouble);
+      if (captured) {
+        _applyCaptureBonusWithSelection(color, piece, hadDouble);
+      } else {
+        _applyFinishBonusWithSelection(color, hadDouble);
+      }
       return;
     }
 
@@ -1090,7 +1209,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     }
 
     if (bonusMoves.isEmpty) {
-      _showEventToast('¡Comiste! Sin bonus disponible 🎯');
+      _showEventToast(S.of(context).capturedNoBonus);
       _resolveTurnAfterCapture(hadDouble);
       return;
     }
@@ -1105,10 +1224,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       return;
     }
 
-    // Si solo hay una ficha elegible, ejecutar bonus automáticamente
     if (bonusMoves.length == 1) {
       final m = bonusMoves.first;
-      _showEventToast('🎯 ¡Comiste! +20 casillas');
+      _showEventToast(S.of(context).capturedBonusN(20));
       Future.delayed(const Duration(milliseconds: 600), () {
         if (!mounted || _gameEnded) return;
         _applyBonusTopiece('yellow', m['piece'] as LudoPiece, m['bonusPos'] as int, hadDouble);
@@ -1120,7 +1238,61 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       _bonusSelectionActive = true;
       _bonusHadDouble = hadDouble;
     });
-    _showEventToast('🎯 ¡Comiste! Toca la ficha que quieres mover +20');
+    _showEventToast(S.of(context).capturedTouchPieceBonusN(20));
+    _startMoveTimer();
+  }
+
+  void _applyFinishBonusWithSelection(String color, bool hadDouble) {
+    if (!mounted) return;
+
+    final allPieces = _gameState.getPiecesByColor(color);
+    final bonusMoves = <Map<String, dynamic>>[];
+
+    for (int i = 0; i < allPieces.length; i++) {
+      final p = allPieces[i];
+      if (p.isFinished || p.isHome) continue;
+      final bonusPos = _calculateFinishBonusPosition(p, color);
+      if (bonusPos == null) continue;
+      bonusMoves.add({'pieceId': i, 'piece': p, 'bonusPos': bonusPos, 'diceValue': 10, 'diceNumber': 0});
+    }
+
+    if (bonusMoves.isEmpty) {
+      _showEventToast(S.of(context).reachedGoalNoBonus);
+      _resolveTurnAfterCapture(hadDouble);
+      return;
+    }
+
+    if (color != 'yellow') {
+      final sp = _getStartPosition(color);
+      final best = bonusMoves.reduce((a, b) {
+        final stA = _stepsFromStart((a['piece'] as LudoPiece).position, sp);
+        final stB = _stepsFromStart((b['piece'] as LudoPiece).position, sp);
+        return stA >= stB ? a : b;
+      });
+      _showEventToast(S.of(context).cpuReachedGoalBonusN(10));
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted || _gameEnded) return;
+        _applyBonusTopiece(color, best['piece'] as LudoPiece, best['bonusPos'] as int, hadDouble);
+      });
+      return;
+    }
+
+    if (bonusMoves.length == 1) {
+      final m = bonusMoves.first;
+      _showEventToast(S.of(context).reachedGoalBonusN(10));
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted || _gameEnded) return;
+        _applyBonusTopiece('yellow', m['piece'] as LudoPiece, m['bonusPos'] as int, hadDouble);
+      });
+      return;
+    }
+
+    setState(() {
+      _movablePieces = bonusMoves;
+      _bonusSelectionActive = true;
+      _bonusHadDouble = hadDouble;
+    });
+    _showEventToast(S.of(context).reachedGoalTouchPieceBonusN(10));
     _startMoveTimer();
   }
 
@@ -1165,6 +1337,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   void _applyBonusTopiece(String color, LudoPiece piece, int bonusPos, bool hadDouble) {
     if (!mounted || piece.isFinished) return;
 
+    bool bonusCaptured = false;
     if (bonusPos < 52 && !_isSafeForColor(bonusPos, color)) {
       for (final enemyColor in _activePlayers) {
         if (enemyColor == color) continue;
@@ -1173,9 +1346,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
             .toList();
         if (enemyList.length == 1) {
           setState(() => enemyList[0].position = -1);
-          _showEventToast('¡Comiste otra! 🔥');
+          bonusCaptured = true;
+          _showEventToast(S.of(context).capturedAnother);
         }
       }
+    }
+    if (bonusCaptured) {
+      _triggerCaptureEffect(bonusPos, _getPlayerColor(color));
     }
 
     setState(() {
@@ -1232,9 +1409,15 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     final cpuAllInHome = cpuPieces.every((p) => p.isHome);
     int d1cpu = 0, d2cpu = 0;
 
+    final cycle = (_cpuTurnCycle[cpuColor] ?? 0) % 3;
+    _cpuTurnCycle[cpuColor] = (_cpuTurnCycle[cpuColor] ?? 0) + 1;
+    final isBadTurn = cycle == 2;
+
     do {
-      d1cpu = _rollCpuDice();
-      d2cpu = (_consecutiveDoubles >= 2) ? _rollCpuDiceNoDouble(d1cpu) : _rollCpuDice();
+      d1cpu = isBadTurn ? _rollCpuDiceBad() : _rollCpuDice();
+      d2cpu = (_consecutiveDoubles >= 2)
+          ? _rollCpuDiceNoDouble(d1cpu)
+          : (isBadTurn ? _rollCpuDiceBad() : _rollCpuDice());
       final cpuHasHome = cpuPieces.any((p) => p.isHome);
       final cpuMissed = _missedFive[cpuColor] ?? 0;
       if (cpuMissed >= 3 && cpuHasHome && d1cpu != 5 && d2cpu != 5) {
@@ -1252,13 +1435,13 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         if (_cpuHomeDoubles >= 3) {
           _cpuHomeDoubles = 0;
           _consecutiveDoubles = 0;
-          _showEventToast('CPU: tres dobles en casa, pierde turno.');
+          _showEventToast(S.of(context).cpuTripleDoublesHome);
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
           if (!_gameEnded && mounted) _nextTurn();
           return;
         }
-        _showEventToast('CPU: doble en casa, vuelve a tirar.');
+        _showEventToast(S.of(context).cpuDoubleHome);
         await Future.delayed(const Duration(milliseconds: 1000));
         setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
         await Future.delayed(const Duration(milliseconds: 500));
@@ -1395,6 +1578,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     if (!_canLandOn(color, newPosition, piece)) return false;
 
     bool captured = false;
+    bool capturedMyPiece = false;
     final isExitingHome = newPosition < 52 && piece.isHome && newPosition == _getStartPosition(color);
 
     if (isExitingHome) {
@@ -1406,6 +1590,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         for (final ep in enemyPiecesHere) {
           setState(() => ep.position = -1);
           captured = true;
+          if (enemyColor == 'yellow') capturedMyPiece = true;
         }
       }
     } else if (newPosition < 52 && !_isSafeForColor(newPosition, color)) {
@@ -1417,8 +1602,16 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         for (final ep in enemyPiecesHere) {
           setState(() => ep.position = -1);
           captured = true;
+          if (enemyColor == 'yellow') capturedMyPiece = true;
         }
       }
+    }
+
+    if (captured && newPosition < 52) {
+      _triggerCaptureEffect(newPosition, _getPlayerColor(color));
+    }
+    if (capturedMyPiece) {
+      _showEventToast('CPU ${S.of(context).capturedYourPiece}', color: Colors.red.shade700);
     }
 
     setState(() {
@@ -1432,16 +1625,22 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     });
     _lastMovedPieceId[color] = pieceId;
 
-    if (captured) {
+    final justFinished = newPosition == 57;
+
+    if (captured || justFinished) {
       final hadDouble = _dice1Value == _dice2Value && _dice1Value > 0;
       final remainingDie = !_hasUsedDice1 ? _dice1Value : (!_hasUsedDice2 ? _dice2Value : 0);
       final remainingNum = !_hasUsedDice1 ? 1 : (!_hasUsedDice2 ? 2 : 0);
       _bonusRemainingDie = hadDouble ? 0 : remainingDie;
       _bonusRemainingDieNumber = hadDouble ? 0 : remainingNum;
-      _applyCpuCaptureBonus(color);
+      if (captured) {
+        _applyCpuCaptureBonus(color);
+      } else {
+        _applyFinishBonusWithSelection(color, hadDouble);
+      }
     }
 
-    return captured;
+    return captured || justFinished;
   }
 
   void _applyCpuCaptureBonus(String color) {
@@ -1609,8 +1808,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     for (int bonus = 1; bonus <= 20; bonus++) {
       final ns = currentSteps + bonus;
       final int candidatePos;
-      if (ns >= 52) {
-        final into = ns - 52;
+      if (ns >= 51) {
+        final into = ns - 51;
         if (into > 5) return null;
         candidatePos = 52 + into;
       } else {
@@ -1619,6 +1818,28 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       if (candidatePos < 52 && _isAnyBarrierAt(candidatePos)) return null;
       if (candidatePos == 57 && bonus < 20) return null;
       if (bonus == 20) return candidatePos;
+    }
+    return null;
+  }
+
+  int? _calculateFinishBonusPosition(LudoPiece piece, String color) {
+    if (piece.isFinished || piece.isHome) return null;
+    if (piece.position >= 52) return null;
+    final startPos = _getStartPosition(color);
+    final currentSteps = _stepsFromStart(piece.position, startPos);
+    for (int bonus = 1; bonus <= 10; bonus++) {
+      final ns = currentSteps + bonus;
+      final int candidatePos;
+      if (ns >= 51) {
+        final into = ns - 51;
+        if (into > 5) return null;
+        candidatePos = 52 + into;
+      } else {
+        candidatePos = (startPos + ns) % 52;
+      }
+      if (candidatePos < 52 && _isAnyBarrierAt(candidatePos)) return null;
+      if (candidatePos == 57 && bonus < 10) return null;
+      if (bonus == 10) return candidatePos;
     }
     return null;
   }
@@ -1690,7 +1911,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         if (userData.diamonds < cost) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Diamantes insuficientes (necesitas $cost 💎)'), backgroundColor: Colors.red),
+              SnackBar(content: Text(S.of(context).insufficientDiamonds(cost)), backgroundColor: Colors.red),
             );
             Navigator.of(context).pop();
           }
@@ -1702,7 +1923,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         if (userData.coins < cost) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Monedas insuficientes (necesitas $cost 🪙)'), backgroundColor: Colors.red),
+              SnackBar(content: Text(S.of(context).insufficientCoins(cost)), backgroundColor: Colors.red),
             );
             Navigator.of(context).pop();
           }
@@ -1727,10 +1948,10 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
 
   String _getColorName(String color) {
     switch (color) {
-      case 'yellow': return 'Amarillo';
-      case 'green':  return 'Verde';
-      case 'blue':   return 'Azul';
-      case 'red':    return 'Rojo';
+      case 'yellow': return S.of(context).yellowColor;
+      case 'green':  return S.of(context).greenColor;
+      case 'blue':   return S.of(context).blueColor;
+      case 'red':    return S.of(context).redColor;
       default:       return color;
     }
   }
@@ -1756,19 +1977,24 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         }
       }
 
+      final int netAmount = result == GameResultModel.win
+          ? (gameCost * 2 * 0.9).floor()
+          : -gameCost;
+
       await _firestoreService.recordGameMatch(
         userId: _currentUser!.uid,
         gameType: GameTypeModel.ludo,
         result: result,
-        pointsEarned: result == GameResultModel.win ? 20 : -5,
+        netEarnings: netAmount,
         durationMinutes: duration > 0 ? duration : 1,
-        opponentName: 'CPU x${widget.cpuCount} (${widget.difficulty})',
+        opponentName: 'CPU x${widget.cpuCount}',
         additionalData: {
           'difficulty': widget.difficulty,
           'playerColor': 'yellow',
           'matchType': widget.matchType,
           'cpuCount': widget.cpuCount,
           'gameCost': gameCost,
+          'netAmount': netAmount,
           'currencyType': isBet ? 'diamonds' : 'coins',
         },
       );
@@ -1930,7 +2156,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         title: Text(
           isBetMode
               ? '${S.of(context).parchisVsFriend} — ${S.of(context).betMode}'
-              : 'Parchís vs ${widget.cpuCount} CPU${widget.cpuCount > 1 ? "s" : ""} - ${widget.difficulty}',
+              : S.of(context).parchisVsCpu(widget.cpuCount, widget.cpuCount > 1 ? 's' : '', widget.difficulty),
           style: const TextStyle(color: Colors.white, fontSize: 15),
         ),
         elevation: 2,
@@ -1960,31 +2186,36 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                                 movableKeys.add('yellow-${m['pieceId']}');
                               }
                             }
-                            return Container(
-                              width: size, height: size,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.35),
-                                    blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                            return Stack(
+                              children: [
+                                Container(
+                                  width: size, height: size,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _getPlayerColor(_currentPlayer).withValues(alpha: 0.35),
+                                        blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                                      ),
+                                      BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                                    ],
                                   ),
-                                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: CustomPaint(
-                                  painter: LudoBoardPainter(
-                                    gameState: _gameState,
-                                    highlightedPieceColor: _selectedPieceColor,
-                                    highlightedPieceId: _selectedPieceId,
-                                    validMovePositions: _validMovePositions,
-                                    pulseValue: _pulseController.value,
-                                    movableKeys: movableKeys,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: CustomPaint(
+                                      painter: LudoBoardPainter(
+                                        gameState: _gameState,
+                                        highlightedPieceColor: _selectedPieceColor,
+                                        highlightedPieceId: _selectedPieceId,
+                                        validMovePositions: _validMovePositions,
+                                        pulseValue: _pulseController.value,
+                                        movableKeys: movableKeys,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                _buildCaptureEffects(size),
+                              ],
                             );
                           },
                         ),
@@ -2074,17 +2305,20 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: _activePlayers.map((color) {
+        children: _activePlayers.asMap().entries.expand((entry) {
+          final idx = entry.key;
+          final color = entry.value;
           final isPlayer = color == 'yellow';
           final isActive = color == _currentPlayer;
           final pieces = _gameState.getPiecesByColor(color);
           final finishedCount = pieces.where((p) => p.isFinished).length;
           final playerColor = _getPlayerColor(color);
 
-          return AnimatedContainer(
+          return [
+            if (idx > 0) const SizedBox(width: 6),
+            Expanded(child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
             decoration: BoxDecoration(
               color: isActive ? playerColor.withValues(alpha: 0.12) : Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
@@ -2106,24 +2340,28 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                         boxShadow: [BoxShadow(color: playerColor.withValues(alpha: 0.5), blurRadius: 4)],
                       ),
                     ),
-                    const SizedBox(width: 5),
-                    Text(
-                      isPlayer ? 'Yo' : 'CPU',
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(
+                      isPlayer ? S.of(context).meLabel : 'CPU',
                       style: TextStyle(
-                        color: isActive ? playerColor : Colors.black87,
+                        color: isActive
+                            ? (color == 'yellow' ? const Color(0xFFB8960E) : playerColor)
+                            : Colors.black87,
                         fontWeight: isActive ? FontWeight.w900 : FontWeight.w500,
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
-                    ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    )),
                     if (isActive) ...[
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 3),
                       Container(width: 6, height: 6, decoration: BoxDecoration(color: playerColor, shape: BoxShape.circle)),
                     ],
                   ],
                 ),
                 const SizedBox(height: 6),
                 SizedBox(
-                  width: 60,
+                  width: 50,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
@@ -2137,11 +2375,18 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                 const SizedBox(height: 3),
                 Text(
                   '$finishedCount/4',
-                  style: TextStyle(color: isActive ? playerColor : Colors.black54, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: isActive
+                        ? (color == 'yellow' ? const Color(0xFFB8960E) : playerColor)
+                        : Colors.black54,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
-          );
+          )),
+          ];
         }).toList(),
       ),
     );
@@ -2225,7 +2470,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _currentPlayer == 'yellow' ? 'TU TURNO' : 'CPU',
+                        _currentPlayer == 'yellow' ? S.of(context).yourTurnLabel : 'CPU',
                         style: TextStyle(color: _getPlayerColor(_currentPlayer), fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 1.2),
                       ),
                       const SizedBox(height: 2),
@@ -2257,8 +2502,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                     const SizedBox(width: 8),
                     Text(
                       _bonusSelectionActive
-                          ? '🎯 Toca la ficha que recibirá +20'
-                          : 'Toca una ficha para mover',
+                          ? S.of(context).touchPieceBonusN(20)
+                          : S.of(context).touchPieceToMove,
                       style: TextStyle(
                         color: _bonusSelectionActive ? Colors.green.shade900 : Colors.blue.shade900,
                         fontSize: 13,
@@ -2299,8 +2544,8 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                     const SizedBox(width: 8),
                     Text(
                       _consecutiveDoubles == 1
-                          ? '¡Dobles! Tira de nuevo'
-                          : '¡Dobles x2! ⚠ Otro doble = penalización',
+                          ? S.of(context).doublesRollAgain
+                          : S.of(context).doublesWarningPenalty,
                       style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -2360,6 +2605,17 @@ class _Coord {
   final int col;
   final int row;
   const _Coord(this.col, this.row);
+}
+
+class _CaptureEffect {
+  final Offset position;
+  final Color color;
+  final AnimationController controller;
+  const _CaptureEffect({
+    required this.position,
+    required this.color,
+    required this.controller,
+  });
 }
 
 class DiceDotsPainter extends CustomPainter {

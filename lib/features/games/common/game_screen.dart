@@ -76,7 +76,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   List<LudoGameMatch> _previousActiveLudoGames = [];
   StreamSubscription<DocumentSnapshot>? _diamondsSubscription;
   final AnonymousWalletService _walletService = AnonymousWalletService();
-  bool _isScreenKeepOnActive = false;
+
 
   String? _localizedChess;
   String? _localizedDomino;
@@ -204,13 +204,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-        if (_isScreenKeepOnActive) {
-          _enableWakeLock();
-        }
+        _enableWakeLock();
         _resumeGameMusic();
         break;
       case AppLifecycleState.paused:
-        _disableWakeLock();
         _audioPlayer?.pause();
         break;
       case AppLifecycleState.inactive:
@@ -240,14 +237,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     try {
       if (!await WakelockPlus.enabled) {
         await WakelockPlus.enable();
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _isScreenKeepOnActive = true;
-          });
-        }
-        if (kDebugMode) {
-          print('WakeLock enabled - screen will stay on');
-        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -260,14 +249,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     try {
       if (await WakelockPlus.enabled) {
         await WakelockPlus.disable();
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _isScreenKeepOnActive = false;
-          });
-        }
-        if (kDebugMode) {
-          print('WakeLock disabled - screen can turn off normally');
-        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -1350,7 +1331,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       ),
                       const SizedBox(height: 10),
 
-                      // Match type + username
                       if (!isPase) _buildMatchTypeIndicator(),
                       const SizedBox(height: 10),
                       _buildUserNameSection(),
@@ -2058,37 +2038,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                       activeColor: const Color(0xFFEC7A34),
                                       onChanged: (v) => setState(() => selectedDifficulty = v!),
                                     )),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                            ] else ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.07),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.psychology, color: Colors.red, size: 18),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            S.of(context).difficultyMax,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red),
-                                          ),
-                                          Text(
-                                            S.of(context).difficultyMaxNote,
-                                            style: TextStyle(fontSize: 11, color: Colors.red.shade700),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),

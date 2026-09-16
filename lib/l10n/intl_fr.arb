@@ -155,7 +155,8 @@
   "generalSummary": "Résumé Général",
   "games": "Parties",
   "victoriesPct": "% de victoires",
-  "totalPoints": "Total des points",
+  "totalPoints": "Classement",
+  "earningsDiamonds": "Gains (Diamants)",
   "stats": "Statistiques",
   "point": "Points",
   "defeats": "Défaites",
@@ -190,7 +191,7 @@
   "invitations": "Invitations",
   "noInvitation": "Aucune invitation",
   "invitesYou": "vous invite",
-  "invitationRejected": "Invitation refusée",
+  "invitationRejected": "La demande de jeu a été refusée",
   "reject": "Refuser",
   "errorAcceptedInvitation": "Erreur lors de l'acceptation de l'invitation",
   "opponentEmail": "E-mail de l'adversaire",
@@ -531,196 +532,75 @@
   "kingStep4Desc": "Le roi est polyvalent : horizontal, vertical et diagonal. Déplacez-le comme vous voulez !",
   "me": "Moi",
   "top": "TOP",
-  "winRate": "Taux de victoire"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  "winRate": "Taux de victoire",
+  "gameHasBeenCancelled": "La partie a été annulée",
+  "bonusNSteps": "Bonus +{n} cases",
+  "pieceNSquareFromTo": "Pièce {pieceNum}  •  Case {from} → {to}",
+  "willCaptureAnother": "Capturera une autre pièce !",
+  "safeSquare": "Case sûre",
+  "advanceNSteps": "Avance +{n}",
+  "movePiece": "Déplacer pièce",
+  "selectYourMove": "Sélectionnez votre mouvement",
+  "moveNSquares": "Déplacer {n} cases",
+  "diceNValue": "Dé {n} : {value}",
+  "capturedNoBonus": "Capturé ! Pas de bonus disponible",
+  "capturedBonusN": "Capturé ! +{n} cases",
+  "capturedTouchPieceBonusN": "Capturé ! Touchez la pièce à déplacer +{n}",
+  "reachedGoalNoBonus": "Arrivé au but ! Pas de bonus disponible",
+  "cpuReachedGoalBonusN": "CPU : But ! +{n} cases",
+  "reachedGoalBonusN": "Arrivé au but ! +{n} cases",
+  "reachedGoalTouchPieceBonusN": "Arrivé au but ! Touchez la pièce à déplacer +{n}",
+  "capturedAnother": "Capturé une autre !",
+  "cpuTripleDoublesHome": "CPU : triple double à la maison, perd le tour.",
+  "cpuDoubleHome": "CPU : double à la maison, relance les dés.",
+  "touchPieceToMove": "Touchez une pièce pour déplacer",
+  "touchPieceBonusN": "Touchez la pièce qui recevra +{n}",
+  "insufficientDiamonds": "Diamants insuffisants (vous avez besoin de {cost} 💎)",
+  "insufficientCoins": "Pièces insuffisantes (vous avez besoin de {cost} 🪙)",
+  "yellowColor": "Jaune",
+  "greenColor": "Vert",
+  "blueColor": "Bleu",
+  "redColor": "Rouge",
+  "parchisVsCpu": "Parchís vs {count} CPU{plural} - {difficulty}",
+  "meLabel": "Moi",
+  "yourTurnLabel": "VOTRE TOUR",
+  "moveButton": "Déplacer",
+  "doublesRollAgain": "Doubles ! Relancez",
+  "doublesWarningPenalty": "Doubles x2 ! ⚠ Un autre double = pénalité",
+  "netDiamonds": "Diamants (net)",
+  "netCoins": "Pièces (net)",
+  "earned": "gagnés",
+  "capturedYourPiece": "a capturé ta pièce",
+  "capturedChoosePiece": "Capturé ! Choisis un pion pour +{n}",
+  "finishedBonusN": "Arrivé au but ! +{n} cases",
+  "finishedChoosePiece": "Arrivé au but ! Choisis un pion pour +{n}",
+  "turnOfPlayer": "Tour de {name}",
+  "botTripleDoublesHome": "{name} : trois doubles à la maison, perd le tour",
+  "botDoubleHomeReroll": "{name} : double à la maison, relance",
+  "botLostTurnTriple": "{name} a perdu le tour (3 doubles)",
+  "botNoMoves": "{name} n'a pas de mouvements",
+  "playerJoinedGame": "{name} a rejoint la partie !",
+  "nPlayersLabel": "{n} joueurs",
+  "searchingNPlayers": "{n} joueurs · recherche...",
+  "almostExpandingSearch": "Presque ! Élargissement de la recherche...",
+  "joinedOfTotal": "{joined} / {total} joueurs",
+  "waitingMorePlayers": "En attente de {n} joueur(s) de plus...",
+  "yourBalanceAmount": "Ton solde : {amount} {currency}",
+  "yourSaldoAmount": "Ton solde : {amount} {currency}",
+  "botCapturedBonusN": "Bot a capturé ! +{n} cases",
+  "botFinishedBonusN": "Bot a terminé un pion ! +{n} cases",
+  "colorYellow": "Jaune",
+  "colorGreen": "Vert",
+  "colorRed": "Rouge",
+  "colorBlue": "Bleu",
+  "playerWon": "{name} a gagné",
+  "connectingWithPlayers": "Connexion avec d'autres joueurs...",
+  "completingWithBots": "Complétion avec des bots...",
+  "startingInSeconds": "Démarrage dans {n}\"",
+  "enterBetAmountHint": "Saisissez un montant",
+  "invalidAmountError": "Montant invalide",
+  "insufficientBalanceAmount": "Solde insuffisant (vous avez {amount})",
+  "codeLabelValue": "Code : {code}",
+  "playerAbandonedGameMsg": "Un joueur a abandonné la partie.",
+  "betWillBeReturned": "Votre mise de {amount} 💎 sera remboursée"
 }

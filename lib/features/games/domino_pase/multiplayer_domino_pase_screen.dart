@@ -346,6 +346,12 @@ class _MultiplayerDominoPaseScreenState
       DeviceOrientation.portraitDown,
     ]);
     WidgetsBinding.instance.removeObserver(this);
+    if (_activeGameId != null && _currentGame != null && _currentGame!.status == 'waiting') {
+      _firestore.collection('domino_pase_games').doc(_activeGameId!).update({
+        'status': 'cancelled',
+        'finishedAt': FieldValue.serverTimestamp(),
+      }).catchError((_) {});
+    }
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
     _waitingSubscription?.cancel();
@@ -990,7 +996,7 @@ class _MultiplayerDominoPaseScreenState
         userId: uid,
         gameType: GameTypeModel.dominoPase,
         result: result,
-        pointsEarned: iWon ? 20 : -5,
+        netEarnings: netDiamonds,
         durationMinutes: dur > 0 ? dur : 1,
         opponentName: opponentName,
         additionalData: {
@@ -1307,6 +1313,13 @@ class _MultiplayerDominoPaseScreenState
       if (!mounted) return;
       if (game == null) return;
       setState(() => _currentGame = game);
+      if (game.status == 'cancelled') {
+        _waitingTimer?.cancel();
+        _waitingSubscription?.cancel();
+        _showSnack(S.of(context).gameHasBeenCancelled);
+        Navigator.of(context).pop();
+        return;
+      }
       if (game.isActive) {
         _waitingTimer?.cancel();
         _waitingSubscription?.cancel();

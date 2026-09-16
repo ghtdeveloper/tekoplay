@@ -406,7 +406,7 @@ class AuthService {
   Future<bool> recordGameMatch({
     required GameTypeModel gameType,
     required GameResultModel result,
-    required int pointsEarned,
+    required int netEarnings,
     required int durationMinutes,
     String? opponentId,
     String? opponentName,
@@ -418,7 +418,7 @@ class AuthService {
         userId: user.uid,
         gameType: gameType,
         result: result,
-        pointsEarned: pointsEarned,
+        netEarnings: netEarnings,
         durationMinutes: durationMinutes,
         opponentId: opponentId,
         opponentName: opponentName,

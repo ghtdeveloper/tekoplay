@@ -753,21 +753,17 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
 
     try {
       final gameDuration = DateTime.now().difference(_gameStartTime!).inMinutes;
-      int pointsEarned = 0;
       int currencyChange = 0;
       final gameCost = _getGameCost();
 
       switch (result) {
         case GameResultModel.win:
-          pointsEarned = 15;
           currencyChange = gameCost + (gameCost ~/ 2);
           break;
         case GameResultModel.loss:
-          pointsEarned = -5;
           currencyChange = 0;
           break;
         case GameResultModel.draw:
-          pointsEarned = 5;
           currencyChange = gameCost ~/ 2;
           break;
       }
@@ -788,19 +784,23 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
         }
       }
 
+      final int netAmount = result == GameResultModel.win
+          ? currencyChange
+          : (result == GameResultModel.loss ? -gameCost : 0);
+
       final success = await _firestoreService.recordGameMatch(
         userId: currentUser!.uid,
         gameType: GameTypeModel.chess,
         result: result,
-        pointsEarned: pointsEarned,
+        netEarnings: netAmount,
         durationMinutes: gameDuration > 0 ? gameDuration : 1,
-        opponentName: 'CPU (${widget.selectedDifficulty})',
+        opponentName: 'CPU',
         additionalData: {
           'difficulty': widget.selectedDifficulty,
           'playerColor': _playerColor == PlayerColor.white ? 'white' : 'black',
           'finalFEN': controller.getFen(),
           'gameCost': gameCost,
-          'currencyChange': currencyChange,
+          'netAmount': netAmount,
           'currencyType': currencyType,
           'matchType': widget.matchType,
           'timeControl': '1 minuto por movimiento',

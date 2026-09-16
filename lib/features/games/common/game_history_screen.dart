@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -26,6 +28,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
   List<GameMatch> _allHistory = [];
   final Map<GameTypeModel, GameStats> _gameStats = {};
   bool _isLoading = true;
+  int _diamondsEarned = 0;
 
   static const _kAccent = Color(0xFFEC7A34);
 
@@ -94,6 +97,12 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
     setState(() => _isLoading = true);
 
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        _diamondsEarned = (userDoc.data()?['diamondsEarned'] as num?)?.toInt() ?? 0;
+      }
+
       for (GameTypeModel gameType in GameTypeModel.values) {
         final history = await _authService.getCurrentUserGameHistory(
           gameType: gameType,
@@ -127,12 +136,10 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
     if (gameType == null) {
       int totalGames = 0;
       int totalWins = 0;
-      int totalPoints = 0;
 
       for (GameStats stats in _gameStats.values) {
         totalGames += stats.gamesPlayed;
         totalWins += stats.wins;
-        totalPoints += stats.points;
       }
 
       double winRate = totalGames > 0 ? (totalWins / totalGames) * 100 : 0;
@@ -197,7 +204,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: _buildStatItem(
-                    S.of(context).totalPoints, '$totalPoints', Icons.star,
+                    S.of(context).earningsDiamonds, '$_diamondsEarned', Icons.diamond,
                   ),
                 ),
               ],
@@ -208,6 +215,38 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
     }
 
     final stats = _gameStats[gameType] ?? GameStats.initial(gameType);
+
+    final matches = _gameHistory[gameType] ?? [];
+    int netDiamonds = 0;
+    int netCoins = 0;
+    for (final m in matches) {
+      final netAmount = (m.additionalData?['netAmount'] as num?)?.toInt();
+      final gameCost = (m.additionalData?['gameCost'] as num?)?.toInt();
+      final currencyType = m.additionalData?['currencyType'] as String?;
+      final matchType = m.additionalData?['matchType'] as String?;
+      final isDiamonds = currencyType == 'diamonds' || matchType == 'Apuesta' || matchType == 'Pase';
+      final isCoins = currencyType == 'coins' || matchType == 'Diversión' || matchType == 'Diversion' || matchType == 'Práctica' || matchType == 'Amistoso';
+
+      int val;
+      if (netAmount != null) {
+        val = netAmount;
+      } else if (gameCost != null && gameCost > 0) {
+        if (m.result == GameResultModel.win) {
+          final commission = isDiamonds ? 0.10 : 0.30;
+          val = (gameCost * 2 * (1 - commission)).floor();
+        } else {
+          val = -gameCost;
+        }
+      } else {
+        val = 0;
+      }
+
+      if (isDiamonds) {
+        netDiamonds += val;
+      } else if (isCoins) {
+        netCoins += val;
+      }
+    }
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -251,7 +290,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
               const SizedBox(width: 8),
               Expanded(
                 child: _buildStatItem(
-                  S.of(context).point, '${stats.points}', Icons.star,
+                  S.of(context).victories, '${stats.wins}', Icons.emoji_events,
                 ),
               ),
             ],
@@ -259,28 +298,22 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(
-                child: _buildStatItem(
-                  S.of(context).victories, '${stats.wins}', Icons.emoji_events,
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: _buildStatItem(
                   S.of(context).defeats, '${stats.losses}', Icons.close,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildStatItem(
                   S.of(context).ties, '${stats.draws}', Icons.handshake,
                 ),
               ),
-              const SizedBox(width: 8),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
               Expanded(
                 child: _buildStatItem(
                   S.of(context).victoriesPct,
@@ -288,17 +321,41 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
                   Icons.trending_up,
                 ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildColoredStatItem(
+                  S.of(context).netDiamonds,
+                  '${netDiamonds >= 0 ? '+' : ''}$netDiamonds 💎',
+                  Icons.diamond,
+                  netDiamonds >= 0 ? Colors.green : Colors.red,
+                ),
+              ),
             ],
           ),
-          if (stats.averageGameTimeMinutes > 0) ...[
-            const SizedBox(height: 8),
-            _buildStatItem(
-              S.of(context).averageTime,
-              '${stats.averageGameTimeMinutes.toStringAsFixed(1)} min',
-              Icons.access_time,
-              fullWidth: true,
-            ),
-          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildColoredStatItem(
+                  S.of(context).netCoins,
+                  '${netCoins >= 0 ? '+' : ''}$netCoins 🪙',
+                  Icons.monetization_on,
+                  netCoins >= 0 ? Colors.green : Colors.red,
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (stats.averageGameTimeMinutes > 0)
+                Expanded(
+                  child: _buildStatItem(
+                    S.of(context).averageTime,
+                    '${stats.averageGameTimeMinutes.toStringAsFixed(1)} min',
+                    Icons.access_time,
+                  ),
+                )
+              else
+                const Expanded(child: SizedBox()),
+            ],
+          ),
         ],
       ),
     );
@@ -356,6 +413,29 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildColoredStatItem(String label, String value, IconData icon, Color valueColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: _kAccent, size: 18),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: valueColor),
+          ),
+        ],
+      ),
     );
   }
 
@@ -417,7 +497,8 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
         break;
     }
 
-    final netAmount = match.additionalData?['netAmount'] as int?;
+    final netAmount = (match.additionalData?['netAmount'] as num?)?.toInt();
+    final gameCost = (match.additionalData?['gameCost'] as num?)?.toInt();
     final currencyType = match.additionalData?['currencyType'] as String?;
     final matchType = match.additionalData?['matchType'] as String?;
     final mode = match.additionalData?['mode'] as String?;
@@ -425,7 +506,19 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
     final isDiamonds = currencyType == 'diamonds' || matchType == 'Apuesta' || matchType == 'Pase';
     final isCoins = currencyType == 'coins' || matchType == 'Diversión' || matchType == 'Diversion' || matchType == 'Práctica' || matchType == 'Amistoso';
 
-    final int valToDisplay = netAmount ?? match.pointsEarned;
+    int valToDisplay;
+    if (netAmount != null) {
+      valToDisplay = netAmount;
+    } else if (gameCost != null && gameCost > 0) {
+      if (match.result == GameResultModel.win) {
+        final commission = isDiamonds ? 0.10 : 0.30;
+        valToDisplay = (gameCost * 2 * (1 - commission)).floor();
+      } else {
+        valToDisplay = -gameCost;
+      }
+    } else {
+      valToDisplay = match.netEarnings;
+    }
     final String currencySymbol = isDiamonds ? '💎' : (isCoins ? '🪙' : '');
 
     return Container(
@@ -503,7 +596,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  'vs ${match.opponentName}',
+                  'vs ${match.opponentName!.replaceAll(RegExp(r'\s*\(.*\)\s*$'), '')}',
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.grey[700],

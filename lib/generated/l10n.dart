@@ -1224,11 +1224,16 @@ class S {
     return Intl.message('Win %', name: 'victoriesPct', desc: '', args: []);
   }
 
-  /// `Total Points`
+  /// `Ranking`
   String get totalPoints {
+    return Intl.message('Ranking', name: 'totalPoints', desc: '', args: []);
+  }
+
+  /// `Earnings (Diamonds)`
+  String get earningsDiamonds {
     return Intl.message(
-      'Total Points',
-      name: 'totalPoints',
+      'Earnings (Diamonds)',
+      name: 'earningsDiamonds',
       desc: '',
       args: [],
     );
@@ -1494,10 +1499,10 @@ class S {
     return Intl.message('invites you', name: 'invitesYou', desc: '', args: []);
   }
 
-  /// `Invitation rejected`
+  /// `The game request has been rejected`
   String get invitationRejected {
     return Intl.message(
-      'Invitation rejected',
+      'The game request has been rejected',
       name: 'invitationRejected',
       desc: '',
       args: [],
@@ -4522,6 +4527,626 @@ class S {
   /// `Win rate`
   String get winRate {
     return Intl.message('Win rate', name: 'winRate', desc: '', args: []);
+  }
+
+  /// `The game has been cancelled`
+  String get gameHasBeenCancelled {
+    return Intl.message(
+      'The game has been cancelled',
+      name: 'gameHasBeenCancelled',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Bonus +{n} steps`
+  String bonusNSteps(Object n) {
+    return Intl.message(
+      'Bonus +$n steps',
+      name: 'bonusNSteps',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Piece {pieceNum}  •  Square {from} → {to}`
+  String pieceNSquareFromTo(Object pieceNum, Object from, Object to) {
+    return Intl.message(
+      'Piece $pieceNum  •  Square $from → $to',
+      name: 'pieceNSquareFromTo',
+      desc: '',
+      args: [pieceNum, from, to],
+    );
+  }
+
+  /// `Will capture another piece!`
+  String get willCaptureAnother {
+    return Intl.message(
+      'Will capture another piece!',
+      name: 'willCaptureAnother',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Safe square`
+  String get safeSquare {
+    return Intl.message('Safe square', name: 'safeSquare', desc: '', args: []);
+  }
+
+  /// `Advance +{n}`
+  String advanceNSteps(Object n) {
+    return Intl.message(
+      'Advance +$n',
+      name: 'advanceNSteps',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Move piece`
+  String get movePiece {
+    return Intl.message('Move piece', name: 'movePiece', desc: '', args: []);
+  }
+
+  /// `Select your move`
+  String get selectYourMove {
+    return Intl.message(
+      'Select your move',
+      name: 'selectYourMove',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Move {n} squares`
+  String moveNSquares(Object n) {
+    return Intl.message(
+      'Move $n squares',
+      name: 'moveNSquares',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Die {n}: {value}`
+  String diceNValue(Object n, Object value) {
+    return Intl.message(
+      'Die $n: $value',
+      name: 'diceNValue',
+      desc: '',
+      args: [n, value],
+    );
+  }
+
+  /// `Captured! No bonus available`
+  String get capturedNoBonus {
+    return Intl.message(
+      'Captured! No bonus available',
+      name: 'capturedNoBonus',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Captured! +{n} steps`
+  String capturedBonusN(Object n) {
+    return Intl.message(
+      'Captured! +$n steps',
+      name: 'capturedBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Captured! Tap the piece to move +{n}`
+  String capturedTouchPieceBonusN(Object n) {
+    return Intl.message(
+      'Captured! Tap the piece to move +$n',
+      name: 'capturedTouchPieceBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Reached the goal! No bonus available`
+  String get reachedGoalNoBonus {
+    return Intl.message(
+      'Reached the goal! No bonus available',
+      name: 'reachedGoalNoBonus',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `CPU: Goal! +{n} steps`
+  String cpuReachedGoalBonusN(Object n) {
+    return Intl.message(
+      'CPU: Goal! +$n steps',
+      name: 'cpuReachedGoalBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Reached the goal! +{n} steps`
+  String reachedGoalBonusN(Object n) {
+    return Intl.message(
+      'Reached the goal! +$n steps',
+      name: 'reachedGoalBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Reached the goal! Tap the piece to move +{n}`
+  String reachedGoalTouchPieceBonusN(Object n) {
+    return Intl.message(
+      'Reached the goal! Tap the piece to move +$n',
+      name: 'reachedGoalTouchPieceBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Captured another!`
+  String get capturedAnother {
+    return Intl.message(
+      'Captured another!',
+      name: 'capturedAnother',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `CPU: triple doubles at home, loses turn.`
+  String get cpuTripleDoublesHome {
+    return Intl.message(
+      'CPU: triple doubles at home, loses turn.',
+      name: 'cpuTripleDoublesHome',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `CPU: double at home, rolls again.`
+  String get cpuDoubleHome {
+    return Intl.message(
+      'CPU: double at home, rolls again.',
+      name: 'cpuDoubleHome',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tap a piece to move`
+  String get touchPieceToMove {
+    return Intl.message(
+      'Tap a piece to move',
+      name: 'touchPieceToMove',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tap the piece to receive +{n}`
+  String touchPieceBonusN(Object n) {
+    return Intl.message(
+      'Tap the piece to receive +$n',
+      name: 'touchPieceBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Insufficient diamonds (you need {cost} 💎)`
+  String insufficientDiamonds(Object cost) {
+    return Intl.message(
+      'Insufficient diamonds (you need $cost 💎)',
+      name: 'insufficientDiamonds',
+      desc: '',
+      args: [cost],
+    );
+  }
+
+  /// `Insufficient coins (you need {cost} 🪙)`
+  String insufficientCoins(Object cost) {
+    return Intl.message(
+      'Insufficient coins (you need $cost 🪙)',
+      name: 'insufficientCoins',
+      desc: '',
+      args: [cost],
+    );
+  }
+
+  /// `Yellow`
+  String get yellowColor {
+    return Intl.message('Yellow', name: 'yellowColor', desc: '', args: []);
+  }
+
+  /// `Green`
+  String get greenColor {
+    return Intl.message('Green', name: 'greenColor', desc: '', args: []);
+  }
+
+  /// `Blue`
+  String get blueColor {
+    return Intl.message('Blue', name: 'blueColor', desc: '', args: []);
+  }
+
+  /// `Red`
+  String get redColor {
+    return Intl.message('Red', name: 'redColor', desc: '', args: []);
+  }
+
+  /// `Parchís vs {count} CPU{plural} - {difficulty}`
+  String parchisVsCpu(Object count, Object plural, Object difficulty) {
+    return Intl.message(
+      'Parchís vs $count CPU$plural - $difficulty',
+      name: 'parchisVsCpu',
+      desc: '',
+      args: [count, plural, difficulty],
+    );
+  }
+
+  /// `Me`
+  String get meLabel {
+    return Intl.message('Me', name: 'meLabel', desc: '', args: []);
+  }
+
+  /// `YOUR TURN`
+  String get yourTurnLabel {
+    return Intl.message('YOUR TURN', name: 'yourTurnLabel', desc: '', args: []);
+  }
+
+  /// `Move`
+  String get moveButton {
+    return Intl.message('Move', name: 'moveButton', desc: '', args: []);
+  }
+
+  /// `Doubles! Roll again`
+  String get doublesRollAgain {
+    return Intl.message(
+      'Doubles! Roll again',
+      name: 'doublesRollAgain',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Doubles x2! ⚠ Another double = penalty`
+  String get doublesWarningPenalty {
+    return Intl.message(
+      'Doubles x2! ⚠ Another double = penalty',
+      name: 'doublesWarningPenalty',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Diamonds (net)`
+  String get netDiamonds {
+    return Intl.message(
+      'Diamonds (net)',
+      name: 'netDiamonds',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Coins (net)`
+  String get netCoins {
+    return Intl.message('Coins (net)', name: 'netCoins', desc: '', args: []);
+  }
+
+  /// `earned`
+  String get earned {
+    return Intl.message('earned', name: 'earned', desc: '', args: []);
+  }
+
+  /// `captured your piece`
+  String get capturedYourPiece {
+    return Intl.message(
+      'captured your piece',
+      name: 'capturedYourPiece',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Captured! Choose piece for +{n}`
+  String capturedChoosePiece(Object n) {
+    return Intl.message(
+      'Captured! Choose piece for +$n',
+      name: 'capturedChoosePiece',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Reached the goal! +{n} steps`
+  String finishedBonusN(Object n) {
+    return Intl.message(
+      'Reached the goal! +$n steps',
+      name: 'finishedBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Reached the goal! Choose piece for +{n}`
+  String finishedChoosePiece(Object n) {
+    return Intl.message(
+      'Reached the goal! Choose piece for +$n',
+      name: 'finishedChoosePiece',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `{name}'s turn`
+  String turnOfPlayer(Object name) {
+    return Intl.message(
+      '$name\'s turn',
+      name: 'turnOfPlayer',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `{name}: three doubles at home, loses turn`
+  String botTripleDoublesHome(Object name) {
+    return Intl.message(
+      '$name: three doubles at home, loses turn',
+      name: 'botTripleDoublesHome',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `{name}: double at home, rolls again`
+  String botDoubleHomeReroll(Object name) {
+    return Intl.message(
+      '$name: double at home, rolls again',
+      name: 'botDoubleHomeReroll',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `{name} lost turn (3 doubles)`
+  String botLostTurnTriple(Object name) {
+    return Intl.message(
+      '$name lost turn (3 doubles)',
+      name: 'botLostTurnTriple',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `{name} has no moves`
+  String botNoMoves(Object name) {
+    return Intl.message(
+      '$name has no moves',
+      name: 'botNoMoves',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `{name} joined the game!`
+  String playerJoinedGame(Object name) {
+    return Intl.message(
+      '$name joined the game!',
+      name: 'playerJoinedGame',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `{n} players`
+  String nPlayersLabel(Object n) {
+    return Intl.message(
+      '$n players',
+      name: 'nPlayersLabel',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `{n} players · searching...`
+  String searchingNPlayers(Object n) {
+    return Intl.message(
+      '$n players · searching...',
+      name: 'searchingNPlayers',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Almost there! Expanding search...`
+  String get almostExpandingSearch {
+    return Intl.message(
+      'Almost there! Expanding search...',
+      name: 'almostExpandingSearch',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `{joined} / {total} players`
+  String joinedOfTotal(Object joined, Object total) {
+    return Intl.message(
+      '$joined / $total players',
+      name: 'joinedOfTotal',
+      desc: '',
+      args: [joined, total],
+    );
+  }
+
+  /// `Waiting for {n} more player(s)...`
+  String waitingMorePlayers(Object n) {
+    return Intl.message(
+      'Waiting for $n more player(s)...',
+      name: 'waitingMorePlayers',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Your balance: {amount} {currency}`
+  String yourBalanceAmount(Object amount, Object currency) {
+    return Intl.message(
+      'Your balance: $amount $currency',
+      name: 'yourBalanceAmount',
+      desc: '',
+      args: [amount, currency],
+    );
+  }
+
+  /// `Your balance: {amount} {currency}`
+  String yourSaldoAmount(Object amount, Object currency) {
+    return Intl.message(
+      'Your balance: $amount $currency',
+      name: 'yourSaldoAmount',
+      desc: '',
+      args: [amount, currency],
+    );
+  }
+
+  /// `Bot captured! +{n} steps`
+  String botCapturedBonusN(Object n) {
+    return Intl.message(
+      'Bot captured! +$n steps',
+      name: 'botCapturedBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Bot finished piece! +{n} steps`
+  String botFinishedBonusN(Object n) {
+    return Intl.message(
+      'Bot finished piece! +$n steps',
+      name: 'botFinishedBonusN',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Yellow`
+  String get colorYellow {
+    return Intl.message('Yellow', name: 'colorYellow', desc: '', args: []);
+  }
+
+  /// `Green`
+  String get colorGreen {
+    return Intl.message('Green', name: 'colorGreen', desc: '', args: []);
+  }
+
+  /// `Red`
+  String get colorRed {
+    return Intl.message('Red', name: 'colorRed', desc: '', args: []);
+  }
+
+  /// `Blue`
+  String get colorBlue {
+    return Intl.message('Blue', name: 'colorBlue', desc: '', args: []);
+  }
+
+  /// `{name} won`
+  String playerWon(Object name) {
+    return Intl.message('$name won', name: 'playerWon', desc: '', args: [name]);
+  }
+
+  /// `Connecting with other players...`
+  String get connectingWithPlayers {
+    return Intl.message(
+      'Connecting with other players...',
+      name: 'connectingWithPlayers',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Completing with bots...`
+  String get completingWithBots {
+    return Intl.message(
+      'Completing with bots...',
+      name: 'completingWithBots',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Starting in {n}"`
+  String startingInSeconds(Object n) {
+    return Intl.message(
+      'Starting in $n"',
+      name: 'startingInSeconds',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Enter an amount`
+  String get enterBetAmountHint {
+    return Intl.message(
+      'Enter an amount',
+      name: 'enterBetAmountHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Invalid amount`
+  String get invalidAmountError {
+    return Intl.message(
+      'Invalid amount',
+      name: 'invalidAmountError',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Insufficient balance (you have {amount})`
+  String insufficientBalanceAmount(Object amount) {
+    return Intl.message(
+      'Insufficient balance (you have $amount)',
+      name: 'insufficientBalanceAmount',
+      desc: '',
+      args: [amount],
+    );
+  }
+
+  /// `Code: {code}`
+  String codeLabelValue(Object code) {
+    return Intl.message(
+      'Code: $code',
+      name: 'codeLabelValue',
+      desc: '',
+      args: [code],
+    );
+  }
+
+  /// `A player has abandoned the game.`
+  String get playerAbandonedGameMsg {
+    return Intl.message(
+      'A player has abandoned the game.',
+      name: 'playerAbandonedGameMsg',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Your bet of {amount} 💎 will be returned`
+  String betWillBeReturned(Object amount) {
+    return Intl.message(
+      'Your bet of $amount 💎 will be returned',
+      name: 'betWillBeReturned',
+      desc: '',
+      args: [amount],
+    );
   }
 }
 

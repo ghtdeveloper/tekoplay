@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/ludo_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
@@ -100,6 +101,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   double _boardSize = 0;
   List<String> _activePlayers = ['yellow', 'red', 'green', 'blue'];
+
+  final List<_CaptureEffect> _captureEffects = [];
 
   bool _gameEnded = false;
   bool _hasUserExited = false;
@@ -204,6 +207,12 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_activeGameId != null && _currentGame != null && _currentGame!.status == 'waiting') {
+      FirebaseFirestore.instance.collection('ludo_games').doc(_activeGameId!).update({
+        'status': 'cancelled',
+        'finishedAt': FieldValue.serverTimestamp(),
+      }).catchError((_) {});
+    }
     _waitingSubscription?.cancel();
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
@@ -211,6 +220,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _waitRoomTimer?.cancel();
     _msgBubbleTimer?.cancel();
     _ownMsgBubbleTimer?.cancel();
+    for (final e in _captureEffects) { e.controller.dispose(); }
+    _captureEffects.clear();
     _pulseController.dispose();
     _diceAnimController.dispose();
     _toastController.dispose();
@@ -343,6 +354,20 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       if (!mounted || game == null) return;
       setState(() => _currentGame = game);
 
+      if (game.status == 'cancelled' && _screenState == _FriendLudoState.waitingRoom) {
+        _waitingSubscription?.cancel();
+        _waitingSubscription = null;
+        _waitRoomTimer?.cancel();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.of(context).gameHasBeenCancelled),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
+
       if (game.status == 'active' && _screenState == _FriendLudoState.waitingRoom) {
         _waitingSubscription?.cancel();
         _waitingSubscription = null;
@@ -468,7 +493,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (game.player3Color != null) _activePlayers.add(game.player3Color!);
     if (game.player4Color != null) _activePlayers.add(game.player4Color!);
 
-    // Detectar slots de bot (guest IDs que comienzan con 'bot_')
     _botColors.clear();
     final slots = [
       (game.guest2Id, game.player2Color),
@@ -577,6 +601,21 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       case 4: return _currentGame!.player4Color ?? '';
       default: return '';
     }
+  }
+
+  String _getNameForColor(String color) {
+    if (_currentGame == null) return 'Bot';
+    for (int n = 1; n <= 4; n++) {
+      if (_colorForPlayerNumber(n) == color) {
+        switch (n) {
+          case 1: return _currentGame!.hostName;
+          case 2: return _currentGame!.guest2Name ?? 'Bot';
+          case 3: return _currentGame!.guest3Name ?? 'Bot';
+          case 4: return _currentGame!.guest4Name ?? 'Bot';
+        }
+      }
+    }
+    return 'Bot';
   }
 
   Future<void> _writeTurnDeadline() async {
@@ -980,6 +1019,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       }
     }
 
+    if (captured && newPos < 52) {
+      _triggerCaptureEffect(newPos, _getPlayerColor(color));
+    }
+
     piece.position = newPos;
     if (newPos == 57) piece.isFinished = true;
     _lastMovedPieceId = pieceId;
@@ -1083,7 +1126,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         final stB = posB >= 52 ? 51 + (posB - 52) : _stepsFromStart(posB, sp);
         return stA >= stB ? a : b;
       });
-      _showEventToast('¡Bot capturó! +20 casillas', color: Colors.green);
+      _showEventToast(S.of(context).botCapturedBonusN(20), color: Colors.green);
       Future.delayed(const Duration(milliseconds: 1000), () {
         if (!mounted || _gameEnded) return;
         _pendingBonusMoves.clear();
@@ -1119,7 +1162,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     _bonusSelectionActive = true;
-    _showEventToast('¡Capturaste! Elige una ficha para el bonus +20', color: Colors.green);
+    _showEventToast(S.of(context).capturedChoosePiece(20), color: Colors.green);
 
     _movablePieces = _pendingBonusMoves.map((m) => {
       ...m, 'diceValue': 20, 'diceNumber': 0,
@@ -1173,7 +1216,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         final stB = posB >= 52 ? 51 + (posB - 52) : _stepsFromStart(posB, sp);
         return stA >= stB ? a : b;
       });
-      _showEventToast('¡Bot completó ficha! +10 casillas', color: Colors.green);
+      _showEventToast(S.of(context).botFinishedBonusN(10), color: Colors.green);
       Future.delayed(const Duration(milliseconds: 1000), () {
         if (!mounted || _gameEnded) return;
         _pendingBonusMoves.clear();
@@ -1209,7 +1252,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     _bonusSelectionActive = true;
-    _showEventToast('¡Llegaste a la meta! Elige una ficha para el bonus +10', color: Colors.green);
+    _showEventToast(S.of(context).finishedChoosePiece(10), color: Colors.green);
 
     _movablePieces = _pendingBonusMoves.map((m) => {
       ...m, 'diceValue': 10, 'diceNumber': 0,
@@ -1224,6 +1267,20 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final pieces = _gameState.getPiecesByColor(_myColor);
     if (pieceId >= pieces.length) return;
     final piece = pieces[pieceId];
+
+    bool bonusCaptured = false;
+    if (bonusPos < 52 && !_isSafeForColor(bonusPos, _myColor)) {
+      for (final ec in _activePlayers) {
+        if (ec == _myColor) continue;
+        final enemyHere = _gameState.getPiecesByColor(ec)
+            .where((p) => !p.isHome && !p.isFinished && p.position == bonusPos).toList();
+        for (final ep in enemyHere) {
+          ep.position = -1;
+          bonusCaptured = true;
+        }
+      }
+    }
+
     piece.position = bonusPos;
     if (bonusPos == 57) piece.isFinished = true;
 
@@ -1232,6 +1289,13 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     if (_checkVictory(_myColor)) {
       _syncGameState(advanceTurn: false).then((_) => _endGame(_myColor));
+      return;
+    }
+
+    if (bonusCaptured) {
+      _triggerCaptureEffect(bonusPos, _getPlayerColor(_myColor));
+      setState(() {});
+      _prepareCaptureBonus(_myColor, piece, _bonusHadDouble);
       return;
     }
 
@@ -1319,8 +1383,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final stepsFromStart = _stepsFromStart(piece.position, startPos);
     final newSteps = stepsFromStart + diceValue;
 
-    if (newSteps >= 52) {
-      final stepsIntoStretch = newSteps - 52;
+    if (newSteps >= 51) {
+      final stepsIntoStretch = newSteps - 51;
       if (stepsIntoStretch > 5) return null;
       return 52 + stepsIntoStretch;
     }
@@ -1338,7 +1402,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final sp = _getStartPosition(color);
     for (int step = 1; step < diceValue; step++) {
       final ns = _stepsFromStart(piece.position, sp) + step;
-      if (ns >= 52) break;
+      if (ns >= 51) break;
       final pos = (sp + ns) % 52;
       if (_isAnyBarrierAt(pos)) return true;
     }
@@ -1408,8 +1472,12 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     for (int bonus = 1; bonus <= bonusSteps; bonus++) {
       final ns = currentSteps + bonus;
       final int candidatePos;
-      if (ns >= 52) {
-        final into = ns - 52;
+      if (piece.position >= 52) {
+        // Already in home stretch — simple addition
+        candidatePos = piece.position + bonus;
+        if (candidatePos > 57) return null;
+      } else if (ns >= 51) {
+        final into = ns - 51;
         if (into > 5) return null;
         candidatePos = 52 + into;
       } else {
@@ -1516,6 +1584,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   Future<void> _executeBotRollAndMove(String botColor) async {
     if (_gameEnded || !mounted) return;
     if (_colorForCurrentTurn() != botColor) return;
+    final s = S.of(context);
 
     final botPieces = _gameState.getPiecesByColor(botColor);
     final allInHome = botPieces.every((p) => p.isHome);
@@ -1570,13 +1639,13 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         if ((_botHomeDoubles[botColor] ?? 0) >= 3) {
           _botHomeDoubles[botColor] = 0;
           _consecutiveDoubles = 0;
-          _showEventToast('Bot: tres dobles en casa, pierde turno');
+          _showEventToast(s.botTripleDoublesHome('Bot'));
           await Future.delayed(const Duration(milliseconds: 1500));
           setState(() { _dice1Value = 0; _dice2Value = 0; });
           await _advanceTurn();
           return;
         }
-        _showEventToast('Bot: doble en casa, vuelve a tirar');
+        _showEventToast(s.botDoubleHomeReroll('Bot'));
         await Future.delayed(const Duration(milliseconds: 1200));
         setState(() { _dice1Value = 0; _dice2Value = 0; });
         continue;
@@ -1689,7 +1758,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     final newPos = _calculateNewPosition(piece, dv, botColor);
     if (newPos == null) { await _syncGameState(advanceTurn: true); return; }
 
-    // Mover pieza
     final wasHome = piece.isHome;
     piece.position = newPos;
     if (newPos == 57) piece.isFinished = true;
@@ -1700,21 +1768,35 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
 
     bool captured = false;
+    bool capturedMyPiece = false;
     final isExitingHome = newPos < 52 && wasHome && newPos == _getStartPosition(botColor);
     if (isExitingHome) {
       for (final ec in _activePlayers) {
         if (ec == botColor) continue;
         final enemyHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos).toList();
-        for (final ep in enemyHere) { ep.position = -1; captured = true; }
+        for (final ep in enemyHere) {
+          ep.position = -1; captured = true;
+          if (ec == _myColor) capturedMyPiece = true;
+        }
       }
     } else if (newPos < 52 && !_isSafeForColor(newPos, botColor)) {
       for (final ec in _activePlayers) {
         if (ec == botColor) continue;
         final enemyHere = _gameState.getPiecesByColor(ec)
             .where((p) => !p.isHome && !p.isFinished && p.position == newPos).toList();
-        for (final ep in enemyHere) { ep.position = -1; captured = true; }
+        for (final ep in enemyHere) {
+          ep.position = -1; captured = true;
+          if (ec == _myColor) capturedMyPiece = true;
+        }
       }
+    }
+    if (captured && newPos < 52) {
+      _triggerCaptureEffect(newPos, _getPlayerColor(botColor));
+    }
+    if (capturedMyPiece) {
+      final botName = _getNameForColor(botColor);
+      _showEventToast('$botName ${S.of(context).capturedYourPiece}', color: Colors.red.shade700);
     }
     setState(() {});
 
@@ -1742,6 +1824,26 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         final bpid = best['pieceId'] as int;
         final bpos = best['bonusPos'] as int;
         if (bpid < pieces.length) {
+          // Check for captures at bonus destination
+          bool bonusCapturedBot = false;
+          if (bpos < 52 && !_isSafeForColor(bpos, botColor)) {
+            for (final ec in _activePlayers) {
+              if (ec == botColor) continue;
+              final enemyHere = _gameState.getPiecesByColor(ec)
+                  .where((p) => !p.isHome && !p.isFinished && p.position == bpos).toList();
+              for (final ep in enemyHere) {
+                ep.position = -1;
+                bonusCapturedBot = true;
+                if (ec == _myColor) {
+                  final botName = _getNameForColor(botColor);
+                  _showEventToast('$botName ${S.of(context).capturedYourPiece}', color: Colors.red.shade700);
+                }
+              }
+            }
+          }
+          if (bonusCapturedBot) {
+            _triggerCaptureEffect(bpos, _getPlayerColor(botColor));
+          }
           pieces[bpid].position = bpos;
           if (bpos == 57) pieces[bpid].isFinished = true;
         }
@@ -1778,7 +1880,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       _gameService.finishGame(gameId: _activeGameId!, winnerId: _currentUser!.uid);
     }
     _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
-    _showEndDialog(isWin ? S.of(context).victory : '${_getColorName(winnerColor)} ganó', _currentGame, forceIsWin: isWin);
+    _showEndDialog(isWin ? S.of(context).victory : S.of(context).playerWon(_getColorName(winnerColor)), _currentGame, forceIsWin: isWin);
   }
 
   void _handleGameEnd(LudoGameMatch game) {
@@ -1832,9 +1934,9 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Un jugador abandonó la partida.',
-                style: TextStyle(color: Colors.black87, fontSize: 16),
+              Text(
+                S.of(context).playerAbandonedGameMsg,
+                style: const TextStyle(color: Colors.black87, fontSize: 16),
                 textAlign: TextAlign.center,
               ),
               if (isBetGame) ...[
@@ -1852,7 +1954,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                       const Icon(Icons.diamond, color: Colors.blue, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        'Tu apuesta de $betAmount 💎 será devuelta',
+                        S.of(context).betWillBeReturned(betAmount),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.blue.shade800,
@@ -1895,14 +1997,45 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (_gameStartTime == null || _currentUser == null) return;
     try {
       final dur = DateTime.now().difference(_gameStartTime!).inMinutes;
+      final game = _currentGame;
+      final betAmt = game?.betAmount ?? 0;
+      final isDiamonds = game?.currencyType == 'diamonds';
+      final commission = isDiamonds ? 0.10 : 0.30;
+      final int realPlayerCount = _activePlayers
+          .where((c) => !_botColors.contains(c))
+          .length
+          .clamp(1, 4);
+      final int prize = betAmt > 0
+          ? (betAmt * realPlayerCount * (1 - commission)).floor()
+          : 0;
+      final int netAmount = betAmt > 0
+          ? (result == GameResultModel.win ? prize : -betAmt)
+          : 0;
+
+      // Build opponent names from game data
+      final names = <String>[];
+      if (_myPlayerNumber != 1 && game?.hostName != null) names.add(game!.hostName);
+      if (_myPlayerNumber != 2 && game?.guest2Name != null) names.add(game!.guest2Name!);
+      if (_myPlayerNumber != 3 && game?.guest3Name != null) names.add(game!.guest3Name!);
+      if (_myPlayerNumber != 4 && game?.guest4Name != null) names.add(game!.guest4Name!);
+      final opponentLabel = names.isNotEmpty ? names.join(', ') : 'Oponente';
+
       await _firestoreService.recordGameMatch(
         userId: _currentUser!.uid,
         gameType: GameTypeModel.ludo,
         result: result,
-        pointsEarned: result == GameResultModel.win ? 25 : -10,
+        netEarnings: netAmount,
         durationMinutes: dur > 0 ? dur : 1,
-        opponentName: 'Jugador en línea',
-        additionalData: {'matchType': widget.matchType, 'playerColor': _myColor},
+        opponentName: opponentLabel,
+        additionalData: {
+          'matchType': widget.matchType,
+          'playerColor': _myColor,
+          'betAmount': betAmt,
+          'gameCost': betAmt,
+          'netAmount': netAmount,
+          'currencyType': game?.currencyType ?? 'coins',
+          'numberOfPlayers': realPlayerCount,
+        },
       );
     } catch (_) {}
   }
@@ -1911,15 +2044,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (!mounted) return;
     final isWin = forceIsWin ?? (game?.winnerId == _currentUser?.uid);
     final betAmount = game?.betAmount;
-    final isBetGame = betAmount != null && betAmount > 0 && game?.currencyType == 'diamonds';
+    final isDiamonds = game?.currencyType == 'diamonds';
+    final hasBet = betAmount != null && betAmount > 0;
     final int realPlayerCount = _activePlayers
         .where((c) => !_botColors.contains(c))
         .length
         .clamp(1, 4);
-    final winnerPrize = !isBetGame
+    final commission = isDiamonds ? 0.10 : 0.30;
+    final winnerPrize = !hasBet
         ? 0
-        : (betAmount * realPlayerCount * 0.90).floor();
-    final netGain = isBetGame ? winnerPrize - betAmount : 0;
+        : (betAmount * realPlayerCount * (1 - commission)).floor();
 
     showDialog(
       context: context,
@@ -1955,7 +2089,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
               Text(message,
                   style: const TextStyle(color: Colors.black87, fontSize: 16),
                   textAlign: TextAlign.center),
-              if (isBetGame) ...[
+              if (hasBet) ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1969,17 +2103,19 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.diamond,
+                      Icon(isDiamonds ? Icons.diamond : Icons.monetization_on,
                           color: isWin ? Colors.blue : Colors.red, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        isWin
-                            ? '+$netGain 💎 ganados'
-                            : '-$betAmount 💎 perdidos',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isWin ? Colors.blue.shade800 : Colors.red.shade800,
-                          fontSize: 15,
+                      Flexible(
+                        child: Text(
+                          isWin
+                              ? '+$winnerPrize ${isDiamonds ? S.of(ctx).diamonds : S.of(ctx).coins} ${S.of(ctx).earned}'
+                              : '-$betAmount ${isDiamonds ? S.of(ctx).diamonds : S.of(ctx).coins}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isWin ? Colors.blue.shade800 : Colors.red.shade800,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ],
@@ -2089,6 +2225,106 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     });
   }
 
+  void _triggerCaptureEffect(int boardPosition, Color pieceColor) {
+    if (!mounted || _boardSize == 0) return;
+    HapticFeedback.mediumImpact();
+    final sq = _boardSize / 15;
+    Offset? screenPos;
+    if (boardPosition >= 0 && boardPosition < _boardPath.length) {
+      final c = _boardPath[boardPosition];
+      screenPos = Offset((c.col + 0.5) * sq, (c.row + 0.5) * sq);
+    }
+    if (screenPos == null) return;
+
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    final effect = _CaptureEffect(
+      position: screenPos,
+      color: pieceColor,
+      controller: controller,
+    );
+    setState(() => _captureEffects.add(effect));
+    controller.forward().then((_) {
+      if (mounted) {
+        controller.dispose();
+        setState(() => _captureEffects.remove(effect));
+      }
+    });
+  }
+
+  Widget _buildCaptureEffects(double boardSize) {
+    if (_captureEffects.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      width: boardSize,
+      height: boardSize,
+      child: Stack(
+        children: _captureEffects.map((e) {
+          return AnimatedBuilder(
+            animation: e.controller,
+            builder: (_, __) {
+              final t = e.controller.value;
+              final ringScale = 0.5 + t * 2.0;
+              final ringOpacity = (1.0 - t).clamp(0.0, 1.0);
+              final burstScale = 0.2 + t * 1.5;
+              final burstOpacity = t < 0.3 ? t / 0.3 : (1.0 - t) / 0.7;
+              final sq = boardSize / 15;
+              final r = sq * 0.4;
+
+              return Stack(
+                children: [
+                  Positioned(
+                    left: e.position.dx - r * ringScale,
+                    top: e.position.dy - r * ringScale,
+                    child: Opacity(
+                      opacity: ringOpacity,
+                      child: Container(
+                        width: r * 2 * ringScale,
+                        height: r * 2 * ringScale,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.red.shade700, width: 3.0 * (1.0 - t * 0.5)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: e.position.dx - r * burstScale,
+                    top: e.position.dy - r * burstScale,
+                    child: Opacity(
+                      opacity: burstOpacity.clamp(0.0, 1.0),
+                      child: Container(
+                        width: r * 2 * burstScale,
+                        height: r * 2 * burstScale,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: e.color.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (t < 0.6)
+                    Positioned(
+                      left: e.position.dx - 12,
+                      top: e.position.dy - 12,
+                      child: Opacity(
+                        opacity: (1.0 - t / 0.6).clamp(0.0, 1.0),
+                        child: Transform.scale(
+                          scale: 0.6 + t * 1.2,
+                          child: const Text('💥', style: TextStyle(fontSize: 20)),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   void _showTurnBannerAnim(String text, Color color) {
     if (!mounted) return;
     setState(() {
@@ -2118,10 +2354,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
   String _getColorName(String color) {
     switch (color) {
-      case 'yellow': return 'Amarillo';
-      case 'green':  return 'Verde';
-      case 'red':    return 'Rojo';
-      case 'blue':   return 'Azul';
+      case 'yellow': return S.of(context).colorYellow;
+      case 'green':  return S.of(context).colorGreen;
+      case 'red':    return S.of(context).colorRed;
+      case 'blue':   return S.of(context).colorBlue;
       default:       return color;
     }
   }
@@ -2218,8 +2454,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
             Text(S.of(context).howManyPlayers,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            const Text('Elige el número de jugadores para la partida',
-                style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+            Text(S.of(context).choosePlayerCountForGame,
+                style: const TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
             const SizedBox(height: 20),
 
             Row(
@@ -2248,7 +2484,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                         children: [
                           Text(_getCountIcon(n), style: const TextStyle(fontSize: 28)),
                           const SizedBox(height: 6),
-                          Text('$n jugadores',
+                          Text(S.of(context).nPlayersLabel(n),
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
                                   color: sel ? Colors.white : Colors.black87),
                               textAlign: TextAlign.center),
@@ -2337,7 +2573,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                       color: isBet ? Colors.blue : Colors.amber, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Tu balance: ${isBet ? '${_userDiamonds ?? 0} diamantes' : '${_userCoins ?? 0} monedas'}',
+                    S.of(context).yourBalanceAmount(
+                      isBet ? '${_userDiamonds ?? 0}' : '${_userCoins ?? 0}',
+                      isBet ? S.of(context).diamonds : S.of(context).coins,
+                    ),
                     style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -2417,11 +2656,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                       const SizedBox(width: 24, height: 24,
                           child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFEC7A34))),
                       const SizedBox(height: 6),
-                      Text('Esperando $remaining ${remaining == 1 ? 'jugador más' : 'jugadores más'}...',
+                      Text(S.of(context).waitingMorePlayers(remaining),
                           style: const TextStyle(color: Colors.grey, fontSize: 13)),
                       const SizedBox(height: 6),
                       Text(
-                        'Iniciando en $_waitRoomCountdown"',
+                        S.of(context).startingInSeconds(_waitRoomCountdown),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: _waitRoomCountdown <= 10 ? FontWeight.bold : FontWeight.normal,
@@ -2439,7 +2678,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
               if (_activeGameId != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Código: ${_activeGameId!.substring(0, 8).toUpperCase()}',
+                  S.of(context).codeLabelValue(_activeGameId!.substring(0, 8).toUpperCase()),
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.black45),
                 ),
               ],
@@ -2508,11 +2747,11 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
             setDlg(() {
               final n = int.tryParse(v);
               if (v.isEmpty) {
-                betError = 'Ingresa un monto';
+                betError = S.of(context).enterBetAmountHint;
               } else if (n == null || n < 1) {
-                betError = 'Monto inválido';
+                betError = S.of(context).invalidAmountError;
               } else if (n > balance) {
-                betError = 'Saldo insuficiente (tienes $balance)';
+                betError = S.of(context).insufficientBalanceAmount(balance);
               } else {
                 betError = null;
               }
@@ -2554,7 +2793,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                               color: isBet ? Colors.blue : Colors.amber, size: 16),
                           const SizedBox(width: 6),
                           Text(
-                            'Tu saldo: $balance ${isBet ? 'diamantes' : 'monedas'}',
+                            S.of(context).yourSaldoAmount(balance, isBet ? S.of(context).diamonds : S.of(context).coins),
                             style: TextStyle(color: Colors.green.shade800,
                                 fontWeight: FontWeight.bold, fontSize: 13),
                           ),
@@ -2573,7 +2812,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                         children: [
                           const Text('🎲', style: TextStyle(fontSize: 18)),
                           const SizedBox(width: 8),
-                          Text('$_selectedPlayerCount jugadores',
+                          Text(S.of(context).nPlayersLabel(_selectedPlayerCount),
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                         ],
                       ),
@@ -2776,67 +3015,72 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
               children: [
                 Column(
                   children: [
-                LayoutBuilder(
-                  builder: (ctx, constraints) {
-                    final sz = constraints.maxWidth - 16;
-                    _boardSize = sz;
-                    return SizedBox(
-                      height: sz + 16,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: GestureDetector(
-                          onTapUp: (d) => _handleBoardTap(d.localPosition),
-                          child: AnimatedBuilder(
-                            animation: Listenable.merge([_pulseController, _diceRotation]),
-                            builder: (ctx, _) {
-                              final movableKeys = <String>{};
-                              if (_isMyTurn) {
-                                for (final m in _movablePieces) {
-                                  movableKeys.add('$_myColor-${m['pieceId']}');
+                _buildPlayersInfo(),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: LayoutBuilder(
+                      builder: (ctx, constraints) {
+                        final sz = constraints.maxWidth < constraints.maxHeight
+                            ? constraints.maxWidth
+                            : constraints.maxHeight;
+                        _boardSize = sz;
+                        return Center(
+                          child: GestureDetector(
+                            onTapUp: (d) => _handleBoardTap(d.localPosition),
+                            child: AnimatedBuilder(
+                              animation: Listenable.merge([_pulseController, _diceRotation]),
+                              builder: (ctx, _) {
+                                final movableKeys = <String>{};
+                                if (_isMyTurn) {
+                                  for (final m in _movablePieces) {
+                                    movableKeys.add('$_myColor-${m['pieceId']}');
+                                  }
                                 }
-                              }
-                              final currentColor = _currentGame != null
-                                  ? _colorForCurrentTurn()
-                                  : _myColor;
-                              return Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Container(
-                                    width: sz, height: sz,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: _getPlayerColor(currentColor).withValues(alpha: 0.35),
-                                          blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
-                                        ),
-                                        BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: CustomPaint(
-                                        painter: LudoBoardPainter(
-                                          gameState: _gameState,
-                                          highlightedPieceColor: _isMyTurn ? _myColor : null,
-                                          highlightedPieceId: _selectedPieceId,
-                                          validMovePositions: _validMovePositions,
-                                          pulseValue: _pulseController.value,
-                                          movableKeys: movableKeys,
+                                final currentColor = _currentGame != null
+                                    ? _colorForCurrentTurn()
+                                    : _myColor;
+                                return Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: sz, height: sz,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: _getPlayerColor(currentColor).withValues(alpha: 0.35),
+                                            blurRadius: 20, spreadRadius: 2, offset: const Offset(0, 4),
+                                          ),
+                                          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                                        ],
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: CustomPaint(
+                                          painter: LudoBoardPainter(
+                                            gameState: _gameState,
+                                            highlightedPieceColor: _isMyTurn ? _myColor : null,
+                                            highlightedPieceId: _selectedPieceId,
+                                            validMovePositions: _validMovePositions,
+                                            pulseValue: _pulseController.value,
+                                            movableKeys: movableKeys,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  _buildBoardPlayerLabels(sz),
-                                  _buildBoardChatBubbles(sz),
-                                ],
-                              );
-                            },
+                                    _buildCaptureEffects(sz),
+                                    _buildBoardPlayerLabels(sz),
+                                    _buildBoardChatBubbles(sz),
+                                  ],
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
+                        );
+                      },
+                    ),
+                  ),
                 ),
                 _buildChatWidget(),
                 _buildControls(),
@@ -2949,6 +3193,118 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       case 4: return _currentGame!.player4Color ?? 'green';
       default: return 'yellow';
     }
+  }
+
+  Widget _buildPlayersInfo() {
+    if (_currentGame == null) return const SizedBox.shrink();
+    final activeColor = _colorForCurrentTurn();
+
+    final players = <Map<String, dynamic>>[];
+    void addPlayer(int n, String? color, String? name) {
+      if (color == null) return;
+      final isMe = n == _myPlayerNumber;
+      players.add({
+        'color': color,
+        'name': isMe ? 'Yo' : (name ?? 'J$n').split(' ').first,
+        'isMe': isMe,
+      });
+    }
+    addPlayer(1, _currentGame!.player1Color, _currentGame!.hostName);
+    addPlayer(2, _currentGame!.player2Color, _currentGame!.guest2Name);
+    addPlayer(3, _currentGame!.player3Color, _currentGame!.guest3Name);
+    addPlayer(4, _currentGame!.player4Color, _currentGame!.guest4Name);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        children: players.asMap().entries.expand((entry) {
+          final idx = entry.key;
+          final p = entry.value;
+          final color = p['color'] as String;
+          final name = p['name'] as String;
+          final isActive = color == activeColor;
+          final playerColor = _getPlayerColor(color);
+          final pieces = _gameState.getPiecesByColor(color);
+          final finishedCount = pieces.where((pc) => pc.isFinished).length;
+          final textColor = isActive
+              ? (color == 'yellow' ? const Color(0xFFB8960E) : playerColor)
+              : Colors.black87;
+          final countColor = isActive
+              ? (color == 'yellow' ? const Color(0xFFB8960E) : playerColor)
+              : Colors.black54;
+
+          return [
+            if (idx > 0) const SizedBox(width: 6),
+            Expanded(child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            decoration: BoxDecoration(
+              color: isActive ? playerColor.withValues(alpha: 0.12) : Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isActive ? playerColor : Colors.grey.shade300, width: isActive ? 2.5 : 1),
+              boxShadow: isActive
+                  ? [BoxShadow(color: playerColor.withValues(alpha: 0.3), blurRadius: 8, spreadRadius: 1)]
+                  : [],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10, height: 10,
+                      decoration: BoxDecoration(
+                        color: playerColor, shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: playerColor.withValues(alpha: 0.5), blurRadius: 4)],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(
+                      name,
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: isActive ? FontWeight.w900 : FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    )),
+                    if (isActive) ...[
+                      const SizedBox(width: 3),
+                      Container(width: 6, height: 6, decoration: BoxDecoration(color: playerColor, shape: BoxShape.circle)),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: 50,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: finishedCount / 4,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation<Color>(playerColor),
+                      minHeight: 6,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$finishedCount/4',
+                  style: TextStyle(color: countColor, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          )),
+          ];
+        }).toList(),
+      ),
+    );
   }
 
   Widget _buildBoardPlayerLabels(double sz) {
@@ -3263,7 +3619,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         ),
         const SizedBox(width: 8),
         Text(
-          'Turno de ${_getColorName(color)}',
+          S.of(context).turnOfPlayer(_getColorName(color)),
           style: TextStyle(
             fontSize: 13,
             color: _getPlayerColor(color),
@@ -3334,4 +3690,15 @@ class _Coord {
   final int col;
   final int row;
   const _Coord(this.col, this.row);
+}
+
+class _CaptureEffect {
+  final Offset position;
+  final Color color;
+  final AnimationController controller;
+  const _CaptureEffect({
+    required this.position,
+    required this.color,
+    required this.controller,
+  });
 }

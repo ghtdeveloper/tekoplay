@@ -7,7 +7,7 @@ class GameMatch {
   final String userId;
   final GameTypeModel gameType;
   final GameResultModel result;
-  final int pointsEarned;
+  final int netEarnings;
   final int durationMinutes;
   final DateTime playedAt;
   final String? opponentId;
@@ -19,7 +19,7 @@ class GameMatch {
     required this.userId,
     required this.gameType,
     required this.result,
-    required this.pointsEarned,
+    required this.netEarnings,
     required this.durationMinutes,
     required this.playedAt,
     this.opponentId,
@@ -40,7 +40,7 @@ class GameMatch {
             (result) => result.id == data['result'],
         orElse: () => GameResultModel.loss,
       ),
-      pointsEarned: data['pointsEarned'] ?? 0,
+      netEarnings: (data['pointsEarned'] as num?)?.toInt() ?? 0,
       durationMinutes: data['durationMinutes'] ?? 0,
       playedAt: (data['playedAt'] as Timestamp).toDate(),
       opponentId: data['opponentId'],
@@ -54,7 +54,7 @@ class GameMatch {
       'userId': userId,
       'gameType': gameType.id,
       'result': result.id,
-      'pointsEarned': pointsEarned,
+      'pointsEarned': netEarnings,
       'durationMinutes': durationMinutes,
       'playedAt': Timestamp.fromDate(playedAt),
       'opponentId': opponentId,
