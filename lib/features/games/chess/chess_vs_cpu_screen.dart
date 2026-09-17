@@ -1348,20 +1348,38 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: ChessBoard(
-                  controller: controller,
-                  boardColor: BoardColor.brown,
-                  boardOrientation: _playerColor!,
-                  enableUserMoves: !_gameEnded && _isPlayerTurn,
-                  onMove: playerMoved,
-                  arrows: _lastMoveFrom != null && _lastMoveTo != null
-                      ? [
-                    BoardArrow(
-                      from: _lastMoveFrom!,
-                      to: _lastMoveTo!,
-                      color: Colors.yellowAccent.withValues(alpha: 0.5),
-                    ),
-                  ] : [],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final boardSize = constraints.maxWidth < constraints.maxHeight
+                        ? constraints.maxWidth
+                        : constraints.maxHeight;
+                    return SizedBox(
+                      width: boardSize,
+                      height: boardSize,
+                      child: Stack(
+                        children: [
+                          ChessBoard(
+                            controller: controller,
+                            boardColor: BoardColor.brown,
+                            boardOrientation: _playerColor!,
+                            enableUserMoves: !_gameEnded && _isPlayerTurn,
+                            onMove: playerMoved,
+                          ),
+                          if (_lastMoveFrom != null && _lastMoveTo != null)
+                            IgnorePointer(
+                              child: CustomPaint(
+                                size: Size(boardSize, boardSize),
+                                painter: _LastMoveHighlightPainter(
+                                  from: _lastMoveFrom!,
+                                  to: _lastMoveTo!,
+                                  boardOrientation: _playerColor!,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1393,4 +1411,38 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     )
     );
   }
+}
+
+class _LastMoveHighlightPainter extends CustomPainter {
+  final String from;
+  final String to;
+  final PlayerColor boardOrientation;
+
+  static const _files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+  _LastMoveHighlightPainter({
+    required this.from,
+    required this.to,
+    required this.boardOrientation,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sq = size.width / 8;
+    final paint = Paint()..color = const ui.Color(0x80F6F669);
+
+    for (final square in [from, to]) {
+      final file = _files.indexOf(square[0]);
+      final rank = int.parse(square[1]) - 1;
+
+      final col = boardOrientation == PlayerColor.white ? file : 7 - file;
+      final row = boardOrientation == PlayerColor.white ? 7 - rank : rank;
+
+      canvas.drawRect(Rect.fromLTWH(col * sq, row * sq, sq, sq), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LastMoveHighlightPainter old) =>
+      from != old.from || to != old.to || boardOrientation != old.boardOrientation;
 }

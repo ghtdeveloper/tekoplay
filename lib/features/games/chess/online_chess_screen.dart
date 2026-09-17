@@ -3580,58 +3580,23 @@ class LastMovePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paintFrom =
-        Paint()
-          ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(
-            alpha: 0.5,
-          )
-          ..style = PaintingStyle.fill;
-
-    final paintTo =
-        Paint()
-          ..color = (isMyMove ? Colors.green : Colors.orange).withValues(
-            alpha: 0.5,
-          )
-          ..style = PaintingStyle.fill;
-
-    final strokePaint =
-        Paint()
-          ..color = (isMyMove ? Colors.blue : Colors.yellow).withValues(
-            alpha: 0.8,
-          )
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0;
+    final paint = Paint()
+      ..color = const ui.Color(0x80F6F669)
+      ..style = PaintingStyle.fill;
 
     final squareSize = size.width / 8;
 
     final fromCoords = _squareToCoordinates(fromSquare, boardOrientation);
     final toCoords = _squareToCoordinates(toSquare, boardOrientation);
 
-    final fromRect = Rect.fromLTWH(
-      fromCoords.dx * squareSize,
-      fromCoords.dy * squareSize,
-      squareSize,
-      squareSize,
+    canvas.drawRect(
+      Rect.fromLTWH(fromCoords.dx * squareSize, fromCoords.dy * squareSize, squareSize, squareSize),
+      paint,
     );
-    canvas.drawRect(fromRect, paintFrom);
-    canvas.drawRect(fromRect, strokePaint);
-
-    final toRect = Rect.fromLTWH(
-      toCoords.dx * squareSize,
-      toCoords.dy * squareSize,
-      squareSize,
-      squareSize,
+    canvas.drawRect(
+      Rect.fromLTWH(toCoords.dx * squareSize, toCoords.dy * squareSize, squareSize, squareSize),
+      paint,
     );
-    canvas.drawRect(toRect, paintTo);
-
-    final strokePaintTo =
-        Paint()
-          ..color = (isMyMove ? Colors.green : Colors.orange).withValues(
-            alpha: 0.8,
-          )
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0;
-    canvas.drawRect(toRect, strokePaintTo);
   }
 
   Offset _squareToCoordinates(String square, PlayerColor orientation) {
