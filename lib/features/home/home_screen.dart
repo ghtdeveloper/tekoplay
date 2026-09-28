@@ -11,6 +11,8 @@ import '../adds/interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
+import '../../core/service/notification_service.dart';
+import '../../core/models/multiplayer_game_match_chess.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class MainScreen extends StatefulWidget {
@@ -23,13 +25,16 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   late AudioPlayer _audioPlayer;
   double _currentVolume = 0.5;
-  bool _isPausedForNavigation = false;
   User? _currentUser;
   bool _isEmailVerified = true;
   Timer? _emailVerificationTimer;
   bool _isEmailVerificationDialogOpen = false;
   bool _isScreenKeepOnActive = false;
+  Timer? _wakelockTimer;
   late InterstitialAdHelper _interstitialHelper;
+  StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
+  final Set<String> _seenInvitationIds = {};
+  bool _invitationDialogOpen = false;
 
   @override
   void initState() {
@@ -40,11 +45,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _startEmailVerificationCheck();
     _interstitialHelper = InterstitialAdHelper(showFrequency: 3);
     _enableWakeLock();
+    _wakelockTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) _enableWakeLock();
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _wakelockTimer?.cancel();
+    _invitationsSubscription?.cancel();
     _disableWakeLock();
     _audioPlayer.dispose();
     _emailVerificationTimer?.cancel();
@@ -105,9 +115,50 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final user = AuthService().getCurrentUser();
     final canAccess = await AuthService().canAccessApp();
 
+    if (user != null) {
+      _startInvitationListener(user.uid);
+    }
+
     setState(() {
       _currentUser = user;
       _isEmailVerified = canAccess;
+    });
+  }
+
+  void _startInvitationListener(String uid) {
+    _invitationsSubscription?.cancel();
+    _invitationsSubscription = GameInvitationService()
+        .getPendingInvitations(uid)
+        .listen((invitations) {
+      if (!mounted) return;
+      for (final inv in invitations) {
+        final id = inv['id'] as String?;
+        if (id != null && !_seenInvitationIds.contains(id)) {
+          _seenInvitationIds.add(id);
+          if (!_invitationDialogOpen) {
+            _invitationDialogOpen = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                NotificationService().handleGameInvitationNotification(
+                  context,
+                  {
+                    'invitationId': id,
+                    'gameType': inv['gameType'],
+                    'fromUserName': inv['fromUserName'],
+                  },
+                );
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  _invitationDialogOpen = false;
+                });
+              }
+            });
+          }
+        }
+      }
+    }, onError: (e) {
+      if (kDebugMode) {
+        print('Error en stream de invitaciones (home): $e');
+      }
     });
   }
 
@@ -143,9 +194,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         if (_isScreenKeepOnActive) {
           _enableWakeLock();
         }
-        if (!_isPausedForNavigation) {
-          _resumeMusic();
-        }
+        _resumeMusic();
         _checkEmailVerification();
         break;
       case AppLifecycleState.paused:
@@ -266,8 +315,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.of(context).pop();
-                        _isPausedForNavigation = true;
-                        await _audioPlayer.pause();
                         if (!context.mounted) return;
                         await Navigator.push(
                           context,
@@ -278,7 +325,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                        _isPausedForNavigation = false;
                         await _resumeMusic();
                       },
                       icon: Icon(Icons.casino),
@@ -348,8 +394,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.of(context).pop();
-                        _isPausedForNavigation = true;
-                        await _audioPlayer.pause();
                         if (!context.mounted) return;
                         await Navigator.push(
                           context,
@@ -360,7 +404,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                        _isPausedForNavigation = false;
                         await _resumeMusic();
                       },
                       icon: Icon(Icons.sports_esports),
@@ -386,8 +429,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.of(context).pop();
-                        _isPausedForNavigation = true;
-                        await _audioPlayer.pause();
                         if (!context.mounted) return;
                         await Navigator.push(
                           context,
@@ -398,7 +439,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                        _isPausedForNavigation = false;
                         await _resumeMusic();
                       },
                       icon: Icon(Icons.monetization_on),

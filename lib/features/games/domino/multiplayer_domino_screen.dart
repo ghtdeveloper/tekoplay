@@ -21,6 +21,7 @@ import '../../../core/service/auth_service.dart';
 import '../../../core/service/payment_service.dart';
 import '../../coins/diamond_purchase_dialog.dart';
 import '../../../generated/l10n.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 enum _FriendDominoState { setup, waitingRoom, gameActive }
 
@@ -44,7 +45,7 @@ class _MultiplayerDominoScreenState extends State<MultiplayerDominoScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final DominoGameService _gameService = DominoGameService();
   final FirestoreService _firestoreService = FirestoreService();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final Random _random = Random();
   final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
@@ -281,7 +282,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
     ]);
     WidgetsBinding.instance.removeObserver(this);
     if (_activeGameId != null && _currentGame != null && _currentGame!.status == 'waiting') {
-      FirebaseFirestore.instance.collection('domino_games').doc(_activeGameId!).update({
+      FlavorConfig.firestore.collection('domino_games').doc(_activeGameId!).update({
         'status': 'cancelled',
         'finishedAt': FieldValue.serverTimestamp(),
       }).catchError((_) {});

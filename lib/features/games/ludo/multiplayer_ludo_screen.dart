@@ -20,6 +20,7 @@ import '../../../core/service/payment_service.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import '../../../generated/l10n.dart';
 import '../../coins/diamond_purchase_dialog.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 enum _FriendLudoState { setup, waitingRoom, gameActive }
 
@@ -42,7 +43,7 @@ class MultiplayerLudoScreen extends StatefulWidget {
 class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final FirestoreService _firestoreService = FirestoreService();
   final LudoGameService _gameService = LudoGameService();
   User? get _currentUser => FirebaseAuth.instance.currentUser;
@@ -67,7 +68,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   int? _lastMovedPieceId;
   final Random _random = Random();
   final Map<String, int> _botMissedFive = {};
-  int _humanHomeDoubles = 0;
   final Map<String, int> _botHomeDoubles = {};
   int _botTurnCounter = 0;
 
@@ -208,7 +208,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     if (_activeGameId != null && _currentGame != null && _currentGame!.status == 'waiting') {
-      FirebaseFirestore.instance.collection('ludo_games').doc(_activeGameId!).update({
+      FlavorConfig.firestore.collection('ludo_games').doc(_activeGameId!).update({
         'status': 'cancelled',
         'finishedAt': FieldValue.serverTimestamp(),
       }).catchError((_) {});
@@ -660,60 +660,35 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     if (!_isMyTurn || _gameEnded || _isRollingDice || _bonusSelectionActive) return;
     if (_dice1Value != 0 || _dice2Value != 0) return;
 
-    final threeDoublesHomeMsg = S.of(context).threeDoublesHome;
-    final doubleHomeMsg = S.of(context).doubleHome;
     final tripleDoubleMsg = S.of(context).tripleDouble;
     final noValidMovesMsg = S.of(context).noValidMoves;
 
     final myPieces = _gameState.getPiecesByColor(_myColor);
-    final allInHome = myPieces.every((p) => p.isHome);
-    int d1 = 0, d2 = 0;
 
-    do {
-      setState(() { _isRollingDice = true; });
-      _diceAnimController.repeat();
-      await Future.delayed(const Duration(milliseconds: 600));
-      _diceAnimController.stop();
-      _diceAnimController.reset();
+    setState(() { _isRollingDice = true; });
+    _diceAnimController.repeat();
+    await Future.delayed(const Duration(milliseconds: 600));
+    _diceAnimController.stop();
+    _diceAnimController.reset();
 
-      d1 = _random.nextInt(6) + 1;
-      d2 = _random.nextInt(6) + 1;
+    int d1 = _random.nextInt(6) + 1;
+    int d2 = _random.nextInt(6) + 1;
 
-      final hasBots = _botColors.isNotEmpty;
-      if (hasBots && widget.matchType == 'Apuesta') {
-        if (_random.nextInt(3) != 0) {
-          if (d1 > 4) d1 = _random.nextInt(4) + 1;
-          if (d2 > 4) d2 = _random.nextInt(4) + 1;
-        }
-      } else {
-        final hasHomePieces = myPieces.any((p) => p.isHome);
-        final humanMissed = _botMissedFive[_myColor] ?? 0;
-        if (humanMissed >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
-          if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
-        }
-        _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
+    final hasBots = _botColors.isNotEmpty;
+    if (hasBots && widget.matchType == 'Apuesta') {
+      if (_random.nextInt(3) != 0) {
+        if (d1 > 4) d1 = _random.nextInt(4) + 1;
+        if (d2 > 4) d2 = _random.nextInt(4) + 1;
       }
+    }
 
-      if (allInHome && d1 == d2 && d1 != 5) {
-        _humanHomeDoubles++;
-        setState(() { _dice1Value = d1; _dice2Value = d2; _isRollingDice = false; });
-        if (_humanHomeDoubles >= 3) {
-          _humanHomeDoubles = 0;
-          _consecutiveDoubles = 0;
-          _showEventToast(threeDoublesHomeMsg);
-          await Future.delayed(const Duration(milliseconds: 1500));
-          setState(() { _dice1Value = 0; _dice2Value = 0; });
-          await _advanceTurn();
-          return;
-        }
-        _showEventToast(doubleHomeMsg);
-        await Future.delayed(const Duration(milliseconds: 1200));
-        setState(() { _dice1Value = 0; _dice2Value = 0; });
-        continue;
-      }
-      _humanHomeDoubles = 0;
-      break;
-    } while (true);
+    final hasHomePieces = myPieces.any((p) => p.isHome);
+    final humanMissed = _botMissedFive[_myColor] ?? 0;
+    final canExitH = d1 == 5 || d2 == 5;
+    if (humanMissed >= 2 && hasHomePieces && !canExitH) {
+      if (_random.nextBool()) { d1 = 5; d2 = _random.nextInt(3) + 1; } else { d2 = 5; d1 = _random.nextInt(3) + 1; }
+    }
+    _botMissedFive[_myColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? humanMissed + 1 : 0;
 
     if (d1 == d2) {
       _consecutiveDoubles++;
@@ -745,9 +720,15 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
 
     _calculateMovablePieces();
     if (_movablePieces.isEmpty) {
+      final hadDouble = d1 == d2;
       _showEventToast(noValidMovesMsg);
       await Future.delayed(const Duration(milliseconds: 1500));
-      if (!_gameEnded && mounted) await _advanceTurn();
+      if (hadDouble && !_gameEnded && mounted) {
+        setState(() { _dice1Value = 0; _dice2Value = 0; });
+        _startTurnTimer();
+      } else if (!_gameEnded && mounted) {
+        await _advanceTurn();
+      }
     } else {
       _startTurnTimer();
       unawaited(_writeTurnDeadline());
@@ -1064,6 +1045,16 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _calculateMovablePieces();
 
     if (_movablePieces.isNotEmpty) {
+      if (_movablePieces.length == 1 && color == _myColor) {
+        final m = _movablePieces.first;
+        _syncGameState(advanceTurn: false);
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (!_gameEnded && mounted && _isMyTurn) {
+            _executePieceMove(_myColor, m['pieceId'] as int, m['diceValue'] as int, m['diceNumber'] as int);
+          }
+        });
+        return;
+      }
       _syncGameState(advanceTurn: false);
       _startTurnTimer();
       return;
@@ -1596,19 +1587,24 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
       final isWeakTurn = isBetMode && (_botTurnCounter % 3 == 0);
 
       if (isWeakTurn) {
-        d1 = _random.nextInt(2) + 1; // 1 or 2
-        d2 = _random.nextInt(2) + 1; // 1 or 2
+        d1 = _random.nextInt(2) + 1;
+        d2 = _random.nextInt(2) + 1;
       } else {
         d1 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble() : _rollBotDie();
         d2 = (_consecutiveDoubles >= 2) ? _rollBotDieNoDouble(exclude: d1) : _rollBotDie();
+      }
 
+      {
         final hasHomePieces = botPieces.any((p) => p.isHome);
         final missedCount = _botMissedFive[botColor] ?? 0;
-        if (missedCount >= 3 && hasHomePieces && d1 != 5 && d2 != 5) {
-          if (_random.nextBool()) { d1 = 5; } else { d2 = 5; }
+        final canExitB = d1 == 5 || d2 == 5;
+        if (missedCount >= 2 && hasHomePieces && !canExitB) {
+          if (_random.nextBool()) { d1 = 5; d2 = _random.nextInt(3) + 1; } else { d2 = 5; d1 = _random.nextInt(3) + 1; }
         }
         _botMissedFive[botColor] = (hasHomePieces && d1 != 5 && d2 != 5) ? missedCount + 1 : 0;
+      }
 
+      if (!isWeakTurn) {
         final piecesInStretch = botPieces
             .where((p) => p.position >= 52 && !p.isFinished)
             .toList();
@@ -1876,11 +1872,24 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     _turnTimer?.cancel();
 
     final isWin = winnerColor == _myColor;
-    if (isWin && _currentUser != null && _activeGameId != null) {
-      _gameService.finishGame(gameId: _activeGameId!, winnerId: _currentUser!.uid);
+    if (_activeGameId != null && _currentGame != null) {
+      final winnerId = _getPlayerIdForColor(winnerColor);
+      if (winnerId != null) {
+        _gameService.finishGame(gameId: _activeGameId!, winnerId: winnerId);
+      }
     }
     _recordResult(isWin ? GameResultModel.win : GameResultModel.loss);
     _showEndDialog(isWin ? S.of(context).victory : S.of(context).playerWon(_getColorName(winnerColor)), _currentGame, forceIsWin: isWin);
+  }
+
+  String? _getPlayerIdForColor(String color) {
+    final game = _currentGame;
+    if (game == null) return null;
+    if (game.player1Color == color) return game.hostId;
+    if (game.player2Color == color) return game.guest2Id;
+    if (game.player3Color == color) return game.guest3Id;
+    if (game.player4Color == color) return game.guest4Id;
+    return null;
   }
 
   void _handleGameEnd(LudoGameMatch game) {
@@ -1953,12 +1962,14 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                     children: [
                       const Icon(Icons.diamond, color: Colors.blue, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        S.of(context).betWillBeReturned(betAmount),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade800,
-                          fontSize: 15,
+                      Flexible(
+                        child: Text(
+                          S.of(context).betWillBeReturned(betAmount),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ],
@@ -2012,7 +2023,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           ? (result == GameResultModel.win ? prize : -betAmt)
           : 0;
 
-      // Build opponent names from game data
       final names = <String>[];
       if (_myPlayerNumber != 1 && game?.hostName != null) names.add(game!.hostName);
       if (_myPlayerNumber != 2 && game?.guest2Name != null) names.add(game!.guest2Name!);
@@ -2501,8 +2511,8 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
               Text(S.of(context).howMuchBet,
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
-              const Text('Elige el monto de diamantes para esta partida',
-                  style: TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
+              Text(S.of(context).chooseBetAmountDiamonds,
+                  style: const TextStyle(fontSize: 14, color: Colors.grey), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(14),

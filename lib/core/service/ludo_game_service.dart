@@ -4,13 +4,14 @@ import 'package:flutter/foundation.dart';
 import '../models/ludo_game_match.dart';
 import 'bot_name_service.dart';
 import 'game_quota_service.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class LudoGameService {
   static final LudoGameService _instance = LudoGameService._internal();
   factory LudoGameService() => _instance;
   LudoGameService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final String _gamesCollection = 'ludo_games';
   final Random _random = Random();
 

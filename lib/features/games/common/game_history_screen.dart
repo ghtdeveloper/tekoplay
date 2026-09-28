@@ -1,10 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 import '../../../core/models/game_stats.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/models/game_match.dart';
@@ -99,7 +99,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final userDoc = await FlavorConfig.firestore.collection('users').doc(uid).get();
         _diamondsEarned = (userDoc.data()?['diamondsEarned'] as num?)?.toInt() ?? 0;
       }
 

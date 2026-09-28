@@ -340,6 +340,7 @@ class LudoBoardPainter extends CustomPainter {
 
     void addPieceToPosition(LudoPiece piece, Color color, String colorName) {
       if (piece.isHome || piece.isFinished) return;
+      if (piece.position >= 52) return; // stretch pieces handled in _drawColorPieces
       if (!piecesAtPosition.containsKey(piece.position)) {
         piecesAtPosition[piece.position] = [];
       }
@@ -432,10 +433,52 @@ class LudoBoardPainter extends CustomPainter {
   }
 
   void _drawColorPieces(Canvas canvas, List<LudoPiece> pieces, Color color, String colorName, double squareSize) {
+    // Draw home and finished pieces individually
     for (final piece in pieces) {
-      final inStretch = piece.position >= 52 && piece.position <= 56;
-      if (!piece.isHome && !piece.isFinished && !inStretch) continue;
-      _drawPiece(canvas, piece, color, colorName, squareSize);
+      if (piece.isHome || piece.isFinished) {
+        _drawPiece(canvas, piece, color, colorName, squareSize);
+      }
+    }
+
+    // Group stretch pieces by position for stacking
+    final stretchByPos = <int, List<LudoPiece>>{};
+    for (final piece in pieces) {
+      if (!piece.isFinished && piece.position >= 52 && piece.position <= 56) {
+        stretchByPos.putIfAbsent(piece.position, () => []).add(piece);
+      }
+    }
+
+    // Determine if this color's stretch is vertical or horizontal
+    final isVertical = colorName == 'green' || colorName == 'blue';
+
+    for (final entry in stretchByPos.entries) {
+      final center = _getHomeStretchBoardPosition(colorName, entry.key, squareSize);
+      final count = entry.value.length;
+      if (count == 1) {
+        _drawSinglePiece(canvas, entry.value[0], color, colorName, center, squareSize);
+      } else {
+        // Draw stacked pieces with direction-aware offset
+        final pieceR = squareSize * 0.28;
+        final off = pieceR + squareSize * 0.04;
+        final offset = isVertical ? Offset(off, 0) : Offset(0, -off);
+        _drawSinglePiece(canvas, entry.value[0], color, colorName, center - offset, squareSize, radius: pieceR);
+        _drawSinglePiece(canvas, entry.value[1 % count], color, colorName, center + offset, squareSize, radius: pieceR);
+
+        // Draw count badge
+        final badgeR = squareSize * 0.16;
+        final badgePos = center + Offset(squareSize * 0.30, -squareSize * 0.30);
+        canvas.drawCircle(badgePos, badgeR + 1, Paint()..color = Colors.black..style = PaintingStyle.fill);
+        canvas.drawCircle(badgePos, badgeR, Paint()..color = Colors.white..style = PaintingStyle.fill);
+        final tp = TextPainter(
+          text: TextSpan(
+            text: '$count',
+            style: TextStyle(color: Colors.black, fontSize: squareSize * 0.20, fontWeight: FontWeight.bold),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        tp.layout();
+        tp.paint(canvas, badgePos - Offset(tp.width / 2, tp.height / 2));
+      }
     }
   }
 

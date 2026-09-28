@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tekoplay/core/models/technical_issue.dart';
 import 'package:tekoplay/core/utils/game_result.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 import '../models/game_stats.dart';
 import '../models/game_match.dart';
 import '../models/multiplayer_game_match_chess.dart';
@@ -28,7 +29,7 @@ class FirestoreService {
 
   FirestoreService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final String _usersCollection = 'users';
   final String _gameMatchesCollection = 'game_matches';
   final String _technicalIssueCollection = 'supports';
@@ -257,7 +258,7 @@ class FirestoreService {
   }
 
   Future<void> addMissingUrlPhoto(String userId, String? photoUrl) async {
-    await FirebaseFirestore.instance.collection('users').doc(userId).update({
+    await FlavorConfig.firestore.collection('users').doc(userId).update({
       'urlPhoto': photoUrl ?? '',
     });
   }

@@ -3,13 +3,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/domino_game_match.dart';
 import 'bot_name_service.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class DominoGameService {
   static final DominoGameService _instance = DominoGameService._internal();
   factory DominoGameService() => _instance;
   DominoGameService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   static const String _collection = 'domino_games';
   final Random _random = Random();
 

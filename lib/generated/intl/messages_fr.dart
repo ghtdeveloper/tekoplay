@@ -83,36 +83,39 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m28(n) => "${n} joueurs";
 
-  static String m29(count, plural, difficulty) =>
+  static String m29(required, currency, balance) =>
+      "Vous avez besoin d\'au moins ${required} ${currency} pour jouer.\nVous avez : ${balance}.";
+
+  static String m30(count, plural, difficulty) =>
       "Parchís vs ${count} CPU${plural} - ${difficulty}";
 
-  static String m30(pieceNum, from, to) =>
+  static String m31(pieceNum, from, to) =>
       "Pièce ${pieceNum}  •  Case ${from} → ${to}";
 
-  static String m31(name) => "${name} a rejoint la partie !";
+  static String m32(name) => "${name} a rejoint la partie !";
 
-  static String m32(name) => "${name} a gagné";
+  static String m33(name) => "${name} a gagné";
 
-  static String m33(n) => "Arrivé au but ! +${n} cases";
+  static String m34(n) => "Arrivé au but ! +${n} cases";
 
-  static String m34(n) => "Arrivé au but ! Touchez la pièce à déplacer +${n}";
+  static String m35(n) => "Arrivé au but ! Touchez la pièce à déplacer +${n}";
 
-  static String m35(n) => "${n} joueurs · recherche...";
+  static String m36(n) => "${n} joueurs · recherche...";
 
-  static String m36(n) => "Démarrage dans ${n}\"";
+  static String m37(n) => "Démarrage dans ${n}\"";
 
-  static String m37(n) => "Touchez la pièce qui recevra +${n}";
+  static String m38(n) => "Touchez la pièce qui recevra +${n}";
 
-  static String m38(name) => "Tour de ${name}";
+  static String m39(name) => "Tour de ${name}";
 
-  static String m39(n) => "En attente de ${n} joueur(s) de plus...";
+  static String m40(n) => "En attente de ${n} joueur(s) de plus...";
 
-  static String m40(amount) =>
+  static String m41(amount) =>
       "Demande de retrait traitée : ${amount} diamants";
 
-  static String m41(amount, currency) => "Ton solde : ${amount} ${currency}";
-
   static String m42(amount, currency) => "Ton solde : ${amount} ${currency}";
+
+  static String m43(amount, currency) => "Ton solde : ${amount} ${currency}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -754,6 +757,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "needAtLeast100": MessageLookupByLibrary.simpleMessage(
       "Vous avez besoin d\'au moins 100",
     ),
+    "needAtLeastNToPlay": m29,
     "needDoubleForBet": MessageLookupByLibrary.simpleMessage(
       "Vous avez besoin du double de la mise (mise + caution)",
     ),
@@ -845,7 +849,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "outOfTime": MessageLookupByLibrary.simpleMessage("Temps écoulé"),
     "parchisOnline": MessageLookupByLibrary.simpleMessage("Ludo en ligne"),
     "parchisShort": MessageLookupByLibrary.simpleMessage("Jeu de ludo"),
-    "parchisVsCpu": m29,
+    "parchisVsCpu": m30,
     "parchisVsFriend": MessageLookupByLibrary.simpleMessage("Ludo vs Ami"),
     "pase": MessageLookupByLibrary.simpleMessage("El Pase"),
     "paseBetBody": MessageLookupByLibrary.simpleMessage(
@@ -911,7 +915,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "paymentProcessingError": MessageLookupByLibrary.simpleMessage(
       "Erreur lors du traitement du paiement",
     ),
-    "pieceNSquareFromTo": m30,
+    "pieceNSquareFromTo": m31,
     "play": MessageLookupByLibrary.simpleMessage("Jouer !"),
     "playAgain": MessageLookupByLibrary.simpleMessage("Rejouer"),
     "playOnline": MessageLookupByLibrary.simpleMessage("Jouer en ligne"),
@@ -925,9 +929,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "playerAbandonedGameMsg": MessageLookupByLibrary.simpleMessage(
       "Un joueur a abandonné la partie.",
     ),
-    "playerJoinedGame": m31,
+    "playerJoinedGame": m32,
     "playerVsCpu": MessageLookupByLibrary.simpleMessage("Joueur vs CPU"),
-    "playerWon": m32,
+    "playerWon": m33,
     "players3total": MessageLookupByLibrary.simpleMessage("(3 joueurs)"),
     "players4total": MessageLookupByLibrary.simpleMessage("(4 joueurs)"),
     "playing": MessageLookupByLibrary.simpleMessage("En jeu"),
@@ -988,11 +992,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "queenStep4Title": MessageLookupByLibrary.simpleMessage("La Reine Capture"),
     "quickAmounts": MessageLookupByLibrary.simpleMessage("Montants rapides :"),
     "ranking": MessageLookupByLibrary.simpleMessage("Classement"),
-    "reachedGoalBonusN": m33,
+    "reachedGoalBonusN": m34,
     "reachedGoalNoBonus": MessageLookupByLibrary.simpleMessage(
       "Arrivé au but ! Pas de bonus disponible",
     ),
-    "reachedGoalTouchPieceBonusN": m34,
+    "reachedGoalTouchPieceBonusN": m35,
     "realPlayersNoBots": MessageLookupByLibrary.simpleMessage(
       "Recherche de joueurs",
     ),
@@ -1048,7 +1052,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "searchPublicGame": MessageLookupByLibrary.simpleMessage(
       "Rechercher une partie publique",
     ),
-    "searchingNPlayers": m35,
+    "searchingNPlayers": m36,
     "searchingOpponent": MessageLookupByLibrary.simpleMessage(
       "Recherche d\'adversaire",
     ),
@@ -1116,7 +1120,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Certains e-mails n\'ont pas pu être envoyés :",
     ),
     "startGame": MessageLookupByLibrary.simpleMessage("Commencer la partie"),
-    "startingInSeconds": m36,
+    "startingInSeconds": m37,
     "stats": MessageLookupByLibrary.simpleMessage("Statistiques"),
     "still": MessageLookupByLibrary.simpleMessage("encore"),
     "stole": MessageLookupByLibrary.simpleMessage("Volé"),
@@ -1183,7 +1187,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "top": MessageLookupByLibrary.simpleMessage("TOP"),
     "totalPoints": MessageLookupByLibrary.simpleMessage("Classement"),
     "totalRequired": MessageLookupByLibrary.simpleMessage("Total requis"),
-    "touchPieceBonusN": m37,
+    "touchPieceBonusN": m38,
     "touchPieceToMove": MessageLookupByLibrary.simpleMessage(
       "Touchez une pièce pour déplacer",
     ),
@@ -1193,7 +1197,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tripleDouble": MessageLookupByLibrary.simpleMessage(
       "Triple double ! Pièce renvoyée à la maison",
     ),
-    "turnOfPlayer": m38,
+    "turnOfPlayer": m39,
     "tutorial": MessageLookupByLibrary.simpleMessage("Tutoriel"),
     "tutorialChessTitle": MessageLookupByLibrary.simpleMessage(
       "Tutoriel d’échecs",
@@ -1238,7 +1242,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "waitingForOpponentJoin": MessageLookupByLibrary.simpleMessage(
       "En attente qu\'un adversaire rejoigne...",
     ),
-    "waitingMorePlayers": m39,
+    "waitingMorePlayers": m40,
     "waitingOpponent": MessageLookupByLibrary.simpleMessage(
       "En attente de l\'adversaire...",
     ),
@@ -1273,7 +1277,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "withdrawProcessError": MessageLookupByLibrary.simpleMessage(
       "Erreur lors du traitement du retrait",
     ),
-    "withdrawalProcessed": m40,
+    "withdrawalProcessed": m41,
     "withdrawalsProcessedIn": MessageLookupByLibrary.simpleMessage(
       "Les retraits sont traités sous 24 à 48 heures ouvrables",
     ),
@@ -1324,7 +1328,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Tu as gagné ! Tes récompenses sont en cours de traitement...",
     ),
     "youWonShort": MessageLookupByLibrary.simpleMessage("Vous avez gagné"),
-    "yourBalanceAmount": m41,
+    "yourBalanceAmount": m42,
     "yourCurrentBalance": MessageLookupByLibrary.simpleMessage(
       "Votre solde actuel :",
     ),
@@ -1334,7 +1338,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "yourPositionIn": MessageLookupByLibrary.simpleMessage(
       "Votre position dans",
     ),
-    "yourSaldoAmount": m42,
+    "yourSaldoAmount": m43,
     "yourTemporaryName": MessageLookupByLibrary.simpleMessage(
       "Votre nom temporaire",
     ),

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/multiplayer_game_match_chess.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class OnlineMatchmakingChessService {
   static final OnlineMatchmakingChessService _instance =
@@ -10,7 +11,7 @@ class OnlineMatchmakingChessService {
 
   OnlineMatchmakingChessService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
 
   Future<List<MultiplayerGameMatch>> findWaitingGames({
     required String gameType,

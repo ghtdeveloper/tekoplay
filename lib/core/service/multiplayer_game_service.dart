@@ -8,6 +8,7 @@ import '../utils/game_result.dart';
 import '../utils/game_type.dart';
 import 'firestore_service.dart';
 import 'game_quota_service.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class MultiplayerGameService {
   static final MultiplayerGameService _instance =
@@ -17,7 +18,7 @@ class MultiplayerGameService {
 
   MultiplayerGameService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final String _gamesCollection = 'multiplayer_games';
 
   Future<String?> createGame({
@@ -210,7 +211,7 @@ class MultiplayerGameService {
     required String playerId,
   }) async {
     try {
-      final gameRef = FirebaseFirestore.instance
+      final gameRef = FlavorConfig.firestore
           .collection('multiplayer_games')
           .doc(gameId);
 

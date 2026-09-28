@@ -1,12 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class GameQuotaService {
   static final GameQuotaService _instance = GameQuotaService._internal();
   factory GameQuotaService() => _instance;
   GameQuotaService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
 
   Future<Map<String, dynamic>> collectQuotas({
     required String gameId,

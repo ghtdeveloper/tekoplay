@@ -5148,6 +5148,16 @@ class S {
       args: [amount],
     );
   }
+
+  /// `You need at least {required} {currency} to play.\nYou have: {balance}.`
+  String needAtLeastNToPlay(Object required, Object currency, Object balance) {
+    return Intl.message(
+      'You need at least $required $currency to play.\nYou have: $balance.',
+      name: 'needAtLeastNToPlay',
+      desc: '',
+      args: [required, currency, balance],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<S> {

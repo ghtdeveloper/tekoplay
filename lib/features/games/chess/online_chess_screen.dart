@@ -24,6 +24,7 @@ import '../../adds/interstitial_ad_helper.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import '../../../core/service/payment_service.dart';
 import '../../coins/diamond_purchase_dialog.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class OnlineChessScreen extends StatefulWidget {
   final String matchType;
@@ -50,10 +51,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   final List<int> _betOptions = [10, 20, 50, 100, 250, 500, 1000, 5000, 10000];
   int? _userCoins;
   final List<int> _coinBetOptions = [50, 100, 250, 500, 1000, 2500, 5000];
-  String? _lastMoveFromSquare;
-  String? _lastMoveToSquare;
-  bool _showLastMove = false;
-  bool _lastMoveWasMine = false;
 
   int? _selectedTimeMinutes;
   final List<TimeOption> _timeOptions = [
@@ -192,6 +189,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     });
 
     _stockfish!.state.addListener(() async {
+      if (_stockfish == null || !mounted) return;
       if (_stockfish!.state.value == StockfishState.ready &&
           !_isStockfishReady) {
         _isStockfishReady = true;
@@ -208,7 +206,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   void _setupBalanceListener() {
     if (currentUser == null) return;
     _balanceSubscription?.cancel();
-    _balanceSubscription = FirebaseFirestore.instance
+    _balanceSubscription = FlavorConfig.firestore
         .collection('users')
         .doc(currentUser!.uid)
         .snapshots()
@@ -356,7 +354,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         _currentGame!.status == 'waiting';
     if (_activeGameId != null && !_isPlayingAgainstBot && isWaiting) {
       try {
-        await FirebaseFirestore.instance
+        await FlavorConfig.firestore
             .collection('multiplayer_games')
             .doc(_activeGameId!)
             .update({
@@ -390,7 +388,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       final isHost = _currentGame?.hostId == currentUser!.uid;
       final fieldName = isHost ? 'lastHostActivity' : 'lastGuestActivity';
 
-      await FirebaseFirestore.instance
+      await FlavorConfig.firestore
           .collection('multiplayer_games')
           .doc(gameId)
           .update({fieldName: FieldValue.serverTimestamp()});
@@ -859,7 +857,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
     if (_activeGameId != null) {
       try {
-        await FirebaseFirestore.instance
+        await FlavorConfig.firestore
             .collection('multiplayer_games')
             .doc(_activeGameId!)
             .update({
@@ -1112,9 +1110,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
     setState(() {
       _isMyTurn = true;
-      _lastMoveFromSquare = from;
-      _lastMoveToSquare = to;
-      _showLastMove = true;
     });
     _onFirstMoveConfirmed();
 
@@ -1385,7 +1380,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         return;
       }
 
-      await FirebaseFirestore.instance
+      await FlavorConfig.firestore
           .collection('multiplayer_games')
           .doc(game.id)
           .update({
@@ -1432,7 +1427,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     int originalAmount,
   ) async {
     try {
-      await FirebaseFirestore.instance.collection('notifications').add({
+      await FlavorConfig.firestore.collection('notifications').add({
         'userId': hostId,
         'type': 'bet_counter_offer',
         'title': S.of(context).counterOfferTitle,
@@ -1459,7 +1454,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
 
     final navigator = Navigator.of(context);
 
-    _betNegotiationSubscription = FirebaseFirestore.instance
+    _betNegotiationSubscription = FlavorConfig.firestore
         .collection('multiplayer_games')
         .doc(gameId)
         .snapshots()
@@ -1716,7 +1711,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         return;
       }
 
-      await FirebaseFirestore.instance
+      await FlavorConfig.firestore
           .collection('multiplayer_games')
           .doc(_pendingGameId!)
           .update({
@@ -1747,7 +1742,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Future<void> _acceptCounterOffer(int amount) async {
     final errorMsg = S.of(context).errorAcceptingCounteroffer;
     try {
-      await FirebaseFirestore.instance
+      await FlavorConfig.firestore
           .collection('multiplayer_games')
           .doc(_pendingGameId!)
           .update({
@@ -1770,7 +1765,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   Future<void> _rejectCounterOffer() async {
     final errorMsg = S.of(context).errorRejectingCounteroffer;
     try {
-      await FirebaseFirestore.instance
+      await FlavorConfig.firestore
           .collection('multiplayer_games')
           .doc(_pendingGameId!)
           .update({
@@ -1862,15 +1857,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     if (shouldSync && !_waitingForMoveResponse) {
       _syncGameState();
 
-      if (isOpponentMove &&
-          game.lastMoveFrom != null &&
-          game.lastMoveTo != null) {
-        setState(() {
-          _lastMoveFromSquare = game.lastMoveFrom;
-          _lastMoveToSquare = game.lastMoveTo;
-          _showLastMove = true;
-          _lastMoveWasMine = false;
-        });
+      if (isOpponentMove) {
         _onFirstMoveConfirmed();
       }
       final inCheck = controller.isInCheck();
@@ -1883,27 +1870,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
 
     setState(() {});
-  }
-
-  Widget _buildLastMoveOverlay() {
-    if (!_showLastMove ||
-        _lastMoveFromSquare == null ||
-        _lastMoveToSquare == null) {
-      return SizedBox.shrink();
-    }
-
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: CustomPaint(
-          painter: LastMovePainter(
-            fromSquare: _lastMoveFromSquare!,
-            toSquare: _lastMoveToSquare!,
-            boardOrientation: _myColor ?? PlayerColor.white,
-            isMyMove: _lastMoveWasMine,
-          ),
-        ),
-      ),
-    );
   }
 
   void _setupGame(MultiplayerGameMatch game) {
@@ -2142,15 +2108,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
   }
 
   void _playerMoved({String? from, String? to, String? promotion}) async {
-    if (from != null && to != null) {
-      setState(() {
-        _lastMoveFromSquare = from;
-        _lastMoveToSquare = to;
-        _showLastMove = true;
-        _lastMoveWasMine = true;
-      });
-    }
-
     _onFirstMoveConfirmed();
 
     if (_isPlayingAgainstBot) {
@@ -2187,9 +2144,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     }
 
     _waitingForMoveResponse = true;
-    final savedFromSquare = _lastMoveFromSquare;
-    final savedToSquare = _lastMoveToSquare;
-    final savedShowLastMove = _showLastMove;
     final errorSendMove = S.of(context).errorSendMove;
     final errorMakeMove = S.of(context).errorMakeMove;
 
@@ -2218,22 +2172,10 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       if (!success) {
         _syncGameState();
         _showError(errorSendMove);
-        setState(() {
-          _showLastMove = false;
-          _lastMoveFromSquare = null;
-          _lastMoveToSquare = null;
-        });
       } else {
         _lastMoveFrom = moveFrom;
         _lastMoveTo = moveTo;
         _lastMovePromotion = movePromotion;
-
-        setState(() {
-          _lastMoveFromSquare = savedFromSquare;
-          _lastMoveToSquare = savedToSquare;
-          _showLastMove = savedShowLastMove;
-          _lastMoveWasMine = true;
-        });
 
         _checkForGameEnd(newFen);
       }
@@ -2243,9 +2185,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       }
       _syncGameState();
       _showError(errorMakeMove);
-      setState(() {
-        _showLastMove = false;
-      });
     } finally {
       _waitingForMoveResponse = false;
     }
@@ -2835,10 +2774,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
       _opponentPhotoUrl = null;
       _myRanking = null;
       _opponentRanking = null;
-      _showLastMove = false;
-      _lastMoveFromSquare = null;
-      _lastMoveToSquare = null;
-      _lastMoveWasMine = false;
       _myTimeSeconds = 0;
       _opponentTimeSeconds = 0;
       _firstMoveDone = false;
@@ -3104,7 +3039,6 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
                         onMove: _playerMoved,
                       ),
                     ),
-                    _buildLastMoveOverlay(),
                   ],
                 ),
               ),
@@ -3474,7 +3408,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
     _gameSubscription?.cancel();
 
     if (_pendingGameId != null) {
-      FirebaseFirestore.instance
+      FlavorConfig.firestore
           .collection('multiplayer_games')
           .doc(_pendingGameId!)
           .update({'status': 'cancelled'});
@@ -3565,63 +3499,3 @@ class TimeOption {
   TimeOption({required this.minutes, required this.display});
 }
 
-class LastMovePainter extends CustomPainter {
-  final String fromSquare;
-  final String toSquare;
-  final PlayerColor boardOrientation;
-  final bool isMyMove;
-
-  LastMovePainter({
-    required this.fromSquare,
-    required this.toSquare,
-    required this.boardOrientation,
-    this.isMyMove = false,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const ui.Color(0x80F6F669)
-      ..style = PaintingStyle.fill;
-
-    final squareSize = size.width / 8;
-
-    final fromCoords = _squareToCoordinates(fromSquare, boardOrientation);
-    final toCoords = _squareToCoordinates(toSquare, boardOrientation);
-
-    canvas.drawRect(
-      Rect.fromLTWH(fromCoords.dx * squareSize, fromCoords.dy * squareSize, squareSize, squareSize),
-      paint,
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(toCoords.dx * squareSize, toCoords.dy * squareSize, squareSize, squareSize),
-      paint,
-    );
-  }
-
-  Offset _squareToCoordinates(String square, PlayerColor orientation) {
-    if (square.length != 2) return Offset.zero;
-
-    final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0); // 0-7
-    final rank = int.parse(square[1]) - 1; // 0-7
-
-    double x, y;
-
-    if (orientation == PlayerColor.white) {
-      x = file.toDouble();
-      y = (7 - rank).toDouble();
-    } else {
-      x = (7 - file).toDouble();
-      y = rank.toDouble();
-    }
-
-    return Offset(x, y);
-  }
-
-  @override
-  bool shouldRepaint(covariant LastMovePainter oldDelegate) {
-    return oldDelegate.fromSquare != fromSquare ||
-        oldDelegate.toSquare != toSquare ||
-        oldDelegate.boardOrientation != boardOrientation;
-  }
-}

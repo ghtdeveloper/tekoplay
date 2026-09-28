@@ -44,7 +44,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   final Random _random = Random();
   final Map<String, int> _missedFive = {};
   final Map<String, int> _cpuTurnCycle = {};
-  int _humanHomeDoubles = 0;
   int _cpuHomeDoubles = 0;
 
   bool get _isUltra => widget.difficulty.toLowerCase().contains('ultra');
@@ -265,43 +264,15 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
   Future<void> _autoRollAndMove() async {
     if (_gameEnded || _currentPlayer != 'yellow') return;
     final autoPieces = _gameState.getPiecesByColor(_currentPlayer);
-    final allInHome = autoPieces.every((p) => p.isHome);
-    int d1auto = 0, d2auto = 0;
-
-    do {
-      d1auto = _random.nextInt(6) + 1;
-      d2auto = _random.nextInt(6) + 1;
-      final autoHasHome = autoPieces.any((p) => p.isHome);
-      final autoMissed = _missedFive[_currentPlayer] ?? 0;
-      if (autoMissed >= 3 && autoHasHome && d1auto != 5 && d2auto != 5) {
-        if (_random.nextBool()) { d1auto = 5; } else { d2auto = 5; }
-      }
-      _missedFive[_currentPlayer] = (autoHasHome && d1auto != 5 && d2auto != 5) ? autoMissed + 1 : 0;
-
-      if (allInHome && d1auto == d2auto && d1auto != 5) {
-        _humanHomeDoubles++;
-        setState(() {
-          _dice1Value = d1auto; _dice2Value = d2auto;
-          _totalDiceValue = d1auto + d2auto;
-          _canRollDice = false; _hasUsedDice1 = false; _hasUsedDice2 = false;
-        });
-        if (_humanHomeDoubles >= 3) {
-          _humanHomeDoubles = 0;
-          _consecutiveDoubles = 0;
-          _showEventToast(S.of(context).threeDoublesHome);
-          await Future.delayed(const Duration(milliseconds: 1500));
-          setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
-          _nextTurn();
-          return;
-        }
-        _showEventToast(S.of(context).doubleHome);
-        await Future.delayed(const Duration(milliseconds: 1000));
-        setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
-        continue;
-      }
-      _humanHomeDoubles = 0;
-      break;
-    } while (true);
+    int d1auto = _random.nextInt(6) + 1;
+    int d2auto = _random.nextInt(6) + 1;
+    final autoHasHome = autoPieces.any((p) => p.isHome);
+    final autoMissed = _missedFive[_currentPlayer] ?? 0;
+    final canExit = d1auto == 5 || d2auto == 5;
+    if (autoMissed >= 2 && autoHasHome && !canExit) {
+      if (_random.nextBool()) { d1auto = 5; d2auto = _random.nextInt(3) + 1; } else { d2auto = 5; d1auto = _random.nextInt(3) + 1; }
+    }
+    _missedFive[_currentPlayer] = (autoHasHome && d1auto != 5 && d2auto != 5) ? autoMissed + 1 : 0;
 
     setState(() {
       _dice1Value = d1auto; _dice2Value = d2auto;
@@ -314,7 +285,17 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       _cancelMoveTimer();
       _autoMove();
     } else {
-      _nextTurn();
+      final hadDouble = d1auto == d2auto;
+      if (hadDouble) {
+        setState(() {
+          _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0;
+          _canRollDice = true;
+        });
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!_gameEnded && mounted) _autoRollAndMove();
+      } else {
+        _nextTurn();
+      }
     }
   }
 
@@ -331,53 +312,25 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
       _hasUsedDice2 = false;
     });
 
-    final threeDoublesHomeMsg = S.of(context).threeDoublesHome;
-    final doubleHomeMsg = S.of(context).doubleHome;
     final noValidMovesMsg = S.of(context).noValidMoves;
 
     final humanPieces = _gameState.getPiecesByColor(_currentPlayer);
-    final allInHome = humanPieces.every((p) => p.isHome);
-    int d1r = 0, d2r = 0;
 
-    do {
-      setState(() { _isRollingDice = true; });
-      _diceAnimationController.repeat();
-      await Future.delayed(const Duration(milliseconds: 600));
-      _diceAnimationController.stop();
-      _diceAnimationController.reset();
+    setState(() { _isRollingDice = true; });
+    _diceAnimationController.repeat();
+    await Future.delayed(const Duration(milliseconds: 600));
+    _diceAnimationController.stop();
+    _diceAnimationController.reset();
 
-      d1r = _random.nextInt(6) + 1;
-      d2r = _random.nextInt(6) + 1;
-      final humanHasHome = humanPieces.any((p) => p.isHome);
-      final humanMissed = _missedFive[_currentPlayer] ?? 0;
-      if (humanMissed >= 3 && humanHasHome && d1r != 5 && d2r != 5) {
-        if (_random.nextBool()) { d1r = 5; } else { d2r = 5; }
-      }
-      _missedFive[_currentPlayer] = (humanHasHome && d1r != 5 && d2r != 5) ? humanMissed + 1 : 0;
-
-      if (allInHome && d1r == d2r && d1r != 5) {
-        _humanHomeDoubles++;
-        setState(() {
-          _dice1Value = d1r; _dice2Value = d2r;
-          _totalDiceValue = d1r + d2r; _isRollingDice = false;
-        });
-        if (_humanHomeDoubles >= 3) {
-          _humanHomeDoubles = 0;
-          _consecutiveDoubles = 0;
-          _showEventToast(threeDoublesHomeMsg);
-          await Future.delayed(const Duration(milliseconds: 1500));
-          setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
-          _nextTurn();
-          return;
-        }
-        _showEventToast(doubleHomeMsg);
-        await Future.delayed(const Duration(milliseconds: 1200));
-        setState(() { _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0; });
-        continue;
-      }
-      _humanHomeDoubles = 0;
-      break;
-    } while (true);
+    int d1r = _random.nextInt(6) + 1;
+    int d2r = _random.nextInt(6) + 1;
+    final humanHasHome = humanPieces.any((p) => p.isHome);
+    final humanMissed = _missedFive[_currentPlayer] ?? 0;
+    final canExitH = d1r == 5 || d2r == 5;
+    if (humanMissed >= 2 && humanHasHome && !canExitH) {
+      if (_random.nextBool()) { d1r = 5; d2r = _random.nextInt(3) + 1; } else { d2r = 5; d1r = _random.nextInt(3) + 1; }
+    }
+    _missedFive[_currentPlayer] = (humanHasHome && d1r != 5 && d2r != 5) ? humanMissed + 1 : 0;
 
     _bridgeBreakPieceIds = (d1r == d2r) ? _getBarreraIndices(_currentPlayer) : {};
     setState(() {
@@ -404,9 +357,17 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     _calculateMovablePieces();
 
     if (_movablePieces.isEmpty) {
+      final hadDouble = d1r == d2r;
       _showEventToast(noValidMovesMsg);
       await Future.delayed(const Duration(milliseconds: 1500));
-      if (!_gameEnded && mounted) _nextTurn();
+      if (hadDouble && !_gameEnded && mounted) {
+        setState(() {
+          _dice1Value = 0; _dice2Value = 0; _totalDiceValue = 0;
+          _canRollDice = true;
+        });
+      } else if (!_gameEnded && mounted) {
+        _nextTurn();
+      }
     } else {
       _startMoveTimer();
     }
@@ -1170,6 +1131,15 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
     _calculateMovablePieces();
 
     if (_movablePieces.isNotEmpty) {
+      if (_movablePieces.length == 1) {
+        final m = _movablePieces.first;
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (!_gameEnded && mounted && _currentPlayer == color) {
+            _executePieceMove(color, m['pieceId'] as int, m['diceValue'] as int, m['diceNumber'] as int);
+          }
+        });
+        return;
+      }
       if (color == 'yellow') _startMoveTimer();
       return;
     }
@@ -1420,8 +1390,9 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
           : (isBadTurn ? _rollCpuDiceBad() : _rollCpuDice());
       final cpuHasHome = cpuPieces.any((p) => p.isHome);
       final cpuMissed = _missedFive[cpuColor] ?? 0;
-      if (cpuMissed >= 3 && cpuHasHome && d1cpu != 5 && d2cpu != 5) {
-        if (_random.nextBool()) { d1cpu = 5; } else { d2cpu = 5; }
+      final canExitCpu = d1cpu == 5 || d2cpu == 5;
+      if (cpuMissed >= 2 && cpuHasHome && !canExitCpu) {
+        if (_random.nextBool()) { d1cpu = 5; d2cpu = _random.nextInt(3) + 1; } else { d2cpu = 5; d1cpu = _random.nextInt(3) + 1; }
       }
       _missedFive[cpuColor] = (cpuHasHome && d1cpu != 5 && d2cpu != 5) ? cpuMissed + 1 : 0;
 
@@ -2069,7 +2040,6 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
                           _hasUsedDice1 = false; _hasUsedDice2 = false;
                           _consecutiveDoubles = 0;
                           _missedFive.clear();
-                          _humanHomeDoubles = 0;
                           _cpuHomeDoubles = 0;
                           _setupActivePlayers();
                         });

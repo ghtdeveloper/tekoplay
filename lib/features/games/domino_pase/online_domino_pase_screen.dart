@@ -22,6 +22,7 @@ import '../../../core/widgets/game_chat_widget.dart';
 import 'domino_pase_tutorial_screen.dart';
 import '../../settings/settings_screen.dart';
 import '../../../generated/l10n.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 enum _PaseOnlineState { playerCountSelection, matchmaking, waitingRoom, gameActive }
 
@@ -37,7 +38,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final DominoPaseGameService _gameService = DominoPaseGameService();
   final FirestoreService _firestoreService = FirestoreService();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
   User? get _currentUser => FirebaseAuth.instance.currentUser;

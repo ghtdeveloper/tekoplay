@@ -810,7 +810,7 @@ class SquareHighlightPainter extends CustomPainter {
 
       try {
         final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0);
-        final rank = int.parse(square[1]) - 1; // 0-7
+        final rank = (int.tryParse(square[1]) ?? 1) - 1; // 0-7
 
         if (file < 0 || file > 7 || rank < 0 || rank > 7) continue;
 

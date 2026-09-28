@@ -34,6 +34,21 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "environment"
+
+    productFlavors {
+        create("prod") {
+            dimension = "environment"
+            applicationIdSuffix = ""
+            resValue("string", "app_name", "TekoPlay")
+        }
+        create("stage") {
+            dimension = "environment"
+            applicationIdSuffix = ""
+            resValue("string", "app_name", "TekoPlay Stage")
+        }
+    }
+
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")

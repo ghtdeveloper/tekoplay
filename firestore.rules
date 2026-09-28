@@ -1,0 +1,145 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+// ─── Users ───────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isAuthenticated();
+    }
+
+    // ─── User Tokens (FCM) ──────────────────────────────────────────
+    match /user_tokens/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ─── Chess multiplayer games ────────────────────────────────────
+    match /multiplayer_games/{gameId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+
+      match /chat/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update, delete: if false;
+      }
+    }
+
+    // ─── Ludo games ─────────────────────────────────────────────────
+    match /ludo_games/{gameId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+
+      match /chat/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update, delete: if false;
+      }
+    }
+
+    // ─── Domino games ───────────────────────────────────────────────
+    match /domino_games/{gameId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+
+      match /chat/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update, delete: if false;
+      }
+    }
+
+    // ─── Domino Pase games ──────────────────────────────────────────
+    match /domino_pase_games/{gameId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+
+      match /chat/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update, delete: if false;
+      }
+    }
+
+    // ─── Game invitations ───────────────────────────────────────────
+    match /game_invitations/{invitationId} {
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      );
+    }
+
+    // ─── Game matches (history) ─────────────────────────────────────
+    match /game_matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─── Supports / Technical issues ────────────────────────────────
+    match /supports/{issueId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─── Counters (anonymous usernames, etc) ────────────────────────
+    match /counters/{counterId} {
+      allow read: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow create: if false;
+      allow delete: if false;
+    }
+
+    // ─── Anonymous usernames ────────────────────────────────────────
+    match /anonymous_usernames/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─── Notifications ──────────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─── Default: deny everything else ──────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

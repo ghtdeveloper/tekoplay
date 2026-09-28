@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:encrypt/encrypt.dart' as enc;
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class ChatMessage {
   final String id;
@@ -20,7 +21,7 @@ class ChatMessage {
 }
 
 class GameChatService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final String collectionName;
   final String gameId;
   late final enc.Key _key;

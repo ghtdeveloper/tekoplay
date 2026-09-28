@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class AnonymousWalletService {
   static final AnonymousWalletService _instance = AnonymousWalletService._internal();
@@ -162,7 +163,7 @@ class AnonymousWalletService {
       }
 
       // Obtener los datos actuales del usuario en Firestore
-      final userDoc = await FirebaseFirestore.instance
+      final userDoc = await FlavorConfig.firestore
           .collection('users')
           .doc(userId)
           .get();
@@ -182,7 +183,7 @@ class AnonymousWalletService {
       final newDiamonds = currentDiamonds + anonymousDiamonds;
 
       // Actualizar en Firestore
-      await FirebaseFirestore.instance
+      await FlavorConfig.firestore
           .collection('users')
           .doc(userId)
           .update({
@@ -266,7 +267,7 @@ class AnonymousWalletService {
       return await getAnonymousCoins();
     } else {
       try {
-        final userDoc = await FirebaseFirestore.instance
+        final userDoc = await FlavorConfig.firestore
             .collection('users')
             .doc(user.uid)
             .get();
@@ -291,7 +292,7 @@ class AnonymousWalletService {
       return await getAnonymousDiamonds();
     } else {
       try {
-        final userDoc = await FirebaseFirestore.instance
+        final userDoc = await FlavorConfig.firestore
             .collection('users')
             .doc(user.uid)
             .get();

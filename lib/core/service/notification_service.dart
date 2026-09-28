@@ -13,6 +13,7 @@ import '../../generated/l10n.dart';
 
 import '../models/multiplayer_game_match_chess.dart';
 import 'firestore_service.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -21,7 +22,7 @@ class NotificationService {
 
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
 
   Future<void> initialize() async {
     await _requestPermissions();
@@ -215,24 +216,26 @@ class NotificationService {
     });
   }
 
-  void handleGameInvitationNotification(BuildContext context, Map<String, dynamic> data) {
+  void handleGameInvitationNotification(BuildContext parentContext, Map<String, dynamic> data) {
     final invitationId = data['invitationId'] as String?;
     final gameType = data['gameType'] as String?;
     final fromUserName = data['fromUserName'] as String?;
 
     if (invitationId == null) return;
 
+    final navigator = Navigator.of(parentContext);
+
     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(S.of(context).gameInvitation),
+      context: parentContext,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(S.of(dialogContext).gameInvitation),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$fromUserName ${S.of(context).invitesYouToPlay} $gameType',
+                '$fromUserName ${S.of(dialogContext).invitesYouToPlay} $gameType',
                 style: TextStyle(fontSize: 16),
                 softWrap: true,
               ),
@@ -242,21 +245,21 @@ class NotificationService {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop();
+              navigator.pop();
               _declineInvitation(invitationId);
             },
-            child: Text(S.of(context).reject, style: TextStyle(color: Colors.red)),
+            child: Text(S.of(dialogContext).reject, style: TextStyle(color: Colors.red)),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              await _acceptInvitation(context, invitationId);
+              navigator.pop();
+              await _acceptInvitation(parentContext, invitationId);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Color(0xFFEC7A34),
               foregroundColor: Colors.white,
             ),
-            child: Text(S.of(context).accept),
+            child: Text(S.of(dialogContext).accept),
           ),
         ],
       ),
@@ -264,16 +267,19 @@ class NotificationService {
   }
 
   Future<void> _acceptInvitation(BuildContext context, String invitationId) async {
+    final navigator = Navigator.of(context);
+    final scaffold = ScaffoldMessenger.of(context);
+
     try {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => Center(child: CircularProgressIndicator()),
+        builder: (_) => Center(child: CircularProgressIndicator()),
       );
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
+        navigator.pop();
+        scaffold.showSnackBar(
           SnackBar(content: Text("Error: Usuario no autenticado"), backgroundColor: Colors.red),
         );
         return;
@@ -281,20 +287,18 @@ class NotificationService {
       final hasEnoughFunds = await _validateUserFundsForInvitation(context, currentUser.uid);
       if (!context.mounted) return;
       if (!hasEnoughFunds) {
-        Navigator.of(context).pop();
+        navigator.pop();
         return;
       }
       final result = await GameInvitationService().respondToInvitation(invitationId, true);
 
-      if (!context.mounted) return;
-      Navigator.of(context).pop();
+      navigator.pop(); // pop loading
 
       if (result != null && result['success'] == true && result['gameId'] != null) {
         if (result['isLudo'] == true) {
-          Navigator.push(
-            context,
+          navigator.push(
             MaterialPageRoute(
-              builder: (context) => MultiplayerLudoScreen(
+              builder: (_) => MultiplayerLudoScreen(
                 gameId: result['gameId'],
                 playerNumber: result['playerNumber'] ?? 2,
                 matchType: result['matchType'] ?? '',
@@ -302,10 +306,9 @@ class NotificationService {
             ),
           );
         } else if (result['isDominoPase'] == true) {
-          Navigator.push(
-            context,
+          navigator.push(
             MaterialPageRoute(
-              builder: (context) => MultiplayerDominoPaseScreen(
+              builder: (_) => MultiplayerDominoPaseScreen(
                 gameId: result['gameId'],
                 playerNumber: result['playerNumber'] ?? 2,
                 matchType: result['matchType'] ?? '',
@@ -313,10 +316,9 @@ class NotificationService {
             ),
           );
         } else if (result['isDomino'] == true) {
-          Navigator.push(
-            context,
+          navigator.push(
             MaterialPageRoute(
-              builder: (context) => MultiplayerDominoScreen(
+              builder: (_) => MultiplayerDominoScreen(
                 gameId: result['gameId'],
                 playerNumber: result['playerNumber'] ?? 2,
                 matchType: result['matchType'] ?? '',
@@ -324,10 +326,9 @@ class NotificationService {
             ),
           );
         } else {
-          Navigator.push(
-            context,
+          navigator.push(
             MaterialPageRoute(
-              builder: (context) => MultiplayerChessScreen(
+              builder: (_) => MultiplayerChessScreen(
                 gameId: result['gameId'],
                 isHost: false,
                 matchType: result['matchType'] ?? "",
@@ -336,15 +337,19 @@ class NotificationService {
           );
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.of(context).errorAcceptInvitation), backgroundColor: Colors.red),
-        );
+        if (context.mounted) {
+          scaffold.showSnackBar(
+            SnackBar(content: Text(S.of(context).errorAcceptInvitation), backgroundColor: Colors.red),
+          );
+        }
       }
     } catch (e) {
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context).errorProcessInvitation), backgroundColor: Colors.red),
-      );
+      navigator.pop();
+      if (context.mounted) {
+        scaffold.showSnackBar(
+          SnackBar(content: Text(S.of(context).errorProcessInvitation), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 

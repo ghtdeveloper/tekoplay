@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tekoplay/core/models/user.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 import '../service/domino_game_service.dart';
 import '../service/domino_pase_game_service.dart';
 import '../service/ludo_game_service.dart';
@@ -258,7 +259,7 @@ class MultiplayerGameMatch {
 
   bool get isActive => status == 'active';
 
-  bool get isFinished => status == 'finished';
+  bool get isFinished => status == 'finished' || status == 'abandoned';
 
   String? getOpponentId(String currentUserId) {
     if (hostId == currentUserId) return guestId;
@@ -298,7 +299,7 @@ class GameInvitationService {
 
   GameInvitationService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final String _invitationsCollection = 'game_invitations';
 
   Future<String?> createInvitation({

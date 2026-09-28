@@ -7,7 +7,7 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  FlavorConfig.init(AppFlavor.stage);
+  FlavorConfig.init(AppFlavor.prod);
   AdManager.initialize();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,

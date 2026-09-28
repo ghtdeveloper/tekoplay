@@ -20,6 +20,7 @@ import '../../../core/service/auth_service.dart';
 import '../../../core/service/payment_service.dart';
 import '../../coins/diamond_purchase_dialog.dart';
 import '../../../generated/l10n.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 enum _DominoOnlineState { playerCountSelection, matchmaking, waitingRoom, gameActive }
 
@@ -35,7 +36,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final DominoGameService _gameService = DominoGameService();
   final FirestoreService _firestoreService = FirestoreService();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   final Random _random = Random();
   final GlobalKey<GameChatWidgetState> _chatKey = GlobalKey<GameChatWidgetState>();
 
@@ -327,7 +328,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     final balance = _currencyType == 'diamonds' ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
     final cost = _selectedBetAmount ?? 100;
     if (balance < cost) {
-      _showSnack('Fondos insuficientes');
+      _showSnack(S.of(context).insufficientFunds);
       return;
     }
 

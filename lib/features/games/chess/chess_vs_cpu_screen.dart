@@ -1,7 +1,6 @@
 import 'dart:ui' as ui;
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
@@ -15,6 +14,7 @@ import '../../../core/utils/game_result.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/interstitial_ad_helper.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class ChessVsComputerScreen extends StatefulWidget {
   final String selectedDifficulty;
@@ -179,7 +179,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
     if (currentUser == null) return;
     try {
       final userDoc =
-          await FirebaseFirestore.instance
+          await FlavorConfig.firestore
               .collection('users')
               .doc(currentUser!.uid)
               .get();
@@ -284,11 +284,13 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
               children: [
                 Icon(Icons.timer_off, color: Colors.red, size: 28),
                 SizedBox(width: 12),
-                Text(
-                  S.of(context).timeExpiredTitle,
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
+                Flexible(
+                  child: Text(
+                    S.of(context).timeExpiredTitle,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -1433,7 +1435,7 @@ class _LastMoveHighlightPainter extends CustomPainter {
 
     for (final square in [from, to]) {
       final file = _files.indexOf(square[0]);
-      final rank = int.parse(square[1]) - 1;
+      final rank = (int.tryParse(square[1]) ?? 1) - 1;
 
       final col = boardOrientation == PlayerColor.white ? file : 7 - file;
       final row = boardOrientation == PlayerColor.white ? 7 - rank : rank;

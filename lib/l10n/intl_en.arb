@@ -606,5 +606,6 @@
   "insufficientBalanceAmount": "Insufficient balance (you have {amount})",
   "codeLabelValue": "Code: {code}",
   "playerAbandonedGameMsg": "A player has abandoned the game.",
-  "betWillBeReturned": "Your bet of {amount} 💎 will be returned"
+  "betWillBeReturned": "Your bet of {amount} 💎 will be returned",
+  "needAtLeastNToPlay": "You need at least {required} {currency} to play.\nYou have: {balance}."
 }

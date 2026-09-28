@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +8,7 @@ import 'package:tekoplay/features/games/chess/chess_tutorial_screen.dart';
 import 'package:tekoplay/features/games/common/withdraw_dialog.dart';
 import 'package:tekoplay/features/games/common/withdrawal_widget.dart';
 import 'package:tekoplay/features/games/ludo/ludo_tutorial_screen.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -66,8 +66,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   int? _userCoins;
   String? _anonymousPlayerName;
   bool _isAnonymousMode = false;
-  AudioPlayer? _audioPlayer;
-  double _currentVolume = 0.5;
   bool _isDisposed = false;
   bool _isInitialized = false;
   StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
@@ -76,7 +74,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   List<LudoGameMatch> _previousActiveLudoGames = [];
   StreamSubscription<DocumentSnapshot>? _diamondsSubscription;
   final AnonymousWalletService _walletService = AnonymousWalletService();
-
+  Timer? _wakelockTimer;
 
   String? _localizedChess;
   String? _localizedDomino;
@@ -122,7 +120,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void _setupFirestoreWalletListener() {
     _diamondsSubscription?.cancel();
 
-    _diamondsSubscription = FirebaseFirestore.instance
+    _diamondsSubscription = FlavorConfig.firestore
         .collection('users')
         .doc(_currentUser!.uid)
         .snapshots()
@@ -205,31 +203,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         _enableWakeLock();
-        _resumeGameMusic();
         break;
       case AppLifecycleState.paused:
-        _audioPlayer?.pause();
-        break;
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
-        _audioPlayer?.pause();
-        break;
       case AppLifecycleState.detached:
         break;
-    }
-  }
-
-  Future<void> _resumeGameMusic() async {
-    if (_isDisposed || _audioPlayer == null) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _currentVolume = prefs.getDouble('musicVolume') ?? 0.5;
-      await _audioPlayer?.setVolume(_currentVolume);
-      await _audioPlayer?.resume();
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error reanudando música del juego: $e');
-      }
     }
   }
 
@@ -261,34 +240,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _updateAnonymousWalletUI();
   }
 
-  Future<bool> _validateUserFundsForInvitation() async {
-    if (_currentUser == null) return false;
-
-    try {
-      final usesDiamonds = matchType == S.of(context).bet || isPase;
-      final currentBalance =
-          usesDiamonds ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
-
-      bool hasInsufficientFunds = false;
-      if (usesDiamonds) {
-        hasInsufficientFunds = currentBalance < 50;
-      } else {
-        hasInsufficientFunds = currentBalance < 100;
-      }
-
-      if (hasInsufficientFunds) {
-        _showInsufficientFundsDialog();
-        return false;
-      }
-
-      return true;
-    } catch (e) {
-      if (kDebugMode) {
-        print('💥 Error validating user funds for invitation: $e');
-      }
-      return false;
-    }
-  }
 
   void _showInsufficientFundsDialog() {
     if (!mounted) return;
@@ -415,12 +366,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   Future<void> _initializeAsync() async {
     try {
       if (_isDisposed) return;
-      _audioPlayer = AudioPlayer();
-      final prefs = await SharedPreferences.getInstance();
-      _currentVolume = prefs.getDouble('musicVolume') ?? 0.5;
-      await _audioPlayer!.setVolume(_currentVolume);
-      await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
-      await _audioPlayer!.play(AssetSource('audio/background_music.mp3'));
       _loadCurrentUser();
       if (_isDisposed) return;
       _initializeNotifications();
@@ -428,6 +373,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _setupStreams();
       if (_isDisposed) return;
       await _enableWakeLock();
+      _wakelockTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+        if (!_isDisposed) _enableWakeLock();
+      });
       if (AuthService().getCurrentUser() == null) {
         _enableAnonymousMode();
       }
@@ -451,15 +399,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   Future<void> _updateVolume(double newVolume) async {
     if (_isDisposed) return;
-    try {
-      _currentVolume = newVolume;
-      await _audioPlayer?.setVolume(newVolume);
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error actualizando volumen: $e');
-      }
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('musicVolume', newVolume);
   }
 
   Future<void> _enableAnonymousMode() async {
@@ -793,20 +734,19 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void deactivate() {
-    _audioPlayer?.stop();
     super.deactivate();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _wakelockTimer?.cancel();
     _disableWakeLock();
     _isDisposed = true;
     _invitationsSubscription?.cancel();
     _activeGamesSubscription?.cancel();
     _activeLudoGamesSubscription?.cancel();
     _diamondsSubscription?.cancel();
-    _audioPlayer?.dispose();
     _previousActiveGames.clear();
     _previousActiveLudoGames.clear();
     if (_isAnonymousMode) {
@@ -1512,13 +1452,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _showNotificationsDialog(
-    BuildContext context,
+    BuildContext parentContext,
     List<Map<String, dynamic>> invitations,
   ) {
+    final navigator = Navigator.of(parentContext);
     showDialog(
-      context: context,
+      context: parentContext,
       builder:
-          (context) => Dialog(
+          (dialogContext) => Dialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -1532,7 +1473,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        S.of(context).invitations,
+                        S.of(dialogContext).invitations,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -1540,7 +1481,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       ),
                       IconButton(
                         icon: Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: () => navigator.pop(),
                       ),
                     ],
                   ),
@@ -1559,7 +1500,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                   ),
                                   SizedBox(height: 16),
                                   Text(
-                                    S.of(context).noInvitation,
+                                    S.of(dialogContext).noInvitation,
                                     style: TextStyle(color: Colors.grey),
                                   ),
                                 ],
@@ -1567,7 +1508,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             )
                             : ListView.builder(
                               itemCount: invitations.length,
-                              itemBuilder: (context, index) {
+                              itemBuilder: (_, index) {
                                 final invitation = invitations[index];
                                 return Card(
                                   margin: EdgeInsets.only(bottom: 8),
@@ -1591,7 +1532,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                     CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
-                                                    '${invitation['fromUserName']} ${S.of(context).invitesYou}',
+                                                    '${invitation['fromUserName']} ${S.of(dialogContext).invitesYou}',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       fontWeight:
@@ -1632,7 +1573,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                           children: [
                                             TextButton(
                                               onPressed: () async {
-                                                final rejectedMsg = S.of(context).invitationRejected;
+                                                final rejectedMsg = S.of(dialogContext).invitationRejected;
                                                 final result =
                                                     await GameInvitationService()
                                                         .respondToInvitation(
@@ -1641,21 +1582,22 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                         );
                                                 if (result != null &&
                                                     result['success'] == true) {
-                                                  if (!context.mounted) return;
-                                                  Navigator.of(context).pop();
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(rejectedMsg),
-                                                      backgroundColor:
-                                                          Colors.orange,
-                                                    ),
-                                                  );
+                                                  navigator.pop();
+                                                  if (parentContext.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      parentContext,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(rejectedMsg),
+                                                        backgroundColor:
+                                                            Colors.orange,
+                                                      ),
+                                                    );
+                                                  }
                                                 }
                                               },
                                               child: Text(
-                                                S.of(context).reject,
+                                                S.of(dialogContext).reject,
                                                 style: TextStyle(
                                                   color: Colors.red,
                                                 ),
@@ -1668,20 +1610,23 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                   return;
                                                 }
 
-                                                final hasEnoughFunds =
-                                                    await _validateUserFundsForInvitation();
-                                                if (!hasEnoughFunds) {
-                                                  if (!context.mounted) return;
-                                                  Navigator.of(context).pop();
+                                                final invCurrency = invitation['currencyType'] as String? ?? 'coins';
+                                                final usesDiamonds = invCurrency == 'diamonds';
+                                                final currentBalance = usesDiamonds ? (_userDiamonds ?? 0) : (_userCoins ?? 0);
+                                                final betAmount = invitation['betAmount'] as int?;
+                                                final minRequired = betAmount ?? (usesDiamonds ? 50 : 100);
+
+                                                if (currentBalance < minRequired) {
+                                                  navigator.pop();
+                                                  _showInsufficientFundsDialog();
                                                   return;
                                                 }
 
-                                                if (!context.mounted) return;
                                                 showDialog(
-                                                  context: context,
+                                                  context: dialogContext,
                                                   barrierDismissible: false,
                                                   builder:
-                                                      (context) => Center(
+                                                      (_) => Center(
                                                         child:
                                                             CircularProgressIndicator(),
                                                       ),
@@ -1694,18 +1639,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                           true,
                                                         );
 
-                                                if (!context.mounted) return;
-                                                Navigator.of(context).pop();
+                                                navigator.pop(); // pop loading
 
                                                 if (result != null &&
                                                     result['success'] == true &&
                                                     result['gameId'] != null) {
-                                                  Navigator.of(context).pop();
+                                                  navigator.pop(); // pop notifications dialog
 
-                                                  Navigator.push(
-                                                    context,
+                                                  navigator.push(
                                                     MaterialPageRoute(
-                                                      builder: (context) => result['isLudo'] == true
+                                                      builder: (_) => result['isLudo'] == true
                                                           ? MultiplayerLudoScreen(
                                                               gameId: result['gameId'],
                                                               playerNumber: result['playerNumber'] ?? 2,
@@ -1726,18 +1669,18 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                                   : MultiplayerChessScreen(
                                                                       gameId: result['gameId'],
                                                                       isHost: false,
-                                                                      matchType: widget.matchType,
+                                                                      matchType: result['matchType'] ?? widget.matchType,
                                                                     ),
                                                     ),
                                                   );
                                                 } else {
-                                                  Navigator.of(context).pop();
-                                                  if (context.mounted) {
+                                                  navigator.pop(); // pop notifications dialog
+                                                  if (parentContext.mounted) {
                                                     ScaffoldMessenger.of(
-                                                      context,
+                                                      parentContext,
                                                     ).showSnackBar(
                                                       SnackBar(
-                                                        content: Text(S.of(context).errorAcceptedInvitation),
+                                                        content: Text(S.of(parentContext).errorAcceptedInvitation),
                                                         backgroundColor:
                                                             Colors.red,
                                                       ),
@@ -1751,7 +1694,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                 ),
                                                 foregroundColor: Colors.white,
                                               ),
-                                              child: Text(S.of(context).accept),
+                                              child: Text(S.of(dialogContext).accept),
                                             ),
                                           ],
                                         ),

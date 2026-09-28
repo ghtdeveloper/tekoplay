@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/domino_game_match.dart';
+import 'package:tekoplay/core/config/flavor_config.dart';
 
 class DominoPaseGameService {
   static final DominoPaseGameService _instance =
@@ -9,7 +10,7 @@ class DominoPaseGameService {
   factory DominoPaseGameService() => _instance;
   DominoPaseGameService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FlavorConfig.firestore;
   static const String _collection = 'domino_pase_games';
   final Random _random = Random();
 
