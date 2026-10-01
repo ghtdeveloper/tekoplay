@@ -579,6 +579,27 @@ class GameInvitationService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  Future<void> cancelPendingInvitationsForGame(String gameId, {required String fromUserId}) async {
+    try {
+      final query = await _firestore
+          .collection(_invitationsCollection)
+          .where('existingGameId', isEqualTo: gameId)
+          .where('fromUserId', isEqualTo: fromUserId)
+          .where('status', isEqualTo: 'pending')
+          .get();
+      for (final doc in query.docs) {
+        await doc.reference.update({
+          'status': 'cancelled',
+          'respondedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error cancelling invitations for game $gameId: $e');
+      }
+    }
+  }
 }
 
 enum OnlineMatchmakingState {

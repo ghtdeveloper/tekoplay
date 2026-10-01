@@ -15,6 +15,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import '../../../core/service/auth_service.dart';
@@ -281,11 +282,19 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
       DeviceOrientation.portraitDown,
     ]);
     WidgetsBinding.instance.removeObserver(this);
-    if (_activeGameId != null && _currentGame != null && _currentGame!.status == 'waiting') {
-      FlavorConfig.firestore.collection('domino_games').doc(_activeGameId!).update({
-        'status': 'cancelled',
-        'finishedAt': FieldValue.serverTimestamp(),
-      }).catchError((_) {});
+    if (_activeGameId != null && _currentGame != null) {
+      if (!_gameEnded && _currentGame!.status == 'active' && _currentUser != null) {
+        _gameService.abandonGame(
+          gameId: _activeGameId!,
+          playerId: _currentUser!.uid,
+        ).catchError((_) => false);
+      } else if (_currentGame!.status == 'waiting') {
+        FlavorConfig.firestore.collection('domino_games').doc(_activeGameId!).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+        GameInvitationService().cancelPendingInvitationsForGame(_activeGameId!, fromUserId: _currentUser!.uid);
+      }
     }
     _gameSubscription?.cancel();
     _balanceSubscription?.cancel();
@@ -1189,6 +1198,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
           title: Text(S.of(context).dominoFriends, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            const InvitationBellWidget(),
             if (!inGame && widget.matchType == 'Apuesta')
               Padding(
                 padding: const EdgeInsets.only(right: 4),
@@ -1768,6 +1778,7 @@ if (widget.matchType != 'Apuesta') _selectedBetAmount = 100;
                 _waitingSubscription?.cancel();
                 if (_activeGameId != null) {
                   await _gameService.abandonGame(gameId: _activeGameId!, playerId: _currentUser!.uid);
+                  GameInvitationService().cancelPendingInvitationsForGame(_activeGameId!, fromUserId: _currentUser!.uid);
                 }
                 if (mounted) Navigator.pop(context);
               },

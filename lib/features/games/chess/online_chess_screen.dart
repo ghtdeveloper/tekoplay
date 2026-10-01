@@ -22,6 +22,7 @@ import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/interstitial_ad_helper.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../core/service/payment_service.dart';
 import '../../coins/diamond_purchase_dialog.dart';
 import 'package:tekoplay/core/config/flavor_config.dart';
@@ -3003,6 +3004,7 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
             },
           ),
           actions: [
+            const InvitationBellWidget(),
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
               onPressed: () => _chatKey.currentState?.toggleChat(),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 
 class DominoPaseTutorialScreen extends StatefulWidget {
@@ -91,6 +92,7 @@ class _DominoPaseTutorialScreenState extends State<DominoPaseTutorialScreen> {
           style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w500),
         ),
         centerTitle: true,
+        actions: const [InvitationBellWidget()],
       ),
       body: SafeArea(
         child: Column(

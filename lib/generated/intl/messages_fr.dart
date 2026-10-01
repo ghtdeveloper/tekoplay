@@ -139,6 +139,9 @@ class MessageLookup extends MessageLookupByLibrary {
       "Vous perdrez votre mise et votre caution si vous abandonnez. Les autres joueurs récupéreront leurs diamants.",
     ),
     "accept": MessageLookupByLibrary.simpleMessage("Accepter"),
+    "acceptInvitationWarning": MessageLookupByLibrary.simpleMessage(
+      "Si vous êtes dans une partie active, vous la quitterez et cela pourrait compter comme un abandon. Voulez-vous continuer ?",
+    ),
     "acceptRematch": MessageLookupByLibrary.simpleMessage(
       "Accepter la revanche",
     ),

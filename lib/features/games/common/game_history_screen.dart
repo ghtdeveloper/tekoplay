@@ -8,6 +8,7 @@ import 'package:tekoplay/core/config/flavor_config.dart';
 import '../../../core/models/game_stats.dart';
 import '../../../core/service/auth_service.dart';
 import '../../../core/models/game_match.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -676,6 +677,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen>
           ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [InvitationBellWidget()],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,

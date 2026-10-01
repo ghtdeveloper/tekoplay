@@ -385,6 +385,7 @@
   "abandonWarningFun": "The current game will be closed.",
   "abandonWarningBet": "You will lose your bet if you abandon.",
   "abandonWarningPase": "You will lose your bet and backup if you abandon. Other players will recover their diamonds.",
+  "acceptInvitationWarning": "If you are in an active game, you will leave it and it may count as an abandon. Do you want to continue?",
   "enterFriendEmail": "Enter your friend's email",
   "enterGuestEmails": "Enter each guest's email",
   "friendEmailLabel": "Friend's email",

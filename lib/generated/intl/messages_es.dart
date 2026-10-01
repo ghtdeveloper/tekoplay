@@ -137,6 +137,9 @@ class MessageLookup extends MessageLookupByLibrary {
       "Perderás tu apuesta y respaldo si abandonas. Los demás jugadores recuperarán sus diamantes.",
     ),
     "accept": MessageLookupByLibrary.simpleMessage("Aceptar"),
+    "acceptInvitationWarning": MessageLookupByLibrary.simpleMessage(
+      "Si estás en una partida activa, saldrás de ella y podría contar como abandono. ¿Deseas continuar?",
+    ),
     "acceptRematch": MessageLookupByLibrary.simpleMessage("Aceptar revancha"),
     "acceptTheirBet": MessageLookupByLibrary.simpleMessage(
       "Aceptar su apuesta",

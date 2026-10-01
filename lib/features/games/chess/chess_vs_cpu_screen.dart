@@ -8,6 +8,7 @@ import 'package:flutter_stockfish_plugin/stockfish.dart';
 import 'package:flutter_stockfish_plugin/stockfish_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/utils/game_result.dart';
@@ -1271,7 +1272,7 @@ class _ChessVsComputerScreenState extends State<ChessVsComputerScreen>
           style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [Center(child: _buildCurrencyDisplay())],
+        actions: [const InvitationBellWidget(), Center(child: _buildCurrencyDisplay())],
       ),
       body: SafeArea(
         child: Column(

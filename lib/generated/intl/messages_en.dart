@@ -136,6 +136,9 @@ class MessageLookup extends MessageLookupByLibrary {
       "You will lose your bet and backup if you abandon. Other players will recover their diamonds.",
     ),
     "accept": MessageLookupByLibrary.simpleMessage("Accept"),
+    "acceptInvitationWarning": MessageLookupByLibrary.simpleMessage(
+      "If you are in an active game, you will leave it and it may count as an abandon. Do you want to continue?",
+    ),
     "acceptRematch": MessageLookupByLibrary.simpleMessage("Accept rematch"),
     "acceptTheirBet": MessageLookupByLibrary.simpleMessage("Accept their bet"),
     "acceptedYourCounterofferOf": MessageLookupByLibrary.simpleMessage(

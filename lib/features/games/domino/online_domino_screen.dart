@@ -14,6 +14,7 @@ import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import '../../../core/service/auth_service.dart';
@@ -271,13 +272,15 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
 
   @override
   void dispose() {
-    // Cancel any waiting game left in Firestore when leaving during matchmaking
-    if (_activeGameId != null && (_screenState == _DominoOnlineState.matchmaking || _screenState == _DominoOnlineState.waitingRoom) && !_navigated) {
-      final gameId = _activeGameId!;
-      _firestore.collection('domino_games').doc(gameId).update({
-        'status': 'cancelled',
-        'finishedAt': FieldValue.serverTimestamp(),
-      }).catchError((_) {});
+    if (_activeGameId != null) {
+      if (!_gameEnded && _screenState == _DominoOnlineState.gameActive && _currentGame != null && _currentGame!.status == 'active' && _currentUser != null) {
+        _gameService.abandonGame(gameId: _activeGameId!, playerId: _currentUser!.uid).catchError((_) => false);
+      } else if ((_screenState == _DominoOnlineState.matchmaking || _screenState == _DominoOnlineState.waitingRoom) && !_navigated) {
+        _firestore.collection('domino_games').doc(_activeGameId!).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+      }
     }
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -1613,6 +1616,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           iconTheme: const IconThemeData(color: Colors.white),
           actionsPadding: EdgeInsets.zero,
           actions: [
+            const InvitationBellWidget(),
             if (!inGame && widget.matchType == 'Apuesta')
               Padding(
                 padding: const EdgeInsets.only(right: 4),

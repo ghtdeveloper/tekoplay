@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/models/ludo_game_match.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 import 'ludo_board_painter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -1183,6 +1184,7 @@ class _LudoTutorialScreenState extends State<LudoTutorialScreen>
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          const InvitationBellWidget(),
           if (!_showLessonSelector && _selectedLesson != null)
             Center(
               child: Padding(

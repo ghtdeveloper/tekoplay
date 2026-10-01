@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../../app.dart';
 import '../../core/service/auth_service.dart';
+import '../../core/widgets/invitation_bell_widget.dart';
 import '../../generated/l10n.dart';
 import '../adds/banner_ad_widget.dart';
 import '../games/common/widget_profile_image_editor.dart';
@@ -1164,6 +1165,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
           ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [InvitationBellWidget()],
       ),
       body: Column(
         children: [

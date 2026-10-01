@@ -18,6 +18,7 @@ import '../../../core/service/auth_service.dart';
 import '../../../core/service/game_chat_service.dart';
 import '../../../core/service/payment_service.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 import '../../coins/diamond_purchase_dialog.dart';
 import 'package:tekoplay/core/config/flavor_config.dart';
@@ -207,11 +208,19 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if (_activeGameId != null && _currentGame != null && _currentGame!.status == 'waiting') {
-      FlavorConfig.firestore.collection('ludo_games').doc(_activeGameId!).update({
-        'status': 'cancelled',
-        'finishedAt': FieldValue.serverTimestamp(),
-      }).catchError((_) {});
+    if (_activeGameId != null && _currentGame != null) {
+      if (!_gameEnded && !_hasUserExited && _currentGame!.status == 'active') {
+        _gameService.abandonGame(
+          gameId: _activeGameId!,
+          playerId: _currentUser?.uid ?? '',
+        ).catchError((_) => false);
+      } else if (_currentGame!.status == 'waiting') {
+        FlavorConfig.firestore.collection('ludo_games').doc(_activeGameId!).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+        GameInvitationService().cancelPendingInvitationsForGame(_activeGameId!, fromUserId: _currentUser!.uid);
+      }
     }
     _waitingSubscription?.cancel();
     _gameSubscription?.cancel();
@@ -2712,6 +2721,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                       'status': 'cancelled',
                       'finishedAt': FieldValue.serverTimestamp(),
                     }).catchError((_) {});
+                    GameInvitationService().cancelPendingInvitationsForGame(_activeGameId!, fromUserId: _currentUser!.uid);
                   }
                   _waitingSubscription?.cancel();
                   if (mounted) Navigator.of(context).pop();
@@ -3003,6 +3013,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
           title: Text(S.of(context).parchisVsFriend,
               style: const TextStyle(color: Colors.white)),
           actions: [
+            const InvitationBellWidget(),
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
               onPressed: () => _chatKey.currentState?.toggleChat(),

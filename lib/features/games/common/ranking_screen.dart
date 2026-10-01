@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:tekoplay/core/service/firestore_service.dart';
 import 'package:tekoplay/core/utils/game_type.dart';
 import '../../../core/service/auth_service.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 import '../../adds/banner_ad_widget.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -604,6 +605,7 @@ class _RankingScreenState extends State<RankingScreen>
           ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [InvitationBellWidget()],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,

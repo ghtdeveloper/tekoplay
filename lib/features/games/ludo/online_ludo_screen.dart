@@ -20,6 +20,7 @@ import '../../adds/banner_ad_widget.dart';
 import '../../coins/diamond_purchase_dialog.dart';
 import '../../../core/service/game_chat_service.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import 'ludo_board_painter.dart';
 import 'multiplayer_ludo_screen.dart';
 import 'package:tekoplay/core/config/flavor_config.dart';
@@ -2287,6 +2288,7 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
                 ),
               ),
             ),
+          const InvitationBellWidget(),
           if (_screenState == _LudoOnlineState.gameActive && !_gameEnded && _activeGameId != null)
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),

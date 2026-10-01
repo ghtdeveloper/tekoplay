@@ -3189,6 +3189,16 @@ class S {
     );
   }
 
+  /// `If you are in an active game, you will leave it and it may count as an abandon. Do you want to continue?`
+  String get acceptInvitationWarning {
+    return Intl.message(
+      'If you are in an active game, you will leave it and it may count as an abandon. Do you want to continue?',
+      name: 'acceptInvitationWarning',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Enter your friend's email`
   String get enterFriendEmail {
     return Intl.message(

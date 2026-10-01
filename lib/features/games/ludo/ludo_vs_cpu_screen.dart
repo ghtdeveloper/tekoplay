@@ -9,6 +9,7 @@ import '../../../core/models/ludo_game_match.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/service/firestore_service.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 import 'ludo_board_painter.dart';
 
@@ -2130,6 +2131,7 @@ class _LudoVsCpuScreenState extends State<LudoVsCpuScreen>
           style: const TextStyle(color: Colors.white, fontSize: 15),
         ),
         elevation: 2,
+        actions: const [InvitationBellWidget()],
       ),
       body: Stack(
         children: [

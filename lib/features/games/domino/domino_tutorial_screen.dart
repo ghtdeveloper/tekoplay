@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/models/domino_tile.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 
 // Tracks chain tile display orientation (which side is left/right on board)
@@ -448,6 +449,7 @@ class _DominoImmersiveTutorialScreenState
               ),
             ),
           ],
+          const InvitationBellWidget(),
         ],
       ),
       ),

@@ -17,6 +17,7 @@ import '../../../core/utils/game_result.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../adds/interstitial_ad_helper.dart';
 import '../../../core/widgets/game_chat_widget.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../core/service/payment_service.dart';
 import '../../coins/diamond_purchase_dialog.dart';
 import '../common/withdrawal_widget.dart';
@@ -1834,6 +1835,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           if (kDebugMode) print('Error cancelando juego desde dispose: $e');
           return false;
         });
+        GameInvitationService().cancelPendingInvitationsForGame(_activeGameId!, fromUserId: currentUser!.uid);
       }
     }
     WidgetsBinding.instance.removeObserver(this);
@@ -2124,6 +2126,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                     onPressed: () async {
                       if (_activeGameId != null) {
                         await _gameService.cancelGame(_activeGameId!, currentUser!.uid);
+                        GameInvitationService().cancelPendingInvitationsForGame(_activeGameId!, fromUserId: currentUser!.uid);
                       }
                       if (mounted) Navigator.of(context).pop();
                     },
@@ -2238,6 +2241,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
                     currentUser!.uid,
                   );
                   if (cancelled) {
+                    GameInvitationService().cancelPendingInvitationsForGame(_activeGameId!, fromUserId: currentUser!.uid);
                     navigator.pop();
                   }
                 },
@@ -2280,6 +2284,7 @@ class _MultiplayerChessScreenState extends State<MultiplayerChessScreen>
           ),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            const InvitationBellWidget(),
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
               onPressed: () => _chatKey.currentState?.toggleChat(),

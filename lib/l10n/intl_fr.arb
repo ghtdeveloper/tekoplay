@@ -383,6 +383,7 @@
   "abandonWarningFun": "La partie en cours sera fermée.",
   "abandonWarningBet": "Vous perdrez votre mise si vous abandonnez.",
   "abandonWarningPase": "Vous perdrez votre mise et votre caution si vous abandonnez. Les autres joueurs récupéreront leurs diamants.",
+  "acceptInvitationWarning": "Si vous êtes dans une partie active, vous la quitterez et cela pourrait compter comme un abandon. Voulez-vous continuer ?",
   "enterFriendEmail": "Entrez l'e-mail de votre ami",
   "enterGuestEmails": "Entrez l'e-mail de chaque invité",
   "friendEmailLabel": "E-mail de l'ami",

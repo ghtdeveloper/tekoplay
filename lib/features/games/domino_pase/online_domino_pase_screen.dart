@@ -17,6 +17,7 @@ import '../../coins/diamond_purchase_dialog.dart';
 import '../../../core/utils/game_type.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../adds/banner_ad_widget.dart';
 import '../../../core/widgets/game_chat_widget.dart';
 import 'domino_pase_tutorial_screen.dart';
@@ -323,13 +324,15 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
 
   @override
   void dispose() {
-    if (_activeGameId != null &&
-        (_screenState == _PaseOnlineState.matchmaking || _screenState == _PaseOnlineState.waitingRoom) &&
-        !_navigated) {
-      _firestore.collection('domino_pase_games').doc(_activeGameId!).update({
-        'status': 'cancelled',
-        'finishedAt': FieldValue.serverTimestamp(),
-      }).catchError((_) {});
+    if (_activeGameId != null) {
+      if (!_gameEnded && _screenState == _PaseOnlineState.gameActive && _currentGame != null && _currentGame!.status == 'active' && _currentUser != null) {
+        _gameService.abandonGame(gameId: _activeGameId!, playerId: _currentUser!.uid).catchError((_) => false);
+      } else if ((_screenState == _PaseOnlineState.matchmaking || _screenState == _PaseOnlineState.waitingRoom) && !_navigated) {
+        _firestore.collection('domino_pase_games').doc(_activeGameId!).update({
+          'status': 'cancelled',
+          'finishedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+      }
     }
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
     WidgetsBinding.instance.removeObserver(this);
@@ -1221,6 +1224,7 @@ class _OnlineDominoPaseScreenState extends State<OnlineDominoPaseScreen>
           title: Text(S.of(context).dominoPaseTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            const InvitationBellWidget(),
             if (!inGame)
               Padding(
                 padding: const EdgeInsets.only(right: 4),

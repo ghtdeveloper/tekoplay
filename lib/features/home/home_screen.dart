@@ -11,8 +11,7 @@ import '../adds/interstitial_ad_helper.dart';
 import '../games/common/game_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../core/service/auth_service.dart';
-import '../../core/service/notification_service.dart';
-import '../../core/models/multiplayer_game_match_chess.dart';
+import '../../core/widgets/invitation_bell_widget.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class MainScreen extends StatefulWidget {
@@ -32,9 +31,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   bool _isScreenKeepOnActive = false;
   Timer? _wakelockTimer;
   late InterstitialAdHelper _interstitialHelper;
-  StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
-  final Set<String> _seenInvitationIds = {};
-  bool _invitationDialogOpen = false;
 
   @override
   void initState() {
@@ -54,7 +50,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _wakelockTimer?.cancel();
-    _invitationsSubscription?.cancel();
     _disableWakeLock();
     _audioPlayer.dispose();
     _emailVerificationTimer?.cancel();
@@ -115,52 +110,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final user = AuthService().getCurrentUser();
     final canAccess = await AuthService().canAccessApp();
 
-    if (user != null) {
-      _startInvitationListener(user.uid);
-    }
-
     setState(() {
       _currentUser = user;
       _isEmailVerified = canAccess;
     });
   }
 
-  void _startInvitationListener(String uid) {
-    _invitationsSubscription?.cancel();
-    _invitationsSubscription = GameInvitationService()
-        .getPendingInvitations(uid)
-        .listen((invitations) {
-      if (!mounted) return;
-      for (final inv in invitations) {
-        final id = inv['id'] as String?;
-        if (id != null && !_seenInvitationIds.contains(id)) {
-          _seenInvitationIds.add(id);
-          if (!_invitationDialogOpen) {
-            _invitationDialogOpen = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                NotificationService().handleGameInvitationNotification(
-                  context,
-                  {
-                    'invitationId': id,
-                    'gameType': inv['gameType'],
-                    'fromUserName': inv['fromUserName'],
-                  },
-                );
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  _invitationDialogOpen = false;
-                });
-              }
-            });
-          }
-        }
-      }
-    }, onError: (e) {
-      if (kDebugMode) {
-        print('Error en stream de invitaciones (home): $e');
-      }
-    });
-  }
 
   Future<void> _initMusic() async {
     _audioPlayer = AudioPlayer();
@@ -1278,6 +1233,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          const InvitationBellWidget(),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () async {

@@ -4,6 +4,16 @@
       "collectionGroup": "game_invitations",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "existingGameId", "order": "ASCENDING" },
+        { "fieldPath": "fromUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "game_invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "fromUserId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" },

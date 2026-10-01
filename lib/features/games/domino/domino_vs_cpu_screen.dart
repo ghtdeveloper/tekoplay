@@ -9,6 +9,7 @@ import '../../../core/models/domino_tile.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/widgets/domino_board_widgets.dart';
 import '../../../core/widgets/domino_webview_board.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../core/utils/game_result.dart';
 import '../../../core/utils/game_type.dart';
 import '../../adds/interstitial_ad_helper.dart';
@@ -1046,6 +1047,7 @@ class _DominoVsComputerScreenState extends State<DominoVsComputerScreen>
           ),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            const InvitationBellWidget(),
             if (_gameStarted && !isBetMode)
               TextButton(
                 onPressed: _showStartDialog,

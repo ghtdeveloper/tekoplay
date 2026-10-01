@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chess_board/flutter_chess_board.dart';
+import '../../../core/widgets/invitation_bell_widget.dart';
 import '../../../generated/l10n.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -662,7 +663,6 @@ class _ChessImmersiveTutorialScreenState
           ),
         ),
 
-        // Botones de control (sin cambios)
         Container(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -760,6 +760,7 @@ class _ChessImmersiveTutorialScreenState
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          const InvitationBellWidget(),
           if (!_showPieceSelector && _selectedPiece != null)
             Center(
               child: Padding(
