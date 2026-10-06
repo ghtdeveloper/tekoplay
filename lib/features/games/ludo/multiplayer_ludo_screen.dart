@@ -513,11 +513,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     }
   }
 
-  Future<void> _fillBotsAndStart() async {
-    if (_activeGameId == null || !mounted) return;
-    await _gameService.fillBotsAndStart(_activeGameId!);
-  }
-
   void _startWaitRoomTimer(int fromSeconds) {
     _waitRoomTimer?.cancel();
     setState(() => _waitRoomCountdown = fromSeconds);
