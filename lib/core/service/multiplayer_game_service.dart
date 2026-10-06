@@ -746,6 +746,24 @@ class MultiplayerGameService {
     });
   }
 
+  Future<MultiplayerGameMatch?> findActiveGameForUser(String userId) async {
+    try {
+      final results = await Future.wait([
+        _firestore.collection(_gamesCollection).where('status', isEqualTo: 'active').where('hostId', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_gamesCollection).where('status', isEqualTo: 'active').where('guestId', isEqualTo: userId).limit(1).get(),
+      ]);
+      for (final snap in results) {
+        if (snap.docs.isNotEmpty) {
+          return MultiplayerGameMatch.fromFirestore(snap.docs.first);
+        }
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('Error finding active chess game: $e');
+      return null;
+    }
+  }
+
   Future<List<MultiplayerGameMatch>> getWaitingGames({
     String? gameType,
     int limit = 10,

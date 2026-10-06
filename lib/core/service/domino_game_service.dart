@@ -557,9 +557,14 @@ class DominoGameService {
             newScores[p] = game.gameState.scoreOf(p) + (p == playerNum ? totalOtherPips : 0);
           }
 
-          final winnerId = newScores.values.any((s) => s >= targetScore)
+          var winnerId = newScores.values.any((s) => s >= targetScore)
               ? game.playerIdOf(playerNum)
               : null;
+
+          // If bot won, redirect prize to best real player
+          if (winnerId != null && winnerId.startsWith('bot_')) {
+            winnerId = _bestRealPlayerByScore(game, newScores);
+          }
 
           if (winnerId != null) {
             updates['status'] = 'finished';
@@ -685,8 +690,15 @@ class DominoGameService {
           if (isGameOver) {
             final bestScore = newScores.values.reduce((a, b) => a > b ? a : b);
             final winnerNum = newScores.entries.firstWhere((e) => e.value == bestScore).key;
+            var gameWinnerId = game.playerIdOf(winnerNum);
+
+            // If bot won, redirect prize to best real player
+            if (gameWinnerId != null && gameWinnerId.startsWith('bot_')) {
+              gameWinnerId = _bestRealPlayerByScore(game, newScores);
+            }
+
             updates['status'] = 'finished';
-            updates['winnerId'] = game.playerIdOf(winnerNum);
+            updates['winnerId'] = gameWinnerId;
             updates['finishedAt'] = FieldValue.serverTimestamp();
             for (int p = 1; p <= nPlayers; p++) {
               updates['gameState.player${p}Score'] = newScores[p];
@@ -815,6 +827,25 @@ class DominoGameService {
           updates['currentTurn'] = game.nextTurnAfter(game.currentTurn);
         }
 
+        // Count remaining real (non-bot) players after replacement
+        int realCount = 0;
+        String? lastRealId;
+        for (int p = 1; p <= game.numberOfPlayers; p++) {
+          final pid = (p == playerNum) ? botId : game.playerIdOf(p);
+          if (pid != null && !pid.startsWith('bot_')) {
+            realCount++;
+            lastRealId = pid;
+          }
+        }
+
+        // If only 1 real player left, they win immediately
+        if (realCount == 1 && lastRealId != null) {
+          updates['status'] = 'finished';
+          updates['winnerId'] = lastRealId;
+          updates['finishedAt'] = FieldValue.serverTimestamp();
+          updates['reason'] = 'all_opponents_abandoned';
+        }
+
         transaction.update(gameRef, updates);
         return true;
       });
@@ -822,6 +853,20 @@ class DominoGameService {
       if (kDebugMode) print('Error abandoning domino game: $e');
       return false;
     }
+  }
+
+  /// Finds the real (non-bot) player with the highest score.
+  String? _bestRealPlayerByScore(DominoGameMatch game, Map<int, int> scores) {
+    int bestScore = -1;
+    String? bestId;
+    for (final entry in scores.entries) {
+      final pid = game.playerIdOf(entry.key);
+      if (pid != null && !pid.startsWith('bot_') && entry.value > bestScore) {
+        bestScore = entry.value;
+        bestId = pid;
+      }
+    }
+    return bestId;
   }
 
   Stream<DominoGameMatch?> getGameStream(String gameId) {

@@ -249,9 +249,7 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
         final elapsed = DateTime.now().difference(_waitRoomPausedAt!).inSeconds;
         _waitRoomPausedAt = null;
         final remaining = (_waitRoomCountdown - elapsed).clamp(0, 60);
-        if (remaining <= 0) {
-          if (_isHost && (_currentGame?.status == 'waiting')) _fillBotsAndStart();
-        } else {
+        if (remaining > 0) {
           _startWaitRoomTimer(remaining);
         }
       } else {
@@ -525,12 +523,10 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
     setState(() => _waitRoomCountdown = fromSeconds);
     _waitRoomTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted || _screenState != _FriendLudoState.waitingRoom) { t.cancel(); return; }
-      setState(() => _waitRoomCountdown--);
-      if (_waitRoomCountdown <= 0) {
+      if (_waitRoomCountdown > 0) {
+        setState(() => _waitRoomCountdown--);
+      } else {
         t.cancel();
-        if (_isHost && (_currentGame?.status == 'waiting')) {
-          _fillBotsAndStart();
-        }
       }
     });
   }
@@ -2677,15 +2673,6 @@ class _MultiplayerLudoScreenState extends State<MultiplayerLudoScreen>
                       const SizedBox(height: 6),
                       Text(S.of(context).waitingMorePlayers(remaining),
                           style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      const SizedBox(height: 6),
-                      Text(
-                        S.of(context).startingInSeconds(_waitRoomCountdown),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: _waitRoomCountdown <= 10 ? FontWeight.bold : FontWeight.normal,
-                          color: _waitRoomCountdown <= 10 ? Colors.orange.shade700 : Colors.grey,
-                        ),
-                      ),
                     ] else ...[
                       const Icon(Icons.check_circle, color: Colors.green, size: 28),
                       Text(S.of(context).allReadyStarting,

@@ -154,6 +154,23 @@ class DominoPaseGameService {
     return game.nextTurnAfter(current);
   }
 
+  String? _bestRealPlayerInPase(DominoGameMatch game) {
+    final abandoned = List<String>.from(
+        game.gameSettings?['abandonedPlayers'] ?? []);
+    int bestPips = 999;
+    String? bestId;
+    for (int p = 1; p <= game.numberOfPlayers; p++) {
+      final pid = game.playerIdOf(p);
+      if (pid == null || pid.startsWith('bot_') || abandoned.contains(pid)) continue;
+      final pips = game.gameState.handPipCount(game.gameState.handOf(p));
+      if (pips < bestPips) {
+        bestPips = pips;
+        bestId = pid;
+      }
+    }
+    return bestId;
+  }
+
   int _activePlayerCount(DominoGameMatch game) {
     final abandoned = List<String>.from(
         game.gameSettings?['abandonedPlayers'] ?? []);
@@ -316,8 +333,12 @@ class DominoPaseGameService {
         final Map<String, dynamic> updates = {};
 
         if (hand.isEmpty) {
+          var effectiveWinner = playerId;
+          if (playerId.startsWith('bot_')) {
+            effectiveWinner = _bestRealPlayerInPase(game) ?? playerId;
+          }
           updates['status'] = 'finished';
-          updates['winnerId'] = playerId;
+          updates['winnerId'] = effectiveWinner;
           updates['finishedAt'] = FieldValue.serverTimestamp();
         }
 
@@ -425,7 +446,12 @@ class DominoPaseGameService {
             });
             winnerNum = tiedPlayers.first;
           }
-          final winnerId = game.playerIdOf(winnerNum);
+          var winnerId = game.playerIdOf(winnerNum);
+
+          // If bot won, redirect prize to best real player
+          if (winnerId != null && winnerId.startsWith('bot_')) {
+            winnerId = _bestRealPlayerInPase(game) ?? winnerId;
+          }
 
           updates['status'] = 'finished';
           updates['winnerId'] = winnerId;
@@ -598,20 +624,20 @@ class DominoPaseGameService {
         final abandoned = List<String>.from(
             game.gameSettings?['abandonedPlayers'] ?? []);
         abandoned.add(playerId);
-        int activeCount = 0;
-        String? lastActiveId;
+        int realActiveCount = 0;
+        String? lastRealActiveId;
         for (int p = 1; p <= game.numberOfPlayers; p++) {
           final pid = game.playerIdOf(p);
-          if (pid != null && !abandoned.contains(pid)) {
-            activeCount++;
-            lastActiveId = pid;
+          if (pid != null && !abandoned.contains(pid) && !pid.startsWith('bot_')) {
+            realActiveCount++;
+            lastRealActiveId = pid;
           }
         }
 
-        if (activeCount <= 1 && lastActiveId != null) {
+        if (realActiveCount <= 1 && lastRealActiveId != null) {
           updates['status'] = 'abandoned';
           updates['abandonedBy'] = playerId;
-          updates['winnerId'] = lastActiveId;
+          updates['winnerId'] = lastRealActiveId;
           updates['finishedAt'] = FieldValue.serverTimestamp();
           updates['reason'] = 'abandoned';
         }
@@ -784,6 +810,26 @@ class DominoPaseGameService {
         .doc(gameId)
         .snapshots()
         .map((s) => s.exists ? DominoGameMatch.fromFirestore(s) : null);
+  }
+
+  Future<DominoGameMatch?> findActiveGameForUser(String userId) async {
+    try {
+      final results = await Future.wait([
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('hostId', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('guestId', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('guest2Id', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_collection).where('status', isEqualTo: 'active').where('guest3Id', isEqualTo: userId).limit(1).get(),
+      ]);
+      for (final snap in results) {
+        if (snap.docs.isNotEmpty) {
+          return DominoGameMatch.fromFirestore(snap.docs.first);
+        }
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('Error finding active domino pase game: $e');
+      return null;
+    }
   }
 
   Future<List<DominoGameMatch>> findWaitingGames({

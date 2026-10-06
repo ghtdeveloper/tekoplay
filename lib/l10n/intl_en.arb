@@ -608,5 +608,38 @@
   "codeLabelValue": "Code: {code}",
   "playerAbandonedGameMsg": "A player has abandoned the game.",
   "betWillBeReturned": "Your bet of {amount} 💎 will be returned",
-  "needAtLeastNToPlay": "You need at least {required} {currency} to play.\nYou have: {balance}."
+  "needAtLeastNToPlay": "You need at least {required} {currency} to play.\nYou have: {balance}.",
+  "phoneVerificationRequired": "Phone verification required",
+  "phoneVerificationDesc": "To play in betting mode you need to verify your phone number.",
+  "enterPhoneNumber": "Enter your phone number",
+  "phoneHint": "+1 809 555 1234",
+  "sendCode": "Send code",
+  "enterVerificationCode": "Enter verification code",
+  "codeHint": "123456",
+  "verifyCode": "Verify",
+  "phoneVerified": "Phone verified successfully",
+  "phoneVerificationError": "Phone verification error",
+  "invalidPhoneNumber": "Invalid phone number",
+  "invalidCode": "Invalid code",
+  "bettingTemporarilyDisabled": "Betting temporarily disabled",
+  "bettingDisabledDesc": "Betting is temporarily paused. Please try again later.",
+  "accountSuspended": "Account suspended",
+  "accountSuspendedDesc": "Your account has been suspended. Contact support for more information.",
+  "rateLimitReached": "Game limit reached",
+  "rateLimitDesc": "You have played too many games recently. Wait a moment before playing another.",
+  "verifyPhone": "Verify phone",
+  "securityCheck": "Security check",
+  "securityVerification": "Security verification",
+  "captchaDesc": "Complete the verification to play in betting mode.",
+  "activeGameFound": "Active game found",
+  "activeGameFoundDesc": "You have an active {gameType} game. Would you like to rejoin?",
+  "@activeGameFoundDesc": {
+    "placeholders": {
+      "gameType": {}
+    }
+  },
+  "rejoin": "Rejoin",
+  "incorrectAnswer": "Incorrect answer, try again",
+  "tryAgain": "Wrong. Solve the new operation",
+  "verify": "Verify"
 }

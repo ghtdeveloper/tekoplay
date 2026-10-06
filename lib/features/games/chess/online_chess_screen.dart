@@ -2380,11 +2380,19 @@ class _OnlineChessScreenState extends State<OnlineChessScreen>
         final userData = await _firestoreService.getUser(currentUser!.uid);
         if (userData != null) {
           if (isBetMode) {
-            final newDiamondsEarned = userData.diamondsEarned + currencyChange;
-            await _firestoreService.updateUserDiamondsEarned(
-              currentUser!.uid,
-              newDiamondsEarned,
-            );
+            if (currencyChange > 0) {
+              final newDiamondsEarned = userData.diamondsEarned + currencyChange;
+              await _firestoreService.updateUserDiamondsEarned(
+                currentUser!.uid,
+                newDiamondsEarned,
+              );
+            } else {
+              final newDiamonds = userData.diamonds + currencyChange;
+              await _firestoreService.updateUserDiamonds(
+                currentUser!.uid,
+                newDiamonds,
+              );
+            }
           } else {
             final currentCoins = userData.coins;
             final newCoins = currentCoins + currencyChange;

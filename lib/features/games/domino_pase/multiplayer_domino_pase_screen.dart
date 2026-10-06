@@ -160,7 +160,8 @@ class _MultiplayerDominoPaseScreenState
       if (_isScreenKeepOnActive) WakelockPlus.enable();
       _awayTimer?.cancel();
       _awayTimer = null;
-      _resumeTimersAfterReturn();
+      _autoPassPending = false;
+      _refreshAndResumeGame();
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
       if (!_gameEnded && _activeGameId != null) {
@@ -542,6 +543,30 @@ class _MultiplayerDominoPaseScreenState
   void _stopOpponentTimer() {
     _opponentTimer?.cancel();
     _opponentTimer = null;
+  }
+
+  Future<void> _refreshAndResumeGame() async {
+    if (_gameEnded || _activeGameId == null || _currentUser == null) return;
+    try {
+      final doc = await _firestore.collection('domino_pase_games').doc(_activeGameId!).get();
+      if (!doc.exists || !mounted) return;
+      final freshGame = DominoGameMatch.fromFirestore(doc);
+
+      if (freshGame.isFinished || freshGame.isAbandoned) {
+        _stopTurnTimer();
+        _stopOpponentTimer();
+        setState(() { _currentGame = freshGame; _gameEnded = true; });
+        _disableWakeLock();
+        _showGameOverDialog(freshGame);
+        return;
+      }
+
+      setState(() { _currentGame = freshGame; });
+      _resumeTimersAfterReturn();
+    } catch (e) {
+      if (kDebugMode) print('Error refreshing game state: $e');
+      _resumeTimersAfterReturn();
+    }
   }
 
   void _resumeTimersAfterReturn() {

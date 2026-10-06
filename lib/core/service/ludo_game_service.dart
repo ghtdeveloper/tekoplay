@@ -469,13 +469,32 @@ class LudoGameService {
           final finishedPlayers = [...game.finishedPlayers, playerId];
           updates['finishedPlayers'] = finishedPlayers;
 
-          if (finishedPlayers.length == 1) {
+          if (game.winnerId == null && !playerId.startsWith('bot_')) {
             updates['winnerId'] = playerId;
           }
 
           if (finishedPlayers.length >= game.playerCount - 1) {
             updates['status'] = 'finished';
             updates['finishedAt'] = FieldValue.serverTimestamp();
+
+            final currentWinner = updates['winnerId'] ?? game.winnerId;
+            if (currentWinner == null || (currentWinner is String && currentWinner.startsWith('bot_'))) {
+              for (final fid in finishedPlayers) {
+                if (!fid.startsWith('bot_')) {
+                  updates['winnerId'] = fid;
+                  break;
+                }
+              }
+              if (updates['winnerId'] == null && game.winnerId == null) {
+                for (int p = 1; p <= game.playerCount; p++) {
+                  final pid = game.getPlayerIdByNumber(p);
+                  if (pid != null && !pid.startsWith('bot_')) {
+                    updates['winnerId'] = pid;
+                    break;
+                  }
+                }
+              }
+            }
           }
         }
 
@@ -526,7 +545,11 @@ class LudoGameService {
         if (game.guest4Id != null) game.guest4Id!,
       ].where((id) => id != playerId).toList();
 
-      if (activePlayers.length == 1) {
+      final realPlayers = activePlayers.where((id) => !id.startsWith('bot_')).toList();
+
+      if (realPlayers.length == 1) {
+        winnerId = realPlayers.first;
+      } else if (realPlayers.isEmpty && activePlayers.isNotEmpty) {
         winnerId = activePlayers.first;
       }
 
@@ -626,6 +649,26 @@ class LudoGameService {
               .map((doc) => LudoGameMatch.fromFirestore(doc))
               .toList();
         });
+  }
+
+  Future<LudoGameMatch?> findActiveGameForUser(String userId) async {
+    try {
+      final results = await Future.wait([
+        _firestore.collection(_gamesCollection).where('status', isEqualTo: 'active').where('hostId', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_gamesCollection).where('status', isEqualTo: 'active').where('guest2Id', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_gamesCollection).where('status', isEqualTo: 'active').where('guest3Id', isEqualTo: userId).limit(1).get(),
+        _firestore.collection(_gamesCollection).where('status', isEqualTo: 'active').where('guest4Id', isEqualTo: userId).limit(1).get(),
+      ]);
+      for (final snap in results) {
+        if (snap.docs.isNotEmpty) {
+          return LudoGameMatch.fromFirestore(snap.docs.first);
+        }
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('Error finding active ludo game: $e');
+      return null;
+    }
   }
 
   Future<List<LudoGameMatch>> findWaitingGames({

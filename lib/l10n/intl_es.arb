@@ -608,5 +608,38 @@
   "codeLabelValue": "Código: {code}",
   "playerAbandonedGameMsg": "Un jugador abandonó la partida.",
   "betWillBeReturned": "Tu apuesta de {amount} 💎 será devuelta",
-  "needAtLeastNToPlay": "Necesitas al menos {required} {currency} para jugar.\nTienes: {balance}."
+  "needAtLeastNToPlay": "Necesitas al menos {required} {currency} para jugar.\nTienes: {balance}.",
+  "phoneVerificationRequired": "Verificación de teléfono requerida",
+  "phoneVerificationDesc": "Para jugar en modo apuesta necesitas verificar tu número de teléfono.",
+  "enterPhoneNumber": "Ingresa tu número de teléfono",
+  "phoneHint": "+1 809 555 1234",
+  "sendCode": "Enviar código",
+  "enterVerificationCode": "Ingresa el código de verificación",
+  "codeHint": "123456",
+  "verifyCode": "Verificar",
+  "phoneVerified": "Teléfono verificado exitosamente",
+  "phoneVerificationError": "Error al verificar el teléfono",
+  "invalidPhoneNumber": "Número de teléfono inválido",
+  "invalidCode": "Código inválido",
+  "bettingTemporarilyDisabled": "Apuestas temporalmente deshabilitadas",
+  "bettingDisabledDesc": "Las apuestas están pausadas temporalmente. Intenta más tarde.",
+  "accountSuspended": "Cuenta suspendida",
+  "accountSuspendedDesc": "Tu cuenta ha sido suspendida. Contacta soporte para más información.",
+  "rateLimitReached": "Límite de partidas alcanzado",
+  "rateLimitDesc": "Has jugado demasiadas partidas recientemente. Espera un momento antes de jugar otra.",
+  "verifyPhone": "Verificar teléfono",
+  "securityVerification": "Verificación de seguridad",
+  "captchaDesc": "Completa la verificación para jugar en modo apuesta.",
+  "securityCheck": "Verificación de seguridad",
+  "activeGameFound": "Partida en curso",
+  "activeGameFoundDesc": "Tienes una partida de {gameType} activa. ¿Deseas retomar?",
+  "@activeGameFoundDesc": {
+    "placeholders": {
+      "gameType": {}
+    }
+  },
+  "rejoin": "Retomar",
+  "incorrectAnswer": "Respuesta incorrecta, intenta de nuevo",
+  "tryAgain": "Incorrecto. Resuelve la nueva operación",
+  "verify": "Verificar"
 }

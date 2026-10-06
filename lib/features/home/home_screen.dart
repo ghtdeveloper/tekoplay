@@ -558,42 +558,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _signInWithFacebook() async {
-    try {
-      final user = await AuthService().signInWithFacebook();
-      if (!mounted) return;
-
-      if (user != null) {
-        setState(() {
-          _currentUser = user;
-          _isEmailVerified = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("${S.of(context).loggedInAs} ${user.displayName ?? user.email}"),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(S.of(context).errorSignInFacebook),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(S.of(context).errorSignInFacebook),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
   Future<void> _signInWithEmail(BuildContext context) async {
     showDialog(
       context: context,
@@ -1160,25 +1124,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     onTap: () async {
                       Navigator.of(context).pop();
                       await _signInWithGoogle();
-                    },
-                  ),
-                ),
-
-                Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 4,
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.facebook,
-                      color: Colors.blue,
-                      size: 32,
-                    ),
-                    title: Text(S.of(context).facebookLogin),
-                    onTap: () async {
-                      Navigator.of(context).pop();
-                      await _signInWithFacebook();
                     },
                   ),
                 ),

@@ -159,12 +159,16 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
       if (_isScreenKeepOnActive) WakelockPlus.enable();
       _awayTimer?.cancel();
       _awayTimer = null;
-      _resumeTimersAfterReturn();
+      _autoPassPending = false;
+      _botMoveTimer?.cancel();
+      _isOpponentThinking = false;
+      _refreshAndResumeGame();
     } else if (state == AppLifecycleState.paused) {
       WakelockPlus.disable();
       if (!_gameEnded && _activeGameId != null) {
         _stopTurnTimer();
         _stopOpponentTimer();
+        _botMoveTimer?.cancel();
         _awaySecondsLeft = 60;
         _awayTimer = Timer.periodic(const Duration(seconds: 1), (t) {
           _awaySecondsLeft--;
@@ -176,6 +180,33 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
           }
         });
       }
+    }
+  }
+
+  Future<void> _refreshAndResumeGame() async {
+    if (_gameEnded || _activeGameId == null || _currentUser == null) return;
+    try {
+      final doc = await _firestore.collection('domino_games').doc(_activeGameId!).get();
+      if (!doc.exists || !mounted) return;
+      final freshGame = DominoGameMatch.fromFirestore(doc);
+
+      if (freshGame.isFinished || freshGame.isAbandoned) {
+        _stopTurnTimer();
+        _stopOpponentTimer();
+        setState(() { _currentGame = freshGame; _gameEnded = true; });
+        _disableWakeLock();
+        if (_isPlayingVsBot) _handleBotGameReward(freshGame);
+        _showGameOverDialog(freshGame);
+        return;
+      }
+
+      setState(() { _currentGame = freshGame; _lastServerGame = freshGame; _isDrawing = false; });
+      _resumeTimersAfterReturn();
+
+      if (_isOpponent(freshGame)) _scheduleOpponentTurn(freshGame);
+    } catch (e) {
+      if (kDebugMode) print('Error refreshing game state: $e');
+      _resumeTimersAfterReturn();
     }
   }
 
@@ -480,7 +511,6 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
               guestPhotoUrl: _myPhotoUrl,
             );
             if (joined && !_navigated) {
-              // Cancel our empty game
               try {
                 await _firestore.collection('domino_games').doc(_activeGameId!).update({
                   'status': 'cancelled',
@@ -1018,10 +1048,7 @@ class _OnlineDominoScreenState extends State<OnlineDominoScreen>
     if (_isOpponentThinking) return;
     setState(() => _isOpponentThinking = true);
     _botMoveTimer?.cancel();
-    final isBet = _currencyType == 'diamonds';
-    final delay = isBet
-        ? Duration(milliseconds: 3500 + _random.nextInt(1000))
-        : Duration(milliseconds: 800 + _random.nextInt(600));
+    const delay = Duration(seconds: 4);
     _botMoveTimer = Timer(delay, () {
       if (!mounted) return;
       _makeBotMove(game);

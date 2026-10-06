@@ -429,18 +429,31 @@ class _OnlineLudoScreenState extends State<OnlineLudoScreen>
 
       if (eligible.isEmpty || !mounted || _navigated || _isPlayingAgainstBot) return;
 
+      eligible.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final target = eligible.first;
+
       if (_screenState == _LudoOnlineState.waitingRoom && _activeGameId != null) {
-        _gameSubscription?.cancel();
-        _keepAliveTimer?.cancel();
-        _firestore.collection('ludo_games').doc(_activeGameId).update({
-          'status': 'cancelled',
-          'finishedAt': FieldValue.serverTimestamp(),
-        }).catchError((_) {});
-        _activeGameId = null;
-        setState(() => _screenState = _LudoOnlineState.matchmaking);
+        final myGameDoc = await _firestore.collection('ludo_games').doc(_activeGameId).get();
+        if (!myGameDoc.exists) return;
+        final myCreatedAt = (myGameDoc.data()!['createdAt'] as Timestamp?)?.toDate();
+        if (myCreatedAt == null) return;
+
+        if (target.createdAt.isBefore(myCreatedAt) ||
+            (target.createdAt.isAtSameMomentAs(myCreatedAt) && target.id.compareTo(_activeGameId!) < 0)) {
+          _gameSubscription?.cancel();
+          _keepAliveTimer?.cancel();
+          _firestore.collection('ludo_games').doc(_activeGameId).update({
+            'status': 'cancelled',
+            'finishedAt': FieldValue.serverTimestamp(),
+          }).catchError((_) {});
+          _activeGameId = null;
+          setState(() => _screenState = _LudoOnlineState.matchmaking);
+        } else {
+          return;
+        }
       }
 
-      await _joinGame(eligible.first);
+      await _joinGame(target);
     } catch (_) {
     } finally {
       _isJoiningGame = false;

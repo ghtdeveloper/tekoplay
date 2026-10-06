@@ -5168,6 +5168,261 @@ class S {
       args: [required, currency, balance],
     );
   }
+
+  /// `Phone verification required`
+  String get phoneVerificationRequired {
+    return Intl.message(
+      'Phone verification required',
+      name: 'phoneVerificationRequired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `To play in betting mode you need to verify your phone number.`
+  String get phoneVerificationDesc {
+    return Intl.message(
+      'To play in betting mode you need to verify your phone number.',
+      name: 'phoneVerificationDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enter your phone number`
+  String get enterPhoneNumber {
+    return Intl.message(
+      'Enter your phone number',
+      name: 'enterPhoneNumber',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `+1 809 555 1234`
+  String get phoneHint {
+    return Intl.message(
+      '+1 809 555 1234',
+      name: 'phoneHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Send code`
+  String get sendCode {
+    return Intl.message('Send code', name: 'sendCode', desc: '', args: []);
+  }
+
+  /// `Enter verification code`
+  String get enterVerificationCode {
+    return Intl.message(
+      'Enter verification code',
+      name: 'enterVerificationCode',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `123456`
+  String get codeHint {
+    return Intl.message('123456', name: 'codeHint', desc: '', args: []);
+  }
+
+  /// `Verify`
+  String get verifyCode {
+    return Intl.message('Verify', name: 'verifyCode', desc: '', args: []);
+  }
+
+  /// `Phone verified successfully`
+  String get phoneVerified {
+    return Intl.message(
+      'Phone verified successfully',
+      name: 'phoneVerified',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Phone verification error`
+  String get phoneVerificationError {
+    return Intl.message(
+      'Phone verification error',
+      name: 'phoneVerificationError',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Invalid phone number`
+  String get invalidPhoneNumber {
+    return Intl.message(
+      'Invalid phone number',
+      name: 'invalidPhoneNumber',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Invalid code`
+  String get invalidCode {
+    return Intl.message(
+      'Invalid code',
+      name: 'invalidCode',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Betting temporarily disabled`
+  String get bettingTemporarilyDisabled {
+    return Intl.message(
+      'Betting temporarily disabled',
+      name: 'bettingTemporarilyDisabled',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Betting is temporarily paused. Please try again later.`
+  String get bettingDisabledDesc {
+    return Intl.message(
+      'Betting is temporarily paused. Please try again later.',
+      name: 'bettingDisabledDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Account suspended`
+  String get accountSuspended {
+    return Intl.message(
+      'Account suspended',
+      name: 'accountSuspended',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Your account has been suspended. Contact support for more information.`
+  String get accountSuspendedDesc {
+    return Intl.message(
+      'Your account has been suspended. Contact support for more information.',
+      name: 'accountSuspendedDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Game limit reached`
+  String get rateLimitReached {
+    return Intl.message(
+      'Game limit reached',
+      name: 'rateLimitReached',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You have played too many games recently. Wait a moment before playing another.`
+  String get rateLimitDesc {
+    return Intl.message(
+      'You have played too many games recently. Wait a moment before playing another.',
+      name: 'rateLimitDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Verify phone`
+  String get verifyPhone {
+    return Intl.message(
+      'Verify phone',
+      name: 'verifyPhone',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Security check`
+  String get securityCheck {
+    return Intl.message(
+      'Security check',
+      name: 'securityCheck',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Security verification`
+  String get securityVerification {
+    return Intl.message(
+      'Security verification',
+      name: 'securityVerification',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Complete the verification to play in betting mode.`
+  String get captchaDesc {
+    return Intl.message(
+      'Complete the verification to play in betting mode.',
+      name: 'captchaDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Active game found`
+  String get activeGameFound {
+    return Intl.message(
+      'Active game found',
+      name: 'activeGameFound',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You have an active {gameType} game. Would you like to rejoin?`
+  String activeGameFoundDesc(Object gameType) {
+    return Intl.message(
+      'You have an active $gameType game. Would you like to rejoin?',
+      name: 'activeGameFoundDesc',
+      desc: '',
+      args: [gameType],
+    );
+  }
+
+  /// `Rejoin`
+  String get rejoin {
+    return Intl.message('Rejoin', name: 'rejoin', desc: '', args: []);
+  }
+
+  /// `Incorrect answer, try again`
+  String get incorrectAnswer {
+    return Intl.message(
+      'Incorrect answer, try again',
+      name: 'incorrectAnswer',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Wrong. Solve the new operation`
+  String get tryAgain {
+    return Intl.message(
+      'Wrong. Solve the new operation',
+      name: 'tryAgain',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Verify`
+  String get verify {
+    return Intl.message('Verify', name: 'verify', desc: '', args: []);
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<S> {

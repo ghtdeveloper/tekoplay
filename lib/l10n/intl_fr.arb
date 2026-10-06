@@ -604,5 +604,38 @@
   "codeLabelValue": "Code : {code}",
   "playerAbandonedGameMsg": "Un joueur a abandonné la partie.",
   "betWillBeReturned": "Votre mise de {amount} 💎 sera remboursée",
-  "needAtLeastNToPlay": "Vous avez besoin d'au moins {required} {currency} pour jouer.\nVous avez : {balance}."
+  "needAtLeastNToPlay": "Vous avez besoin d'au moins {required} {currency} pour jouer.\nVous avez : {balance}.",
+  "phoneVerificationRequired": "Vérification du téléphone requise",
+  "phoneVerificationDesc": "Pour jouer en mode pari, vous devez vérifier votre numéro de téléphone.",
+  "enterPhoneNumber": "Entrez votre numéro de téléphone",
+  "phoneHint": "+1 809 555 1234",
+  "sendCode": "Envoyer le code",
+  "enterVerificationCode": "Entrez le code de vérification",
+  "codeHint": "123456",
+  "verifyCode": "Vérifier",
+  "phoneVerified": "Téléphone vérifié avec succès",
+  "phoneVerificationError": "Erreur de vérification du téléphone",
+  "invalidPhoneNumber": "Numéro de téléphone invalide",
+  "invalidCode": "Code invalide",
+  "bettingTemporarilyDisabled": "Paris temporairement désactivés",
+  "bettingDisabledDesc": "Les paris sont temporairement suspendus. Réessayez plus tard.",
+  "accountSuspended": "Compte suspendu",
+  "accountSuspendedDesc": "Votre compte a été suspendu. Contactez le support pour plus d'informations.",
+  "rateLimitReached": "Limite de parties atteinte",
+  "rateLimitDesc": "Vous avez joué trop de parties récemment. Attendez un moment avant de jouer.",
+  "verifyPhone": "Vérifier le téléphone",
+  "securityCheck": "Vérification de sécurité",
+  "securityVerification": "Vérification de sécurité",
+  "captchaDesc": "Complétez la vérification pour jouer en mode pari.",
+  "activeGameFound": "Partie en cours",
+  "activeGameFoundDesc": "Vous avez une partie de {gameType} active. Voulez-vous la reprendre ?",
+  "@activeGameFoundDesc": {
+    "placeholders": {
+      "gameType": {}
+    }
+  },
+  "rejoin": "Reprendre",
+  "incorrectAnswer": "Réponse incorrecte, réessayez",
+  "tryAgain": "Incorrect. Résolvez la nouvelle opération",
+  "verify": "Vérifier"
 }

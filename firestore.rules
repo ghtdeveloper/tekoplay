@@ -137,6 +137,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─── System config (read-only for clients) ──────────────────────
+    match /system_config/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // ─── Audit log (admin only) ───────────────────────────────────
+    match /_audit_log/{docId} {
+      allow read, write: if false;
+    }
+
     // ─── Default: deny everything else ──────────────────────────────
     match /{document=**} {
       allow read, write: if false;

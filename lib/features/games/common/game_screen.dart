@@ -12,11 +12,16 @@ import 'package:tekoplay/core/config/flavor_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../core/models/domino_game_match.dart';
 import '../../../core/models/ludo_game_match.dart';
 import '../../../core/models/multiplayer_game_match_chess.dart';
 import '../../../core/widgets/invitation_bell_widget.dart';
+import '../../../core/widgets/captcha_verification_dialog.dart' show CaptchaVerificationDialog;
 import '../../../core/service/anonymous_wallet_service.dart';
 import '../../../core/service/auth_service.dart';
+import '../../../core/service/betting_security_service.dart';
+import '../../../core/service/domino_game_service.dart';
+import '../../../core/service/domino_pase_game_service.dart';
 import '../../../core/service/firestore_service.dart';
 import '../../../core/service/ludo_game_service.dart';
 import '../../../core/service/multiplayer_game_service.dart';
@@ -284,6 +289,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         setState(() {
           _isInitialized = true;
         });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_isDisposed) _checkForActiveGames();
+        });
       }
     } catch (e) {
       if (kDebugMode) {
@@ -295,6 +303,133 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         });
       }
     }
+  }
+
+  Future<void> _checkForActiveGames() async {
+    if (_isDisposed || _currentUser == null) return;
+    final uid = _currentUser!.uid;
+
+    try {
+      final results = await Future.wait<dynamic>([
+        MultiplayerGameService().findActiveGameForUser(uid),
+        LudoGameService().findActiveGameForUser(uid),
+        DominoGameService().findActiveGameForUser(uid),
+        DominoPaseGameService().findActiveGameForUser(uid),
+      ]);
+
+      if (_isDisposed || !mounted) return;
+
+      final chessGame = results[0] as MultiplayerGameMatch?;
+      final ludoGame = results[1] as LudoGameMatch?;
+      final dominoGame = results[2] as DominoGameMatch?;
+      final dominoPaseGame = results[3] as DominoGameMatch?;
+
+      if (chessGame != null) {
+        _showRejoinDialog(
+          gameLabel: S.of(context).chess,
+          onRejoin: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MultiplayerChessScreen(
+                gameId: chessGame.id,
+                isHost: chessGame.hostId == uid,
+                matchType: chessGame.currencyType == 'diamonds'
+                    ? S.of(context).bet
+                    : S.of(context).fun,
+              ),
+            ),
+          ),
+        );
+      } else if (ludoGame != null) {
+        final playerNumber = ludoGame.getPlayerNumber(uid) ?? 1;
+        _showRejoinDialog(
+          gameLabel: S.of(context).parchisShort,
+          onRejoin: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MultiplayerLudoScreen(
+                gameId: ludoGame.id,
+                playerNumber: playerNumber,
+                matchType: ludoGame.currencyType,
+              ),
+            ),
+          ),
+        );
+      } else if (dominoGame != null) {
+        final playerNumber = dominoGame.getPlayerNumber(uid);
+        _showRejoinDialog(
+          gameLabel: S.of(context).domino,
+          onRejoin: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MultiplayerDominoScreen(
+                gameId: dominoGame.id,
+                playerNumber: playerNumber,
+                matchType: dominoGame.currencyType == 'diamonds'
+                    ? S.of(context).bet
+                    : S.of(context).fun,
+              ),
+            ),
+          ),
+        );
+      } else if (dominoPaseGame != null) {
+        final playerNumber = dominoPaseGame.getPlayerNumber(uid);
+        _showRejoinDialog(
+          gameLabel: '${S.of(context).domino} ${S.of(context).pase}',
+          onRejoin: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MultiplayerDominoPaseScreen(
+                gameId: dominoPaseGame.id,
+                playerNumber: playerNumber,
+                matchType: S.of(context).pase,
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error checking active games: $e');
+    }
+  }
+
+  void _showRejoinDialog({
+    required String gameLabel,
+    required VoidCallback onRejoin,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.sports_esports, color: Color(0xFFEC7A34), size: 28),
+            const SizedBox(width: 8),
+            Flexible(child: Text(S.of(ctx).activeGameFound)),
+          ],
+        ),
+        content: Text(S.of(ctx).activeGameFoundDesc(gameLabel)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(S.of(ctx).cancel),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onRejoin();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEC7A34),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(S.of(ctx).rejoin),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _updateVolume(double newVolume) async {
@@ -1299,11 +1434,61 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
 
 
-  void _showFriendGameDialog(BuildContext context) {
+  Future<bool> _checkBettingSecurity(BuildContext ctx) async {
+    final isBetting = matchType == S.of(ctx).bet || isPase;
+    if (!isBetting) return true;
+
+    final result = await BettingSecurityService().canPlayBettingGame();
+    if (!ctx.mounted) return false;
+
+    switch (result) {
+      case BettingCheckResult.allowed:
+        return true;
+      case BettingCheckResult.captchaRequired:
+        final verified = await showDialog<bool>(
+          context: ctx,
+          builder: (_) => const CaptchaVerificationDialog(),
+        );
+        return verified == true;
+      case BettingCheckResult.suspended:
+        _showSecurityAlert(ctx, S.of(ctx).accountSuspended, S.of(ctx).accountSuspendedDesc);
+        return false;
+      case BettingCheckResult.notAuthenticated:
+        return false;
+    }
+  }
+
+  void _showSecurityAlert(BuildContext ctx, String title, String message) {
+    showDialog(
+      context: ctx,
+      builder: (c) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            const SizedBox(width: 8),
+            Flexible(child: Text(title)),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: Text(S.of(c).close),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFriendGameDialog(BuildContext context) async {
     if (_currentUser == null) {
       _showLoginRequiredDialog(context, S.of(context).vsFriend);
       return;
     }
+
+    if (!await _checkBettingSecurity(context)) return;
+
+    if (!context.mounted) return;
 
     if (isLudo) {
       Navigator.push(
@@ -1371,7 +1556,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
 
-  void _showComputerGameDialog(BuildContext context) {
+  void _showComputerGameDialog(BuildContext context) async {
+    if (!await _checkBettingSecurity(context)) return;
+    if (!context.mounted) return;
+
     if (isChess) {
       if (matchType == S.of(context).bet) {
         Navigator.push(
@@ -1895,11 +2083,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showOnlineGameDialog(BuildContext context) {
+  void _showOnlineGameDialog(BuildContext context) async {
     if (_currentUser == null) {
       _showLoginRequiredDialog(context, S.of(context).online);
       return;
     }
+
+    if (!await _checkBettingSecurity(context)) return;
+    if (!context.mounted) return;
+
     if (isChess) {
       Navigator.push(
         context,

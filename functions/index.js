@@ -47,6 +47,61 @@
     }
   }
 
+  function getTodayKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+
+  async function readSecurityDocs(db, transaction) {
+    const todayKey = getTodayKey();
+    const configRef = db.collection('system_config').doc('betting_limits');
+    const dailyPayoutRef = db.collection('system_config').doc(`daily_payouts_${todayKey}`);
+    const configDoc = await transaction.get(configRef);
+    const dailyPayoutDoc = await transaction.get(dailyPayoutRef);
+    return {
+      config: configDoc.exists ? configDoc.data() : {},
+      dailyPayout: dailyPayoutDoc.exists ? dailyPayoutDoc.data() : null,
+      configRef, dailyPayoutRef, todayKey,
+    };
+  }
+
+  function writePayoutTracking(transaction, security, rewardAmount, gameId) {
+    const { dailyPayout, dailyPayoutRef, todayKey, config } = security;
+    const currentTotal = dailyPayout ? (dailyPayout.totalPaidOut || 0) : 0;
+    const newTotal = currentTotal + rewardAmount;
+    const maxDaily = config.maxDailyPayout || 500000;
+
+    if (dailyPayout) {
+      transaction.update(dailyPayoutRef, {
+        totalPaidOut: admin.firestore.FieldValue.increment(rewardAmount),
+        lastGameId: gameId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      transaction.set(dailyPayoutRef, {
+        date: todayKey,
+        totalPaidOut: rewardAmount,
+        lastGameId: gameId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (newTotal > maxDaily) {
+      transaction.update(security.configRef, { bettingEnabled: false });
+    }
+  }
+
+  async function logAudit(db, entry) {
+    try {
+      await db.collection('_audit_log').add({
+        ...entry,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Audit log error:', e);
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // FACTORY: generates all game functions for a given Firestore database
   // ═══════════════════════════════════════════════════════════════════════════
@@ -319,11 +374,15 @@
 
         if (!guestId || totalPot === 0) return null;
 
+        let auditData = { gameId, databaseId, function: 'distributeGameRewards', currencyType, isBetMode };
+
         try {
           await db.runTransaction(async (transaction) => {
             const gameRef = db.collection('multiplayer_games').doc(gameId);
             const hostRef = db.collection('users').doc(hostId);
             const guestRef = db.collection('users').doc(guestId);
+
+            const security = isBetMode ? await readSecurityDocs(db, transaction) : null;
 
             const hostDoc  = await transaction.get(hostRef);
             const guestDoc = await transaction.get(guestRef);
@@ -336,6 +395,25 @@
 
             const hostData  = hostDoc.data();
             const guestData = guestDoc.data();
+
+            if (isBetMode && security) {
+              if (security.config.bettingEnabled === false) {
+                transaction.update(gameRef, {
+                  rewardsDistributed: true, distributionBlocked: 'betting_disabled',
+                  rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                auditData.blocked = 'betting_disabled';
+                return;
+              }
+              if (hostData.suspended === true || guestData.suspended === true) {
+                transaction.update(gameRef, {
+                  rewardsDistributed: true, distributionBlocked: 'user_suspended',
+                  rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                auditData.blocked = 'user_suspended';
+                return;
+              }
+            }
 
             const quotaAmount = totalPot / 2;
             const { winnerPrize, drawReturn, houseCommissionWin, houseCommissionDraw } =
@@ -394,9 +472,14 @@
               },
             });
 
-            console.log(`[${gameId}] Transaccion completada (${databaseId})`);
+            const totalPlayerReward = hostReward + guestReward;
+            if (isBetMode && security) {
+              writePayoutTracking(transaction, security, totalPlayerReward, gameId);
+            }
+            auditData = { ...auditData, hostReward, guestReward, houseCommission: actualHouseCommission, winnerId };
           });
 
+          await logAudit(db, auditData);
           return null;
         } catch (error) {
           console.error(`[${gameId}] ERROR en distributeGameRewards:`, error);
@@ -437,16 +520,41 @@
 
         if (!hostId || !guestId || totalPot === 0) return null;
 
+        let auditData = { gameId, databaseId, function: 'distributeOnlineBetGameRewards' };
+
         try {
           await db.runTransaction(async (transaction) => {
             const gameRef  = db.collection('multiplayer_games').doc(gameId);
             const hostRef  = db.collection('users').doc(hostId);
             const guestRef = db.collection('users').doc(guestId);
 
-            const [gameDoc] = await Promise.all([transaction.get(gameRef)]);
+            const security = await readSecurityDocs(db, transaction);
+            const gameDoc  = await transaction.get(gameRef);
+            const hostDoc  = await transaction.get(hostRef);
+            const guestDoc = await transaction.get(guestRef);
 
             const currentGameData = gameDoc.data();
             if (currentGameData?.rewardsDistributed === true) return;
+
+            if (security.config.bettingEnabled === false) {
+              transaction.update(gameRef, {
+                rewardsDistributed: true, distributionBlocked: 'betting_disabled',
+                rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              auditData.blocked = 'betting_disabled';
+              return;
+            }
+
+            const hostData = hostDoc.exists ? hostDoc.data() : {};
+            const guestData = guestDoc.exists ? guestDoc.data() : {};
+            if (hostData.suspended === true || guestData.suspended === true) {
+              transaction.update(gameRef, {
+                rewardsDistributed: true, distributionBlocked: 'user_suspended',
+                rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              auditData.blocked = 'user_suspended';
+              return;
+            }
 
             const quotaAmount = totalPot / 2;
             const { winnerPrize, drawReturn, houseCommissionWin, houseCommissionDraw } =
@@ -506,8 +614,13 @@
                 hostNetGain, guestNetGain,
               },
             });
+
+            const totalPlayerReward = hostReward + guestReward;
+            writePayoutTracking(transaction, security, totalPlayerReward, gameId);
+            auditData = { ...auditData, hostReward, guestReward, houseCommission: actualHouseCommission, winnerId };
           });
 
+          await logAudit(db, auditData);
           return null;
         } catch (error) {
           console.error(`[${gameId}] ERROR en distributeOnlineBetGameRewards:`, error);
@@ -549,22 +662,56 @@
 
         if (realPlayerIds.length < 2) return null;
 
+        let auditData = { gameId, databaseId, function: 'distributeLudoGameRewards', currencyType };
+
         try {
           await db.runTransaction(async (transaction) => {
             const gameRef = db.collection('ludo_games').doc(gameId);
+            const isCoins = currencyType === 'coins';
+            const isBetMode = !isCoins && betAmount > 0;
+
+            const security = isBetMode ? await readSecurityDocs(db, transaction) : null;
             const gameDoc = await transaction.get(gameRef);
+
+            const playerDocs = {};
+            if (isBetMode) {
+              for (const pid of realPlayerIds) {
+                playerDocs[pid] = { doc: await transaction.get(db.collection('users').doc(pid)) };
+              }
+            }
+
             const currentGameData = gameDoc.data();
             if (currentGameData && currentGameData.rewardsDistributed === true) return;
             if (currentGameData?.quotasCollected !== true) return;
 
-            const isCoins = currencyType === 'coins';
-            const isBetMode = !isCoins && betAmount > 0;
+            if (isBetMode && security) {
+              if (security.config.bettingEnabled === false) {
+                transaction.update(gameRef, {
+                  rewardsDistributed: true, distributionBlocked: 'betting_disabled',
+                  rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                auditData.blocked = 'betting_disabled';
+                return;
+              }
+              const suspendedIds = realPlayerIds.filter(pid => playerDocs[pid]?.doc?.data()?.suspended === true);
+              if (suspendedIds.length > 0) {
+                transaction.update(gameRef, {
+                  rewardsDistributed: true, distributionBlocked: 'user_suspended',
+                  suspendedUsers: suspendedIds,
+                  rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                auditData.blocked = 'user_suspended';
+                return;
+              }
+            }
+
             const realPlayerCount = realPlayerIds.length;
 
             if (gameJustAbandoned) {
               const nonAbandoningIds = realPlayerIds.filter(id => id !== abandonedBy);
               if (nonAbandoningIds.length === 0) return;
 
+              const totalRefund = betAmount * nonAbandoningIds.length;
               for (const playerId of nonAbandoningIds) {
                 const playerRef = db.collection('users').doc(playerId);
                 if (isCoins) {
@@ -583,6 +730,11 @@
                   houseKeeps: betAmount, currencyType, isBetMode,
                 },
               });
+
+              if (isBetMode && security) {
+                writePayoutTracking(transaction, security, totalRefund, gameId);
+              }
+              auditData = { ...auditData, type: 'abandoned_refund', refundAmount: betAmount };
               return;
             }
 
@@ -615,8 +767,14 @@
                 reason: 'win', winnerNetGain,
               },
             });
+
+            if (isBetMode && security) {
+              writePayoutTracking(transaction, security, winnerPrize, gameId);
+            }
+            auditData = { ...auditData, winnerId, winnerPrize, houseCommission, currencyType };
           });
 
+          await logAudit(db, auditData);
           return null;
         } catch (error) {
           console.error(`[Ludo ${gameId}] ERROR:`, error);
@@ -662,17 +820,50 @@
         if (realPlayerIds.length === 0) return null;
         if (afterData.quotasCollected !== true) return null;
 
+        let auditData = { gameId, databaseId, function: 'distributeDominoGameRewards', currencyType };
+
         try {
           await db.runTransaction(async (transaction) => {
             const gameRef = db.collection('domino_games').doc(gameId);
+            const isCoins   = currencyType === 'coins';
+            const isBetMode = !isCoins && betAmount > 0;
+
+            const security = isBetMode ? await readSecurityDocs(db, transaction) : null;
             const gameDoc = await transaction.get(gameRef);
+
+            const playerDocs = {};
+            if (isBetMode) {
+              for (const pid of realPlayerIds) {
+                playerDocs[pid] = { doc: await transaction.get(db.collection('users').doc(pid)) };
+              }
+            }
+
             const currentGameData = gameDoc.data();
 
             if (currentGameData?.rewardsDistributed === true) return;
             if (currentGameData?.quotasCollected !== true) return;
 
-            const isCoins   = currencyType === 'coins';
-            const isBetMode = !isCoins && betAmount > 0;
+            if (isBetMode && security) {
+              if (security.config.bettingEnabled === false) {
+                transaction.update(gameRef, {
+                  rewardsDistributed: true, distributionBlocked: 'betting_disabled',
+                  rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                auditData.blocked = 'betting_disabled';
+                return;
+              }
+              const suspendedIds = realPlayerIds.filter(pid => playerDocs[pid]?.doc?.data()?.suspended === true);
+              if (suspendedIds.length > 0) {
+                transaction.update(gameRef, {
+                  rewardsDistributed: true, distributionBlocked: 'user_suspended',
+                  suspendedUsers: suspendedIds,
+                  rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                auditData.blocked = 'user_suspended';
+                return;
+              }
+            }
+
             const realPlayerCount = realPlayerIds.length;
             const totalPot  = currentGameData.totalPot || (betAmount * realPlayerCount);
             const commissionRate = isBetMode ? 0.10 : 0.30;
@@ -703,8 +894,14 @@
                 reason: gameJustAbandoned ? 'abandoned' : 'win', winnerNetGain,
               },
             });
+
+            if (isBetMode && security) {
+              writePayoutTracking(transaction, security, winnerPrize, gameId);
+            }
+            auditData = { ...auditData, winnerId: effectiveWinnerId, winnerPrize, houseCommission };
           });
 
+          await logAudit(db, auditData);
           return null;
         } catch (error) {
           console.error(`[Domino ${gameId}] ERROR:`, error);
@@ -748,14 +945,44 @@
         const allPlayerIds = [hostId, guestId, guest2Id, guest3Id].filter(id => !!id);
         if (allPlayerIds.length === 0) return null;
 
+        let auditData = { gameId, databaseId, function: 'distributeDominoPaseGameRewards' };
+
         try {
           await db.runTransaction(async (transaction) => {
             const gameRef = db.collection('domino_pase_games').doc(gameId);
+
+            const security = await readSecurityDocs(db, transaction);
             const gameDoc = await transaction.get(gameRef);
+
+            const playerDocs = {};
+            for (const pid of allPlayerIds) {
+              playerDocs[pid] = { doc: await transaction.get(db.collection('users').doc(pid)) };
+            }
+
             const currentGameData = gameDoc.data();
 
             if (currentGameData?.rewardsDistributed === true) return;
             if (currentGameData?.quotasCollected !== true) return;
+
+            if (security.config.bettingEnabled === false) {
+              transaction.update(gameRef, {
+                rewardsDistributed: true, distributionBlocked: 'betting_disabled',
+                rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              auditData.blocked = 'betting_disabled';
+              return;
+            }
+
+            const suspendedIds = allPlayerIds.filter(pid => playerDocs[pid]?.doc?.data()?.suspended === true);
+            if (suspendedIds.length > 0) {
+              transaction.update(gameRef, {
+                rewardsDistributed: true, distributionBlocked: 'user_suspended',
+                suspendedUsers: suspendedIds,
+                rewardsDistributedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              auditData.blocked = 'user_suspended';
+              return;
+            }
 
             const requiredBalance = betAmount;
             const commissionAmt = currentGameData.gameSettings?.commissionAmount
@@ -769,7 +996,6 @@
 
             if (!effectiveWinnerId || !allPlayerIds.includes(effectiveWinnerId)) return;
 
-            // Player number -> uid mapping
             const playerNumMap = {};
             if (hostId)   playerNumMap['player1'] = hostId;
             if (guestId)  playerNumMap['player2'] = guestId;
@@ -809,6 +1035,7 @@
               settlement[pid] = base + (passNet[pid] || 0);
             }
 
+            let totalPlayerPayout = 0;
             for (const pid of allPlayerIds) {
               const netAmount = settlement[pid] || 0;
               if (netAmount === 0) continue;
@@ -816,6 +1043,7 @@
               const userRef = db.collection('users').doc(pid);
               if (netAmount > 0) {
                 transaction.update(userRef, { diamondsEarned: admin.firestore.FieldValue.increment(netAmount) });
+                totalPlayerPayout += netAmount;
               } else {
                 transaction.update(userRef, { diamonds: admin.firestore.FieldValue.increment(netAmount) });
               }
@@ -833,8 +1061,12 @@
                 passNet, settlement,
               },
             });
+
+            writePayoutTracking(transaction, security, totalPlayerPayout, gameId);
+            auditData = { ...auditData, winnerId: effectiveWinnerId, winnerPrize, houseCommission: commissionAmt };
           });
 
+          await logAudit(db, auditData);
           return null;
         } catch (error) {
           console.error(`[DominoPase ${gameId}] ERROR:`, error);
